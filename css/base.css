@@ -1,0 +1,41 @@
+/* css/base.css — reset, tipografía, utilidades */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+.disp { font-family: var(--font-disp); }
+h1, h2, h3 { font-family: var(--font-disp); font-weight: 700; line-height: 1.1; }
+a { color: var(--gold); text-decoration: none; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+
+/* utilidades */
+.row { display: flex; align-items: center; }
+.between { justify-content: space-between; }
+.gap-1 { gap: var(--sp-1); } .gap-2 { gap: var(--sp-2); } .gap-3 { gap: var(--sp-3); }
+.wrap { flex-wrap: wrap; }
+.grid { display: grid; }
+.muted { color: var(--sub); }
+.center { text-align: center; }
+.hidden { display: none !important; }
+.flex1 { flex: 1; min-width: 0; }
+.mt-2 { margin-top: var(--sp-2); } .mt-3 { margin-top: var(--sp-3); } .mt-4 { margin-top: var(--sp-4); }
+.mb-2 { margin-bottom: var(--sp-2); } .mb-3 { margin-bottom: var(--sp-3); } .mb-4 { margin-bottom: var(--sp-4); }
+.small { font-size: 12px; }
+.tiny { font-size: 11px; }
+.bold { font-weight: 600; }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.pop { animation: pop .35s ease both; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; }

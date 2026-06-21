@@ -1,0 +1,33 @@
+/* css/tokens.css — variables de diseño */
+:root {
+  --bg: #0e1417;
+  --panel: #161e22;
+  --panel-2: #1d272c;
+  --line: #26333a;
+  --ink: #eef3f1;
+  --sub: #8aa0a3;
+  --gold: #d8a657;
+  --gold-ink: #0e1417;
+  --green: #7fbf7f;
+  --green-d: #2f5d3a;
+  --red: #e07a5f;
+  --red-d: #5d2f2f;
+  --yel: #e9c46a;
+  --blue: #5a8fb0;
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+
+  --sp-1: 6px;
+  --sp-2: 10px;
+  --sp-3: 14px;
+  --sp-4: 18px;
+  --sp-5: 24px;
+
+  --font-disp: "Fraunces", Georgia, serif;
+  --font-body: "Outfit", system-ui, sans-serif;
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  --maxw: 1080px;
+}

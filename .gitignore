@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Workflow de Firebase Hosting (no se usa con GitHub Pages; evita CI fallida)
+.github/
+
+# Artefactos de Firebase CLI
+.firebase/
+firebase-debug.log
+*.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Claves PRIVADAS (nunca subir). La config pública de Firebase SÍ se sube.
+serviceAccount*.json
+*-service-account.json
+.env
+.env.*
+
+# NOTA: firebase-config.js SÍ debe subirse: es código de cliente y sus
+# claves son públicas por diseño (se protegen con las reglas de Firestore).
