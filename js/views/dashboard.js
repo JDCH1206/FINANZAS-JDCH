@@ -73,6 +73,7 @@ export function renderDashboard(root) {
   const ahorro = totalInc - total;
   const tasa = totalInc ? (ahorro / totalInc) * 100 : 0;
   const disponible = sum(s.accounts || [], (a) => a.balance); // ahorro real = plata en cuentas
+  const runway = avg ? disponible / avg : 0;                   // meses que cubren tus cuentas
 
   // gasto diario promedio (sobre el lapso de fechas del periodo) y gasto hormiga
   const fdates = filtered.map((t) => t.date).filter(Boolean).sort();
@@ -98,6 +99,7 @@ export function renderDashboard(root) {
     ${kpi("Gasto hormiga (<$20k)", fmt(hormiga))}
     ${kpi("Proyección fin de mes", fmt(projection), true)}
     ${kpi("Mayor gasto", fmt(maxTx ? maxTx.amount : 0), true)}
+    ${kpi("Colchón (meses)", (disponible && avg ? runway.toFixed(1) : "—") + " meses", true)}
     ${kpi("Movimientos", filtered.length)}
     ${kpi("Categoría top", byCat[0]?.name || "—", true)}`;
 
