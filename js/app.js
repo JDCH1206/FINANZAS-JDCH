@@ -123,7 +123,16 @@ function showLoading() {
   app.innerHTML = `<div style="min-height:100vh;display:grid;place-items:center"><div class="loader spin"></div></div>`;
 }
 
-// registrar service worker (PWA)
+// registrar service worker (PWA) con auto-actualización
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+  // cuando una versión nueva toma control, recarga una sola vez (sin DevTools)
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return; refreshing = true; location.reload();
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+      .then((reg) => reg.update())   // busca versión nueva en cada carga
+      .catch(() => {});
+  });
 }

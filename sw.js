@@ -1,5 +1,5 @@
 // sw.js — service worker (cache del shell de la app)
-const CACHE = "finanzas-jdch-v11";
+const CACHE = "finanzas-jdch-v12";
 const ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./css/tokens.css", "./css/base.css", "./css/components.css", "./css/pages.css",
@@ -35,10 +35,10 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // HTML/JS/CSS: RED PRIMERO → siempre código actualizado si hay internet;
-  // si no hay red, responde desde la caché (modo offline).
+  // HTML/JS/CSS: RED PRIMERO con revalidación (no-cache) → siempre código
+  // actualizado si hay internet; si no hay red, responde desde la caché.
   e.respondWith(
-    fetch(e.request).then((res) => {
+    fetch(e.request, { cache: "no-cache" }).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
       return res;

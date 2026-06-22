@@ -47,6 +47,7 @@ export function renderDashboard(root) {
       <div class="card col-span"><div class="card-title">Tendencia mensual (últimos 12)</div><div class="chart-box"><canvas id="ch-trend"></canvas></div></div>
       <div class="card col-span"><div class="card-title">Evolución de la tasa de ahorro (12 meses)</div><div class="chart-box"><canvas id="ch-saverate"></canvas></div><p class="tiny muted mt-2">% del ingreso que te queda cada mes: (ingresos − gastos) ÷ ingresos.</p></div>
       <div class="card col-span"><div class="card-title">Categorías: mes actual vs promedio 12m</div><div class="chart-box"><canvas id="ch-catcmp"></canvas></div><p class="tiny muted mt-2" id="catcmp-cap"></p></div>
+      <div class="card col-span"><div class="card-title">Gasto por día de la semana</div><div class="chart-box"><canvas id="ch-dow"></canvas></div><p class="tiny muted mt-2">Suma del gasto del periodo por día. Revela en qué días gastas más.</p></div>
       <div class="card col-span"><div class="card-title">Tu % vs. canasta DANE</div><div id="dane"></div></div>
     </div>`;
 
@@ -79,6 +80,15 @@ export function renderDashboard(root) {
   const avgDaily = total / daysSpan;
   const hormiga = sum(filtered.filter((t) => (+t.amount || 0) < 20000), (t) => t.amount);
 
+  // proyección fin de mes (mes calendario actual, ritmo de gasto)
+  const cmKey = curMonth();
+  const spentCM = sum(s.txs.filter((t) => ym(t.date) === cmKey), (t) => t.amount);
+  const domDay = +todayISO().slice(8, 10);
+  const daysInMonth = new Date(+cmKey.slice(0, 4), +cmKey.slice(5, 7), 0).getDate();
+  const projection = domDay ? (spentCM / domDay) * daysInMonth : 0;
+  // mayor gasto del periodo
+  const maxTx = filtered.reduce((m, t) => ((+t.amount || 0) > (m ? +m.amount : 0) ? t : m), null);
+
   root.querySelector("#kpis").innerHTML = `
     ${kpi("Ingresos", fmt(totalInc))}
     ${kpi("Gastos", fmt(total))}
@@ -86,6 +96,8 @@ export function renderDashboard(root) {
     ${kpi("Tasa de ahorro", (totalInc ? tasa.toFixed(0) : "—") + "%")}
     ${kpi("Gasto diario prom.", fmt(avgDaily))}
     ${kpi("Gasto hormiga (<$20k)", fmt(hormiga))}
+    ${kpi("Proyección fin de mes", fmt(projection), true)}
+    ${kpi("Mayor gasto", fmt(maxTx ? maxTx.amount : 0), true)}
     ${kpi("Movimientos", filtered.length)}
     ${kpi("Categoría top", byCat[0]?.name || "—", true)}`;
 
@@ -161,6 +173,11 @@ export function renderDashboard(root) {
     monthLabel(refMonth), "Prom. 12m");
   const cc = root.querySelector("#catcmp-cap");
   if (cc) cc.textContent = `Gasto de ${monthLabel(refMonth)} por categoría vs su promedio mensual de los últimos 12 meses. Barra actual más alta = gastaste más de lo habitual.`;
+
+  // ---- Gasto por día de la semana (del periodo seleccionado) ----
+  const dowSum = [0, 0, 0, 0, 0, 0, 0];
+  filtered.forEach((t) => { const p = (t.date || "").split("-").map(Number); if (p.length === 3 && p[0]) { const wd = new Date(p[0], p[1] - 1, p[2]).getDay(); dowSum[wd] += (+t.amount || 0); } });
+  categoryBars("ch-dow", ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"], [dowSum[1], dowSum[2], dowSum[3], dowSum[4], dowSum[5], dowSum[6], dowSum[0]]);
 
   // DANE
   root.querySelector("#dane").innerHTML = byCat.map((e, i) => {
