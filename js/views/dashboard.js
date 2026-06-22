@@ -43,8 +43,8 @@ export function renderDashboard(root) {
         <div class="chart-box"><canvas id="ch-yoy"></canvas></div>
         <p class="tiny muted mt-2" id="yoy-cap"></p>
       </div>
-      <div class="card col-span"><div class="card-title">Recomendación de gasto según tus ingresos</div><div id="reco"></div>
-        <p class="tiny muted mt-2">Referencia: regla <b>50/30/20</b> (50% necesidades · 30% deseos · 20% ahorro), ampliamente usada por asesores financieros; estructura de categorías según canasta <b>DANE</b>. Guía general, <b>no asesoría financiera personalizada</b>.</p>
+      <div class="card col-span"><div class="card-title">Recomendación de gasto según tu salario</div><div id="reco"></div>
+        <p class="tiny muted mt-2">Basada solo en tu <b>salario</b> (excluye primas y pagos extra). Referencia: regla <b>50/30/20</b> (50% necesidades · 30% deseos · 20% ahorro), ampliamente usada por asesores financieros; estructura de categorías según canasta <b>DANE</b>. Guía general, <b>no asesoría financiera personalizada</b>.</p>
       </div>
       <div class="card"><div class="card-title">Distribución por categoría</div><div class="chart-box"><canvas id="ch-donut"></canvas></div><div id="leg" class="row wrap gap-2 mt-2"></div></div>
       <div class="card"><div class="card-title">Regla 50/30/20</div><div id="rule"></div><p class="tiny muted mt-2">La línea marca el objetivo. Verde = en rango (±6%).</p></div>
@@ -104,9 +104,12 @@ export function renderDashboard(root) {
   // ingreso mensual promedio (12m) y gasto recomendado según regla 50/30/20
   const incMap = {};
   s.incomes.forEach((t) => { const k = ym(t.date); if (k) incMap[k] = (incMap[k] || 0) + (+t.amount || 0); });
-  const incKeys = Object.keys(incMap).sort().slice(-12);
-  const incAvg = incKeys.length ? sum(incKeys.map((k) => incMap[k])) / incKeys.length : 0;
-  const recSpend = incAvg * 0.80; // 50% necesidades + 30% deseos
+  // base de la recomendación: SOLO salario (ingreso fijo), excluye primas/pagos grandes
+  const salMap = {};
+  s.incomes.forEach((t) => { if (t.type === "Salario") { const k = ym(t.date); if (k) salMap[k] = (salMap[k] || 0) + (+t.amount || 0); } });
+  const salKeys = Object.keys(salMap).sort().slice(-12);
+  const salAvg = salKeys.length ? sum(salKeys.map((k) => salMap[k])) / salKeys.length : 0;
+  const recSpend = salAvg * 0.80; // 50% necesidades + 30% deseos
 
   root.querySelector("#kpis").innerHTML = `
     ${kpi("Ingresos", fmt(totalInc))}
@@ -120,7 +123,7 @@ export function renderDashboard(root) {
     ${kpi("Proyección fin de mes", fmt(projection), true)}
     ${kpi("Mayor gasto", fmt(maxTx ? maxTx.amount : 0), true)}
     ${kpi("Colchón (meses)", (disponible && avg ? runway.toFixed(1) : "—") + " meses", true)}
-    ${kpi("Gasto recomendado/mes", incAvg ? fmt(recSpend) : "—", true)}
+    ${kpi("Gasto recomendado/mes", salAvg ? fmt(recSpend) : "—", true)}
     ${kpi("Movimientos", filtered.length)}
     ${kpi("Categoría top", byCat[0]?.name || "—", true)}`;
 
@@ -128,20 +131,20 @@ export function renderDashboard(root) {
   const recoEl = root.querySelector("#reco");
   if (recoEl) {
     const row = (k, v, c) => `<div class="row between" style="padding:6px 0;border-top:1px solid var(--line)"><span class="small muted">${k}</span><span class="small bold"${c ? ` style="color:${c}"` : ""}>${v}</span></div>`;
-    if (!incAvg) {
-      recoEl.innerHTML = `<div class="muted small">Registra ingresos para ver tu recomendación de gasto.</div>`;
+    if (!salAvg) {
+      recoEl.innerHTML = `<div class="muted small">Registra ingresos de tipo "Salario" para ver tu recomendación de gasto.</div>`;
     } else {
-      const pctReal = (avg / incAvg) * 100, ok = avg <= recSpend;
+      const pctReal = (avg / salAvg) * 100, ok = avg <= recSpend;
       recoEl.innerHTML =
-        row("Ingreso mensual promedio (12m)", fmt(incAvg)) +
+        row("Salario mensual promedio (12m)", fmt(salAvg)) +
         row("Gasto recomendado (≤ 80%)", fmt(recSpend), "var(--gold)") +
-        row("· Necesidades sugeridas (≤ 50%)", fmt(incAvg * 0.5)) +
-        row("· Deseos sugeridos (≤ 30%)", fmt(incAvg * 0.3)) +
-        row("· Ahorro objetivo (≥ 20%)", fmt(incAvg * 0.2), "var(--green)") +
-        row("Tu gasto real promedio", `${fmt(avg)} · ${pctReal.toFixed(0)}% del ingreso`, ok ? "var(--green)" : "var(--red)") +
+        row("· Necesidades sugeridas (≤ 50%)", fmt(salAvg * 0.5)) +
+        row("· Deseos sugeridos (≤ 30%)", fmt(salAvg * 0.3)) +
+        row("· Ahorro objetivo (≥ 20%)", fmt(salAvg * 0.2), "var(--green)") +
+        row("Tu gasto real promedio", `${fmt(avg)} · ${pctReal.toFixed(0)}% del salario`, ok ? "var(--green)" : "var(--red)") +
         `<div class="small" style="margin-top:8px;color:${ok ? "var(--green)" : "var(--red)"}">${ok
-          ? `✓ Vas bien: gastas el ${pctReal.toFixed(0)}% de tu ingreso (objetivo ≤ 80%), ahorrando el resto.`
-          : `⚠ Gastas el ${pctReal.toFixed(0)}% de tu ingreso (recomendado ≤ 80%). Hay margen para recortar y ahorrar más.`}</div>`;
+          ? `✓ Vas bien: gastas el ${pctReal.toFixed(0)}% de tu salario (objetivo ≤ 80%), te queda margen para ahorrar.`
+          : `⚠ Gastas el ${pctReal.toFixed(0)}% de tu salario (recomendado ≤ 80%). Tus primas/extras ayudan, pero conviene que el gasto recurrente quepa en el salario.`}</div>`;
     }
   }
 
