@@ -22,14 +22,20 @@ export function renderHome(root) {
     <div class="field" style="position:relative">
       <input id="q" class="input" placeholder="Buscar..." value="${escapeHtml(query)}">
     </div>
-    <div class="card" style="padding:0" id="list"></div>
-    <button class="fab" id="fab" aria-label="Agregar">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-    </button>`;
+    <div class="card" style="padding:0" id="list"></div>`;
 
   root.querySelectorAll("[data-kind]").forEach((b) => b.onclick = () => { tabKind = b.getAttribute("data-kind"); renderHome(root); });
   root.querySelector("#q").oninput = (e) => { query = e.target.value; drawList(); };
-  root.querySelector("#fab").onclick = () => tabKind === "gasto" ? openTxModal() : openIncomeModal();
+
+  // FAB fuera del contenedor animado (#view), pegado a la pantalla, siempre visible
+  let fab = document.getElementById("fab");
+  if (!fab) {
+    fab = document.createElement("button");
+    fab.id = "fab"; fab.className = "fab"; fab.setAttribute("aria-label", "Agregar");
+    fab.innerHTML = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>`;
+    document.body.appendChild(fab);
+  }
+  fab.onclick = () => tabKind === "gasto" ? openTxModal() : openIncomeModal();
   drawList();
 }
 

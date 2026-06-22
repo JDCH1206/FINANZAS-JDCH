@@ -45,6 +45,7 @@ async function afterLogin(user) { startSession(user); }
 
 function stopSession() {
   if (unsubscribeData) { unsubscribeData(); unsubscribeData = null; }
+  document.getElementById("fab")?.remove(); // quita el botón flotante de Movimientos
   booted = false;
 }
 
@@ -108,6 +109,7 @@ function go(route) {
 
 function draw(route) {
   const view = document.getElementById("view");
+  if (route !== "home") document.getElementById("fab")?.remove(); // FAB solo en Movimientos
   switch (route) {
     case "summary": return renderSummary(view);
     case "home": return renderHome(view);
