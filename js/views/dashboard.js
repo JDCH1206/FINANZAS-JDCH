@@ -71,6 +71,7 @@ export function renderDashboard(root) {
   const totalInc = sum(incFiltered, (t) => t.amount);
   const ahorro = totalInc - total;
   const tasa = totalInc ? (ahorro / totalInc) * 100 : 0;
+  const disponible = sum(s.accounts || [], (a) => a.balance); // ahorro real = plata en cuentas
 
   // gasto diario promedio (sobre el lapso de fechas del periodo) y gasto hormiga
   const fdates = filtered.map((t) => t.date).filter(Boolean).sort();
@@ -81,7 +82,7 @@ export function renderDashboard(root) {
   root.querySelector("#kpis").innerHTML = `
     ${kpi("Ingresos", fmt(totalInc))}
     ${kpi("Gastos", fmt(total))}
-    ${kpi("Balance (ing. − gastos)", fmt(ahorro))}
+    ${kpi("Ahorro (cuentas)", fmt(disponible))}
     ${kpi("Tasa de ahorro", (totalInc ? tasa.toFixed(0) : "—") + "%")}
     ${kpi("Gasto diario prom.", fmt(avgDaily))}
     ${kpi("Gasto hormiga (<$20k)", fmt(hormiga))}
