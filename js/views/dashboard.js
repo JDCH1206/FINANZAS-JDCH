@@ -2,7 +2,7 @@
 import { getState } from "../state.js";
 import { RULE_503020, PALETTE } from "../config.js";
 import { fmt, ym, monthLabel, sum, curMonth, todayISO } from "../utils.js";
-import { donut, lineTrend, categoryBars, groupedBars } from "../components/charts.js";
+import { donut, lineTrend, lineTrendPct, categoryBars, groupedBars } from "../components/charts.js";
 
 // desplaza una clave "YYYY-MM" en delta meses
 function ymAdd(key, delta) {
@@ -45,6 +45,8 @@ export function renderDashboard(root) {
       <div class="card"><div class="card-title">Distribución por categoría</div><div class="chart-box"><canvas id="ch-donut"></canvas></div><div id="leg" class="row wrap gap-2 mt-2"></div></div>
       <div class="card"><div class="card-title">Regla 50/30/20</div><div id="rule"></div><p class="tiny muted mt-2">La línea marca el objetivo. Verde = en rango (±6%).</p></div>
       <div class="card col-span"><div class="card-title">Tendencia mensual (últimos 12)</div><div class="chart-box"><canvas id="ch-trend"></canvas></div></div>
+      <div class="card col-span"><div class="card-title">Evolución de la tasa de ahorro (12 meses)</div><div class="chart-box"><canvas id="ch-saverate"></canvas></div><p class="tiny muted mt-2">% del ingreso que te queda cada mes: (ingresos − gastos) ÷ ingresos.</p></div>
+      <div class="card col-span"><div class="card-title">Categorías: mes actual vs promedio 12m</div><div class="chart-box"><canvas id="ch-catcmp"></canvas></div><p class="tiny muted mt-2" id="catcmp-cap"></p></div>
       <div class="card col-span"><div class="card-title">Tu % vs. canasta DANE</div><div id="dane"></div></div>
     </div>`;
 
@@ -70,11 +72,19 @@ export function renderDashboard(root) {
   const ahorro = totalInc - total;
   const tasa = totalInc ? (ahorro / totalInc) * 100 : 0;
 
+  // gasto diario promedio (sobre el lapso de fechas del periodo) y gasto hormiga
+  const fdates = filtered.map((t) => t.date).filter(Boolean).sort();
+  const daysSpan = fdates.length ? Math.max(1, Math.round((new Date(fdates[fdates.length - 1]) - new Date(fdates[0])) / 86400000) + 1) : 1;
+  const avgDaily = total / daysSpan;
+  const hormiga = sum(filtered.filter((t) => (+t.amount || 0) < 20000), (t) => t.amount);
+
   root.querySelector("#kpis").innerHTML = `
     ${kpi("Ingresos", fmt(totalInc))}
     ${kpi("Gastos", fmt(total))}
-    ${kpi("Ahorro", fmt(ahorro))}
+    ${kpi("Balance (ing. − gastos)", fmt(ahorro))}
     ${kpi("Tasa de ahorro", (totalInc ? tasa.toFixed(0) : "—") + "%")}
+    ${kpi("Gasto diario prom.", fmt(avgDaily))}
+    ${kpi("Gasto hormiga (<$20k)", fmt(hormiga))}
     ${kpi("Movimientos", filtered.length)}
     ${kpi("Categoría top", byCat[0]?.name || "—", true)}`;
 
@@ -125,6 +135,31 @@ export function renderDashboard(root) {
   groupedBars("ch-yoy", MESES, monthlyOf(Y), monthlyOf(Y - 1), String(Y), String(Y - 1));
   const cap = root.querySelector("#yoy-cap");
   if (cap) cap.textContent = `Gasto mensual ${Y} vs ${Y - 1}. "Año a la fecha" compara del 1-ene a hoy en cada año.`;
+
+  // ---- Evolución de la tasa de ahorro (12 meses) ----
+  const incMap = {};
+  s.incomes.forEach((t) => { const k = ym(t.date); if (k) incMap[k] = (incMap[k] || 0) + (+t.amount || 0); });
+  const rateMonths = [...new Set([...Object.keys(trendMap), ...Object.keys(incMap)])].sort().slice(-12);
+  const rateData = rateMonths.map((k) => { const inc = incMap[k] || 0; return inc ? Math.round(((inc - (trendMap[k] || 0)) / inc) * 100) : 0; });
+  lineTrendPct("ch-saverate", rateMonths.map((k) => monthLabel(k)), rateData);
+
+  // ---- Categorías: mes actual vs promedio mensual de 12m ----
+  const last12 = []; let mk = refMonth;
+  for (let i = 0; i < 12; i++) { last12.unshift(mk); mk = ymAdd(mk, -1); }
+  const set12 = new Set(last12);
+  const curCatMap = {}, sumCatMap = {};
+  s.txs.forEach((t) => {
+    const k = ym(t.date); if (!k) return;
+    if (k === refMonth) curCatMap[t.cat] = (curCatMap[t.cat] || 0) + (+t.amount || 0);
+    if (set12.has(k)) sumCatMap[t.cat] = (sumCatMap[t.cat] || 0) + (+t.amount || 0);
+  });
+  const catsRanked = Object.keys(sumCatMap).sort((a, b) => sumCatMap[b] - sumCatMap[a]).slice(0, 6);
+  groupedBars("ch-catcmp", catsRanked,
+    catsRanked.map((c) => Math.round(curCatMap[c] || 0)),
+    catsRanked.map((c) => Math.round((sumCatMap[c] || 0) / 12)),
+    monthLabel(refMonth), "Prom. 12m");
+  const cc = root.querySelector("#catcmp-cap");
+  if (cc) cc.textContent = `Gasto de ${monthLabel(refMonth)} por categoría vs su promedio mensual de los últimos 12 meses. Barra actual más alta = gastaste más de lo habitual.`;
 
   // DANE
   root.querySelector("#dane").innerHTML = byCat.map((e, i) => {

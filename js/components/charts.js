@@ -41,6 +41,22 @@ export function lineTrend(id, labels, data) {
   });
 }
 
+// línea de porcentajes (ej. evolución de la tasa de ahorro)
+export function lineTrendPct(id, labels, data) {
+  mount(id, {
+    type: "line",
+    data: { labels, datasets: [{ data, borderColor: "#7fbf7f", backgroundColor: "rgba(127,191,127,.12)", borderWidth: 2.5, fill: true, tension: .3, pointRadius: 3, pointBackgroundColor: "#7fbf7f" }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => " " + c.raw + "%" } } },
+      scales: {
+        x: { ticks: { color: AXIS, font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: AXIS, font: { size: 10 }, callback: (v) => v + "%" }, grid: { color: GRID } },
+      },
+    },
+  });
+}
+
 export function budgetBars(id, labels, presup, real) {
   mount(id, {
     type: "bar",
