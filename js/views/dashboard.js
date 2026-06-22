@@ -1,8 +1,9 @@
 // js/views/dashboard.js
 import { getState } from "../state.js";
 import { RULE_503020, PALETTE } from "../config.js";
-import { fmt, ym, monthLabel, sum, curMonth, todayISO } from "../utils.js";
+import { fmt, ym, monthLabel, sum, curMonth, todayISO, escapeHtml } from "../utils.js";
 import { donut, lineTrend, lineTrendPct, categoryBars, groupedBars } from "../components/charts.js";
+import { openModal } from "../components/modals.js";
 
 // desplaza una clave "YYYY-MM" en delta meses
 function ymAdd(key, delta) {
@@ -90,18 +91,39 @@ export function renderDashboard(root) {
   // mayor gasto del periodo
   const maxTx = filtered.reduce((m, t) => ((+t.amount || 0) > (m ? +m.amount : 0) ? t : m), null);
 
+  // gasto mensual promedio de lo indispensable (categorías tipo "Necesidad")
+  const typeMap = Object.fromEntries(s.cats.map((c) => [c.name, c.type]));
+  const essMap = {};
+  s.txs.forEach((t) => { if (typeMap[t.cat] === "Necesidad") { const k = ym(t.date); if (k) essMap[k] = (essMap[k] || 0) + (+t.amount || 0); } });
+  const essKeys = Object.keys(essMap).sort().slice(-12);
+  const essAvg = essKeys.length ? sum(essKeys.map((k) => essMap[k])) / essKeys.length : 0;
+
   root.querySelector("#kpis").innerHTML = `
     ${kpi("Ingresos", fmt(totalInc))}
     ${kpi("Gastos", fmt(total))}
     ${kpi("Ahorro (cuentas)", fmt(disponible))}
     ${kpi("Tasa de ahorro", (totalInc ? tasa.toFixed(0) : "—") + "%")}
     ${kpi("Gasto diario prom.", fmt(avgDaily))}
-    ${kpi("Gasto hormiga (<$20k)", fmt(hormiga))}
+    ${kpi("Indispensable/mes", fmt(essAvg))}
+    <div class="kpi" id="kpi-hormiga" style="cursor:pointer" title="Ver el detalle de estos gastos">
+      <div class="k-label">Gasto hormiga 🔎</div><div class="k-val">${fmt(hormiga)}</div></div>
     ${kpi("Proyección fin de mes", fmt(projection), true)}
     ${kpi("Mayor gasto", fmt(maxTx ? maxTx.amount : 0), true)}
     ${kpi("Colchón (meses)", (disponible && avg ? runway.toFixed(1) : "—") + " meses", true)}
     ${kpi("Movimientos", filtered.length)}
     ${kpi("Categoría top", byCat[0]?.name || "—", true)}`;
+
+  // clic en "Gasto hormiga" → listado de los movimientos que suman ese total
+  const hbtn = root.querySelector("#kpi-hormiga");
+  if (hbtn) hbtn.onclick = () => {
+    const list = filtered.filter((t) => (+t.amount || 0) < 20000).sort((a, b) => (+b.amount) - (+a.amount));
+    const rows = list.map((t) => `<div class="row between" style="padding:6px 0;border-top:1px solid var(--line)">
+      <span class="small muted">${escapeHtml(t.date || "")} · ${escapeHtml(t.desc || "")}</span>
+      <span class="small bold">${fmt(t.amount)}</span></div>`).join("");
+    openModal(`Gasto hormiga · ${list.length} movimientos`,
+      `<p class="small muted mb-2">Gastos menores a $20.000. Suman <b>${fmt(hormiga)}</b>.</p>
+       <div style="max-height:55vh;overflow:auto">${rows || '<div class="muted small">Sin gastos hormiga en este periodo</div>'}</div>`);
+  };
 
   // Donut
   donut("ch-donut", byCat.map((x) => x.name), byCat.map((x) => x.value));
@@ -109,7 +131,6 @@ export function renderDashboard(root) {
     `<span class="tiny muted row gap-1"><span style="width:9px;height:9px;border-radius:3px;background:${PALETTE[i % PALETTE.length]}"></span>${e.name} ${((e.value / total) * 100).toFixed(0)}%</span>`).join("");
 
   // 50/30/20
-  const typeMap = Object.fromEntries(s.cats.map((c) => [c.name, c.type]));
   const buck = { Necesidad: 0, Deseo: 0, Deuda: 0 };
   filtered.forEach((t) => { const ty = typeMap[t.cat]; if (ty) buck[ty] += (+t.amount || 0); });
   root.querySelector("#rule").innerHTML = ["Necesidad", "Deseo", "Deuda"].map((bk) => {
