@@ -47,6 +47,18 @@ export const ACCOUNT_TYPES = ["Ahorro", "Corriente", "Efectivo", "Inversión", "
 // Medios de pago base (el usuario puede agregar otros desde Ajustes)
 export const DEFAULT_PAY_METHODS = ["Efectivo", "Transferencia", "Tarjeta débito", "Tarjeta crédito", "Otro"];
 
+// ---------- Módulo de Vehículos ----------
+export const VEHICLE_TYPES = ["Moto", "Carro"];
+export const FUEL_TYPES = ["Corriente", "Extra", "Diésel", "Gas"];
+export const SERVICE_TYPES = ["Particular", "Público"];
+export const DEPARTAMENTOS = [
+  "Amazonas", "Antioquia", "Arauca", "Atlántico", "Bogotá D.C.", "Bolívar", "Boyacá",
+  "Caldas", "Caquetá", "Casanare", "Cauca", "Cesar", "Chocó", "Córdoba", "Cundinamarca",
+  "Guainía", "Guaviare", "Huila", "La Guajira", "Magdalena", "Meta", "Nariño",
+  "Norte de Santander", "Putumayo", "Quindío", "Risaralda", "San Andrés y Providencia",
+  "Santander", "Sucre", "Tolima", "Valle del Cauca", "Vaupés", "Vichada",
+];
+
 // Reglas de clasificación automática para importar (descripción → [categoría, subcategoría])
 export function classify(desc, origCat) {
   const d = (desc || "").toLowerCase();

@@ -11,6 +11,8 @@ import { renderBudget } from "./views/budget.js";
 import { renderAccounts } from "./views/accounts.js";
 import { renderCategories } from "./views/categories.js";
 import { renderSettings } from "./views/settings.js";
+import { renderVehicles } from "./views/vehicles.js";
+import { openModal, closeModal } from "./components/modals.js";
 
 const app = document.getElementById("app");
 
@@ -25,7 +27,27 @@ const NAV = [
   { id: "accounts", label: "Cuentas", icon: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>' },
   { id: "cats", label: "Categ.", icon: '<path d="M3 7l9-4 9 4-9 4-9-4zM3 12l9 4 9-4M3 17l9 4 9-4"/>' },
   { id: "settings", label: "Ajustes", icon: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 00-1.7-1l-.4-2.5H9.6L9.2 5a7 7 0 00-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 000 2l-2 1.6 2 3.4 2.4-1a7 7 0 001.7 1l.4 2.5h4.8l.4-2.5a7 7 0 001.7-1l2.4 1 2-3.4-2-1.6c.1-.3.1-.7.1-1z"/>' },
+  { id: "more", label: "Más", icon: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>' },
 ];
+
+// Rutas accesibles desde el menú "Más" (módulos opcionales)
+function moreRoutes() {
+  const s = getState();
+  const items = [];
+  if (s.vehiclesEnabled) items.push({ id: "vehicles", label: "Vehículos", icon: "🚗" });
+  return items;
+}
+function openMoreMenu() {
+  const items = moreRoutes();
+  const body = items.length
+    ? items.map((it) => `<button class="btn btn-ghost btn-block mb-2" data-go="${it.id}" style="justify-content:flex-start;gap:10px;font-size:15px">${it.icon} ${it.label}</button>`).join("")
+    : `<p class="muted small">No tienes módulos extra activos. Puedes activarlos en <b>Ajustes</b> (ej. el módulo de Vehículos).</p>`;
+  openModal("Más", body, {
+    onMount(b) {
+      b.querySelectorAll("[data-go]").forEach((x) => x.onclick = () => { closeModal(); go(x.getAttribute("data-go")); });
+    },
+  });
+}
 
 /* ---------- arranque ---------- */
 let unsubscribeData = null; // listener de tiempo real activo
@@ -57,6 +79,7 @@ function startSession(user) {
     setState({
       profile: data.profile, cats: data.cats, budgets: data.budgets,
       accounts: data.accounts || [], payMethods: data.payMethods || [],
+      vehicles: data.vehicles || [], vehiclesEnabled: data.vehiclesEnabled || false,
       txs: data.txs, incomes: data.incomes || [], loading: false,
     });
     if (!booted) {
@@ -95,13 +118,20 @@ function mountShell(route) {
         <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">${n.icon}</svg>
         <span class="lbl">${n.label}</span></button>`).join("")}
     </nav>`;
-  app.querySelectorAll("[data-route]").forEach((b) => b.onclick = () => go(b.getAttribute("data-route")));
+  app.querySelectorAll("[data-route]").forEach((b) => b.onclick = () => {
+    const r = b.getAttribute("data-route");
+    if (r === "more") return openMoreMenu();
+    go(r);
+  });
   draw(route);
 }
 
 function go(route) {
   setState({ route });
-  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("on", b.getAttribute("data-route") === route));
+  document.querySelectorAll("#nav button").forEach((b) => {
+    const r = b.getAttribute("data-route");
+    b.classList.toggle("on", r === route || (r === "more" && route === "vehicles"));
+  });
   const view = document.getElementById("view");
   view.classList.remove("pop"); void view.offsetWidth; view.classList.add("pop");
   draw(route);
@@ -117,6 +147,7 @@ function draw(route) {
     case "budget": return renderBudget(view);
     case "accounts": return renderAccounts(view);
     case "cats": return renderCategories(view);
+    case "vehicles": return renderVehicles(view);
     case "settings": return renderSettings(view, () => { stopSession(); setState({ user: null }); renderLogin(app, afterLogin); });
   }
 }

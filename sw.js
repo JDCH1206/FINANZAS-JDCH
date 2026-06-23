@@ -1,12 +1,12 @@
 // sw.js — service worker (cache del shell de la app)
-const CACHE = "finanzas-jdch-v17";
+const CACHE = "finanzas-jdch-v18";
 const ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./css/tokens.css", "./css/base.css", "./css/components.css", "./css/pages.css",
   "./js/app.js", "./js/config.js", "./js/state.js", "./js/utils.js",
   "./js/firebase-service.js", "./firebase-config.js",
   "./js/views/login.js", "./js/views/onboarding.js", "./js/views/home.js", "./js/views/summary.js", "./js/views/accounts.js",
-  "./js/views/dashboard.js", "./js/views/budget.js", "./js/views/categories.js", "./js/views/settings.js",
+  "./js/views/dashboard.js", "./js/views/budget.js", "./js/views/categories.js", "./js/views/settings.js", "./js/views/vehicles.js",
   "./js/components/charts.js", "./js/components/modals.js",
   "./icons/icon-192.png", "./icons/icon-512.png",
 ];

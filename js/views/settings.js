@@ -47,6 +47,12 @@ export function renderSettings(root, onSignOut) {
     </div>
 
     <div class="card mb-3">
+      <div class="card-title">Módulos opcionales</div>
+      <p class="small muted mb-3">🚗 <b>Vehículos</b>: combustible, mantenimiento y obligaciones (SOAT, tecnomecánica, impuesto) con alarmas. Al activarlo aparece en el menú <b>"Más"</b> de la barra inferior.</p>
+      <button id="veh-toggle" class="btn btn-sm"></button>
+    </div>
+
+    <div class="card mb-3">
       <div class="card-title">Zona de peligro</div>
       <p class="small muted mb-3">Borra <b>todos</b> tus gastos e ingresos (y presupuestos) para volver a importar desde cero. Tu perfil, categorías y cuentas se conservan. No se puede deshacer.</p>
       <button id="wipe" class="btn btn-danger btn-sm btn-block">Borrar todos los movimientos</button>
@@ -125,8 +131,8 @@ export function renderSettings(root, onSignOut) {
     const file = impJson.files[0]; if (!file) return;
     try {
       const d = JSON.parse(await file.text());
-      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [] });
-      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [] });
+      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false });
+      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false });
       await bulkSetTx(s.user.uid, d.txs || []);
       await bulkSetIncomes(s.user.uid, d.incomes || []);
       forcePersistLocal(s.user.uid);
@@ -166,6 +172,24 @@ export function renderSettings(root, onSignOut) {
       btn.disabled = false; btn.textContent = "Borrar todos los movimientos";
     }
   });
+
+  // activar/desactivar módulo de Vehículos
+  const vehBtn = root.querySelector("#veh-toggle");
+  const paintVeh = () => {
+    const on = getState().vehiclesEnabled;
+    vehBtn.textContent = on ? "✓ Vehículos activado" : "Activar Vehículos";
+    vehBtn.className = "btn btn-sm " + (on ? "btn-primary" : "btn-ghost");
+  };
+  paintVeh();
+  vehBtn.onclick = async () => {
+    const on = !getState().vehiclesEnabled;
+    setState({ vehiclesEnabled: on });
+    const s2 = getState();
+    await saveConfig(s2.user.uid, { profile: s2.profile, cats: s2.cats, budgets: s2.budgets, accounts: s2.accounts, payMethods: s2.payMethods, vehicles: s2.vehicles, vehiclesEnabled: on });
+    forcePersistLocal(s2.user.uid);
+    paintVeh();
+    toast(on ? "Módulo de Vehículos activado — míralo en 'Más'" : "Módulo de Vehículos desactivado");
+  };
 
   root.querySelector("#logout").onclick = () => confirmDialog("¿Cerrar sesión?", async () => { await signOutUser(); onSignOut(); });
 

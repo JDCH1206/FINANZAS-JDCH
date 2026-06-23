@@ -14,6 +14,8 @@ const state = {
   accounts: [],          // [{id, name, type, balance}]
   budgets: {},           // { 'YYYY-MM': { catName: amount } }
   payMethods: [],        // medios de pago personalizados (extienden los base)
+  vehiclesEnabled: false,// módulo opcional de vehículos
+  vehicles: [],          // [{ id, tipo, alias, placa, ... }]
 };
 
 const listeners = new Set();
@@ -40,6 +42,6 @@ export function setData({ profile, cats, txs, incomes, accounts, budgets, payMet
 }
 
 export function dataSnapshot() {
-  const { profile, cats, txs, incomes, accounts, budgets, payMethods } = state;
-  return { profile, cats, txs, incomes, accounts, budgets, payMethods };
+  const { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled } = state;
+  return { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled };
 }
