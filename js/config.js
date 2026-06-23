@@ -51,6 +51,11 @@ export const DEFAULT_PAY_METHODS = ["Efectivo", "Transferencia", "Tarjeta débit
 export const VEHICLE_TYPES = ["Moto", "Carro"];
 export const FUEL_TYPES = ["Corriente", "Extra", "Diésel", "Gas"];
 export const SERVICE_TYPES = ["Particular", "Público"];
+export const MAINT_CATEGORIES = ["Taller", "Rutina"];
+export const MAINT_TIPOS = {
+  Taller: ["Cambio de aceite", "Filtro de aceite", "Llantas", "Frenos (pastillas)", "Kit de arrastre", "Bujía", "Sincronización / válvulas", "Batería", "Reparación", "Otro"],
+  Rutina: ["Lubricación de cadena", "Tensión de cadena", "Presión de llantas", "Nivel de aceite", "Luces", "Limpieza", "Otro"],
+};
 export const DEPARTAMENTOS = [
   "Amazonas", "Antioquia", "Arauca", "Atlántico", "Bogotá D.C.", "Bolívar", "Boyacá",
   "Caldas", "Caquetá", "Casanare", "Cauca", "Cesar", "Chocó", "Córdoba", "Cundinamarca",

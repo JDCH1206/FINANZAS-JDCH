@@ -1,14 +1,27 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal } from "../firebase-service.js";
-import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE } from "../config.js";
+import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal } from "../firebase-service.js";
+import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
 
 const icon = (t) => (t === "Moto" ? "🏍️" : "🚗");
 let activeFuelVid = null;   // si está fijo, mostramos la bitácora de ese vehículo
+let activeMaintVid = null;  // bitácora de mantenimiento
 let allFuel = [];           // cache de todos los tanqueos (todos los vehículos)
+let allMaint = [];          // cache de mantenimientos
+
+function addDays(iso, days) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+function daysBetween(a, b) {
+  if (!a || !b) return null;
+  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+}
 
 function ymAdd(key, delta) {
   if (!key) return "";
@@ -29,6 +42,7 @@ async function persistVehicles() {
 }
 
 export function renderVehicles(root) {
+  if (activeMaintVid) return renderMaint(root, activeMaintVid);
   if (activeFuelVid) return renderFuel(root, activeFuelVid);
   renderList(root);
 }
@@ -68,15 +82,19 @@ function drawList(root) {
       <div class="row between mt-2" style="border-top:1px solid var(--line);padding-top:8px">
         <span class="small muted">Odómetro</span><span class="small bold">${v.odometro != null ? Number(v.odometro).toLocaleString("es-CO") + " km" : "—"}</span>
       </div>
-      <button class="btn btn-ghost btn-sm btn-block mt-3" data-fuel="${v.id}">⛽ Combustible</button>
+      <div class="row gap-2 mt-3">
+        <button class="btn btn-ghost btn-sm flex1" data-fuel="${v.id}">⛽ Combustible</button>
+        <button class="btn btn-ghost btn-sm flex1" data-maint="${v.id}">🔧 Mantenimiento</button>
+      </div>
     </div>`).join("");
 
+  list.querySelectorAll("[data-maint]").forEach((b) => b.onclick = () => { activeFuelVid = null; activeMaintVid = b.getAttribute("data-maint"); renderMaint(root, activeMaintVid); });
   list.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openVehicleModal(getState().vehicles.find((x) => x.id === b.getAttribute("data-edit")), root));
   list.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => confirmDialog("¿Eliminar este vehículo?", async () => {
     setState({ vehicles: getState().vehicles.filter((x) => x.id !== b.getAttribute("data-del")) });
     await persistVehicles(); drawList(root); toast("Vehículo eliminado");
   }));
-  list.querySelectorAll("[data-fuel]").forEach((b) => b.onclick = () => { activeFuelVid = b.getAttribute("data-fuel"); renderFuel(root, activeFuelVid); });
+  list.querySelectorAll("[data-fuel]").forEach((b) => b.onclick = () => { activeMaintVid = null; activeFuelVid = b.getAttribute("data-fuel"); renderFuel(root, activeFuelVid); });
 }
 
 function openVehicleModal(v, root) {
@@ -337,6 +355,126 @@ async function exportXlsx(v, fuel) {
   const ws = XLSX.utils.json_to_sheet(fuel.map((r) => ({ Fecha: r.fecha, Estacion: r.estacion, Tipo_combustible: r.tipoCombustible, Galones: r.galones, Odometro: r.odometro, Costo: r.costo, Tanque_lleno: r.tanqueLleno })));
   XLSX.utils.book_append_sheet(wb, ws, "Combustible");
   XLSX.writeFile(wb, "combustible_" + (v.alias || v.placa || "vehiculo").replace(/\s+/g, "_") + ".xlsx"); toast("Excel exportado");
+}
+
+/* ===================== MANTENIMIENTO ===================== */
+function maintStatus(rec, vehOdo, today) {
+  const nextKm = rec.proximoKm || (rec.recurrenteKm ? (rec.odometro || 0) + rec.recurrenteKm : null);
+  const nextDate = rec.proximaFecha || (rec.recurrenteDias && rec.fecha ? addDays(rec.fecha, rec.recurrenteDias) : null);
+  let st = null; const lbl = [];
+  if (nextKm != null) {
+    const falta = nextKm - (vehOdo || 0);
+    if (falta <= 0) { st = "vencido"; lbl.push(`vencido (${Number(nextKm).toLocaleString("es-CO")} km)`); }
+    else if (falta <= 300) { st = st || "proximo"; lbl.push(`en ${falta} km`); }
+  }
+  if (nextDate) {
+    const dias = daysBetween(today, nextDate);
+    if (dias != null && dias <= 0) { st = "vencido"; lbl.push("vencido por fecha"); }
+    else if (dias != null && dias <= 15) { st = st || "proximo"; lbl.push(`en ${dias} días`); }
+  }
+  return { nextKm, nextDate, st, lbl: lbl.join(" · ") };
+}
+
+async function renderMaint(root, vid) {
+  const s = getState();
+  const v = (s.vehicles || []).find((x) => x.id === vid);
+  if (!v) { activeMaintVid = null; return renderList(root); }
+  root.innerHTML = `<div style="min-height:50vh;display:grid;place-items:center"><div class="loader spin"></div></div>`;
+  allMaint = await loadMaint(s.user.uid);
+  drawMaint(root, v);
+}
+
+function drawMaint(root, v) {
+  const items = allMaint.filter((r) => r.vehicleId === v.id).sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || ((b.odometro || 0) - (a.odometro || 0)));
+  const tallerCost = sum(items.filter((r) => r.categoria === "Taller"), (r) => +r.costo || 0);
+  const totalCost = sum(items, (r) => +r.costo || 0);
+  const fechas = items.map((r) => r.fecha).filter(Boolean).sort();
+  const years = fechas.length ? Math.max(1, (new Date(fechas[fechas.length - 1]) - new Date(fechas[0])) / (365 * 86400000)) : 1;
+  const today = todayISO();
+  const latest = {};
+  for (const r of items) { const k = (r.categoria || "") + "|" + (r.tipo || ""); if (!latest[k]) latest[k] = r; }
+  const alerts = [];
+  Object.values(latest).forEach((r) => { const st = maintStatus(r, v.odometro, today); if (st.st) alerts.push({ r, st }); });
+  alerts.sort((a, b) => (a.st.st === "vencido" ? 0 : 1) - (b.st.st === "vencido" ? 0 : 1));
+  const badge = (c) => `<span class="badge" style="background:${c === "Taller" ? "var(--blue)" : "var(--gold)"};color:#10171a">${c}</span>`;
+
+  root.innerHTML = `
+    <div class="row gap-2 mb-3" style="align-items:center">
+      <button id="back" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div><div class="page-title disp" style="font-size:21px;margin:0">🔧 Mantenimiento</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)} · ${Number(v.odometro || 0).toLocaleString("es-CO")} km</div></div>
+    </div>
+    <button id="add-maint" class="btn btn-primary btn-block mb-3">+ Mantenimiento</button>
+    <div class="grid-kpi mb-4">
+      ${kpi("Gasto total", fmt(totalCost))}
+      ${kpi("Solo Taller", fmt(tallerCost))}
+      ${kpi("Gasto/año aprox.", fmt(totalCost / years), true)}
+      ${kpi("Pendientes", alerts.length, true)}
+    </div>
+    ${alerts.length ? `<div class="card mb-3"><div class="card-title">Próximos servicios</div>
+      ${alerts.map((a) => `<div class="row between" style="padding:7px 0;border-top:1px solid var(--line)">
+        <span class="small">${badge(a.r.categoria)} ${escapeHtml(a.r.tipo)}</span>
+        <span class="small bold" style="color:${a.st.st === "vencido" ? "var(--red)" : "var(--yel)"}">${a.st.st === "vencido" ? "⚠ " : "⏳ "}${a.st.lbl}</span></div>`).join("")}</div>` : ""}
+    ${items.length ? `<div class="card" style="padding:0" id="maint-list"></div>` : `<div class="empty"><p>Sin mantenimientos aún. Registra cambios de aceite, llantas, lubricación de cadena, etc.<br>Usa "Taller" para servicios con costo y "Rutina" para inspecciones frecuentes.</p></div>`}`;
+
+  root.querySelector("#back").onclick = () => { activeMaintVid = null; renderList(root); };
+  root.querySelector("#add-maint").onclick = () => openMaintModal(v, root);
+  if (items.length) {
+    root.querySelector("#maint-list").innerHTML = items.slice(0, 300).map((r) => `
+      <div class="tx-row" data-rowm="${r.id}" style="cursor:pointer">
+        <div class="flex1"><div class="tx-desc">${badge(r.categoria)} ${escapeHtml(r.tipo)}</div>
+          <div class="tx-meta">${escapeHtml(r.fecha)} · ${Number(r.odometro || 0).toLocaleString("es-CO")} km${r.taller ? " · " + escapeHtml(r.taller) : ""}</div></div>
+        <div class="tx-amt">${r.costo ? fmt(r.costo) : "—"}</div>
+        <button class="icon-btn" data-delm="${r.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
+      </div>`).join("");
+    root.querySelectorAll("[data-rowm]").forEach((rw) => rw.onclick = (e) => { if (e.target.closest("[data-delm]")) return; openMaintModal(v, root, allMaint.find((x) => x.id === rw.getAttribute("data-rowm"))); });
+    root.querySelectorAll("[data-delm]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este mantenimiento?", async () => {
+      const id = b.getAttribute("data-delm"); allMaint = allMaint.filter((x) => x.id !== id);
+      await deleteMaint(getState().user.uid, id); persistMaintLocal(getState().user.uid, allMaint); drawMaint(root, v); toast("Eliminado");
+    }); });
+  }
+}
+
+function openMaintModal(v, root, existing) {
+  const f = (label, html) => `<div class="field"><label class="label">${label}</label>${html}</div>`;
+  const catOpts = MAINT_CATEGORIES.map((c) => `<option ${existing && existing.categoria === c ? "selected" : ""}>${c}</option>`).join("");
+  const val = (x) => (x != null && x !== "" ? x : "");
+  openModal(existing ? "Mantenimiento" : "Nuevo mantenimiento", `
+    ${f("Categoría", `<select id="ma-cat" class="input">${catOpts}</select>`)}
+    ${f("Tipo", `<select id="ma-tipo" class="input"></select>`)}
+    ${f("Fecha", `<input id="ma-fecha" type="date" class="input" value="${existing ? existing.fecha : todayISO()}">`)}
+    ${f("Odómetro (km)", `<input id="ma-odo" type="number" class="input" value="${existing ? val(existing.odometro) : (v.odometro ?? "")}">`)}
+    ${f("Descripción", `<input id="ma-desc" class="input" value="${existing ? escapeHtml(existing.descripcion || "") : ""}" placeholder="Detalle (opcional)">`)}
+    ${f("Repuesto", `<input id="ma-rep" class="input" value="${existing ? escapeHtml(existing.repuesto || "") : ""}" placeholder="Opcional">`)}
+    ${f("Taller", `<input id="ma-taller" class="input" value="${existing ? escapeHtml(existing.taller || "") : ""}" placeholder="Opcional">`)}
+    ${f("Costo (COP)", `<input id="ma-costo" type="number" class="input" value="${existing ? val(existing.costo) : ""}" placeholder="0">`)}
+    <div class="card-title" style="margin-top:10px;font-size:13px">Próximo aviso (opcional)</div>
+    ${f("Avisar a los (km)", `<input id="ma-pkm" type="number" class="input" value="${existing ? val(existing.proximoKm) : ""}" placeholder="km absoluto, ej: 12000">`)}
+    ${f("o repetir cada (km)", `<input id="ma-rkm" type="number" class="input" value="${existing ? val(existing.recurrenteKm) : ""}" placeholder="ej: 1000 (cadena)">`)}
+    ${f("Avisar en la fecha", `<input id="ma-pfecha" type="date" class="input" value="${existing ? val(existing.proximaFecha) : ""}">`)}
+    ${f("o repetir cada (días)", `<input id="ma-rdias" type="number" class="input" value="${existing ? val(existing.recurrenteDias) : ""}" placeholder="ej: 180">`)}
+    <button id="ma-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
+    onMount(b) {
+      const catSel = b.querySelector("#ma-cat"), tipoSel = b.querySelector("#ma-tipo");
+      const fillTipos = () => { tipoSel.innerHTML = (MAINT_TIPOS[catSel.value] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join(""); };
+      catSel.onchange = fillTipos; fillTipos();
+      if (existing && existing.tipo) tipoSel.value = existing.tipo;
+      b.querySelector("#ma-save").onclick = async () => {
+        const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
+        const rec = {
+          id: existing ? existing.id : uid(), vehicleId: v.id, categoria: catSel.value, tipo: tipoSel.value,
+          fecha: b.querySelector("#ma-fecha").value, odometro: num("ma-odo"),
+          descripcion: b.querySelector("#ma-desc").value.trim(), repuesto: b.querySelector("#ma-rep").value.trim(),
+          taller: b.querySelector("#ma-taller").value.trim(), costo: num("ma-costo") || 0,
+          proximoKm: num("ma-pkm"), recurrenteKm: num("ma-rkm"), proximaFecha: b.querySelector("#ma-pfecha").value || "", recurrenteDias: num("ma-rdias"),
+        };
+        if (!rec.fecha || rec.odometro == null) return toast("Falta fecha u odómetro", true);
+        allMaint = existing ? allMaint.map((x) => (x.id === rec.id ? rec : x)) : [...allMaint, rec];
+        await addMaint(getState().user.uid, rec); persistMaintLocal(getState().user.uid, allMaint);
+        if ((rec.odometro || 0) > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x)) }); v.odometro = rec.odometro; await persistVehicles(); }
+        closeModal(); drawMaint(root, v); toast(existing ? "Mantenimiento actualizado" : "Mantenimiento registrado");
+      };
+    },
+  });
 }
 
 function kpi(label, val, sm) { return `<div class="kpi"><div class="k-label">${label}</div><div class="k-val ${sm ? "sm" : ""}">${val}</div></div>`; }

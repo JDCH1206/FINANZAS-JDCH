@@ -302,6 +302,32 @@ export function persistFuelLocal(uid, arr) {
   if (!FIREBASE_READY) localStorage.setItem("fz_fuel_" + uid, JSON.stringify(arr));
 }
 
+/* ---------- Mantenimiento (subcolección users/{uid}/maintenance) ---------- */
+export async function loadMaint(uid) {
+  if (FIREBASE_READY) {
+    const { db, fsMod } = await initFirebase();
+    const snap = await fsMod.getDocs(fsMod.collection(db, "users", uid, "maintenance"));
+    const arr = []; snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+    return arr;
+  }
+  const raw = localStorage.getItem("fz_maint_" + uid);
+  return raw ? JSON.parse(raw) : [];
+}
+export async function addMaint(uid, rec) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  const { id, ...rest } = rec;
+  await fsMod.setDoc(fsMod.doc(db, "users", uid, "maintenance", id), rest);
+}
+export async function deleteMaint(uid, id) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  await fsMod.deleteDoc(fsMod.doc(db, "users", uid, "maintenance", id));
+}
+export function persistMaintLocal(uid, arr) {
+  if (!FIREBASE_READY) localStorage.setItem("fz_maint_" + uid, JSON.stringify(arr));
+}
+
 /* ---------- persistencia local (modo sin Firebase) ---------- */
 let _stateGetter = null;
 export function bindLocalState(getter) { _stateGetter = getter; }
