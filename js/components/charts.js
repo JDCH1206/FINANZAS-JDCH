@@ -57,6 +57,22 @@ export function lineTrendPct(id, labels, data) {
   });
 }
 
+// línea numérica genérica (ej. rendimiento km/galón)
+export function lineNum(id, labels, data, color = "#5a8fb0", suffix = "") {
+  mount(id, {
+    type: "line",
+    data: { labels, datasets: [{ data, borderColor: color, backgroundColor: "transparent", borderWidth: 2.5, tension: .3, pointRadius: 2, pointBackgroundColor: color }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => " " + c.raw + suffix } } },
+      scales: {
+        x: { ticks: { color: AXIS, font: { size: 9 }, maxTicksLimit: 8 }, grid: { display: false } },
+        y: { ticks: { color: AXIS, font: { size: 10 }, callback: (v) => v + suffix }, grid: { color: GRID } },
+      },
+    },
+  });
+}
+
 export function budgetBars(id, labels, presup, real) {
   mount(id, {
     type: "bar",

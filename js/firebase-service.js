@@ -258,6 +258,50 @@ export async function bulkSetIncomes(uid, incomes) {
   } else { persistLocal(uid); }
 }
 
+/* ---------- Combustible (subcolección users/{uid}/fuel) ---------- */
+export async function loadFuel(uid) {
+  if (FIREBASE_READY) {
+    const { db, fsMod } = await initFirebase();
+    const snap = await fsMod.getDocs(fsMod.collection(db, "users", uid, "fuel"));
+    const arr = []; snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+    return arr;
+  }
+  const raw = localStorage.getItem("fz_fuel_" + uid);
+  return raw ? JSON.parse(raw) : [];
+}
+export async function addFuel(uid, rec) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  const { id, ...rest } = rec;
+  await fsMod.setDoc(fsMod.doc(db, "users", uid, "fuel", id), rest);
+}
+export async function deleteFuel(uid, id) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  await fsMod.deleteDoc(fsMod.doc(db, "users", uid, "fuel", id));
+}
+export async function bulkSetFuel(uid, vehicleId, recs) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  const col = fsMod.collection(db, "users", uid, "fuel");
+  const snap = await fsMod.getDocs(col);
+  let batch = fsMod.writeBatch(db), n = 0;
+  for (const d of snap.docs) {
+    if (d.data().vehicleId === vehicleId) { batch.delete(d.ref); if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; } }
+  }
+  if (n) await batch.commit();
+  batch = fsMod.writeBatch(db); n = 0;
+  for (const r of recs) {
+    const { id, ...rest } = r;
+    batch.set(fsMod.doc(db, "users", uid, "fuel", id), rest);
+    if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
+  }
+  if (n) await batch.commit();
+}
+export function persistFuelLocal(uid, arr) {
+  if (!FIREBASE_READY) localStorage.setItem("fz_fuel_" + uid, JSON.stringify(arr));
+}
+
 /* ---------- persistencia local (modo sin Firebase) ---------- */
 let _stateGetter = null;
 export function bindLocalState(getter) { _stateGetter = getter; }

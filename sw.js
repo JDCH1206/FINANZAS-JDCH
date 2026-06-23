@@ -1,5 +1,5 @@
 // sw.js — service worker (cache del shell de la app)
-const CACHE = "finanzas-jdch-v18";
+const CACHE = "finanzas-jdch-v19";
 const ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./css/tokens.css", "./css/base.css", "./css/components.css", "./css/pages.css",
