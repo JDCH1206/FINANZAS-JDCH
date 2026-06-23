@@ -128,6 +128,7 @@ export function renderSettings(root, onSignOut) {
     const blob = new Blob([JSON.stringify(dataSnapshot(), null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = "finanzas_respaldo_" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
+    localStorage.setItem("fz_last_backup", new Date().toISOString().slice(0, 10));
     toast("Respaldo descargado");
   };
   const impJson = root.querySelector("#imp-json");
@@ -136,8 +137,8 @@ export function renderSettings(root, onSignOut) {
     const file = impJson.files[0]; if (!file) return;
     try {
       const d = JSON.parse(await file.text());
-      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false });
-      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false });
+      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [] });
+      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [] });
       await bulkSetTx(s.user.uid, d.txs || []);
       await bulkSetIncomes(s.user.uid, d.incomes || []);
       forcePersistLocal(s.user.uid);

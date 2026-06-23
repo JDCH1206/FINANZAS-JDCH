@@ -16,6 +16,7 @@ const state = {
   payMethods: [],        // medios de pago personalizados (extienden los base)
   vehiclesEnabled: false,// módulo opcional de vehículos
   vehicles: [],          // [{ id, tipo, alias, placa, ... }]
+  goals: [],             // metas de ahorro [{ id, nombre, objetivo, ahorrado, fecha }]
 };
 
 const listeners = new Set();
@@ -42,6 +43,6 @@ export function setData({ profile, cats, txs, incomes, accounts, budgets, payMet
 }
 
 export function dataSnapshot() {
-  const { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled } = state;
-  return { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled };
+  const { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals } = state;
+  return { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals };
 }

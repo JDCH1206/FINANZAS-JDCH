@@ -12,7 +12,7 @@ import { renderAccounts } from "./views/accounts.js";
 import { renderCategories } from "./views/categories.js";
 import { renderSettings } from "./views/settings.js";
 import { renderVehicles } from "./views/vehicles.js";
-import { openModal, closeModal } from "./components/modals.js";
+import { openModal, closeModal, toast } from "./components/modals.js";
 
 const app = document.getElementById("app");
 
@@ -83,13 +83,13 @@ function startSession(user) {
     setState({
       profile: data.profile, cats: data.cats, budgets: data.budgets,
       accounts: data.accounts || [], payMethods: data.payMethods || [],
-      vehicles: data.vehicles || [], vehiclesEnabled: data.vehiclesEnabled || false,
+      vehicles: data.vehicles || [], vehiclesEnabled: data.vehiclesEnabled || false, goals: data.goals || [],
       txs: data.txs, incomes: data.incomes || [], loading: false,
     });
     if (!booted) {
       booted = true;
       if (data.isNew) { renderOnboarding(app, () => mountShell("summary")); }
-      else { mountShell("summary"); }
+      else { mountShell("summary"); checkBackupReminder(); }
     } else if (data.fromRemote) {
       liveRefresh();
     }
@@ -154,6 +154,15 @@ function draw(route) {
     case "vehicles": return renderVehicles(view);
     case "settings": return renderSettings(view, () => { stopSession(); setState({ user: null }); renderLogin(app, afterLogin); });
   }
+}
+
+// recordatorio de respaldo (cada 30 días) — solo con nube no es crítico, pero útil en local
+function checkBackupReminder() {
+  try {
+    const last = localStorage.getItem("fz_last_backup");
+    const days = last ? Math.round((Date.now() - new Date(last + "T00:00:00")) / 86400000) : 999;
+    if (days >= 30) setTimeout(() => toast(last ? `Hace ${days} días no descargas un respaldo. Ajustes → Descargar respaldo.` : "Tip: descarga un respaldo en Ajustes para proteger tus datos."), 1800);
+  } catch (e) { /* noop */ }
 }
 
 function showLoading() {

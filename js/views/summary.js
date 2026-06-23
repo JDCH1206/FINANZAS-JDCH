@@ -1,7 +1,9 @@
 // js/views/summary.js
-import { getState } from "../state.js";
+import { getState, setState } from "../state.js";
 import { RULE_503020 } from "../config.js";
-import { fmt, ym, monthLabel, sum, curMonth } from "../utils.js";
+import { fmt, ym, monthLabel, sum, curMonth, uid, escapeHtml } from "../utils.js";
+import { saveConfig, forcePersistLocal } from "../firebase-service.js";
+import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
 
 export function renderSummary(root) {
   const s = getState();
@@ -93,6 +95,11 @@ export function renderSummary(root) {
         ${topCats.map(([c, v]) => lineKV(c, fmt(v) + ` · ${totalExp ? ((v / totalExp) * 100).toFixed(0) : 0}%`)).join("") || `<div class="muted small">Sin gastos</div>`}
       </div>
 
+      <div class="card col-span">
+        <div class="row between mb-2"><div class="card-title" style="margin:0">Metas de ahorro</div><button id="add-goal" class="btn btn-ghost btn-sm">+ Meta</button></div>
+        <div id="goals-list"></div>
+      </div>
+
       <div class="card">
         <div class="card-title">Estabilidad del ingreso</div>
         ${["Fijo", "Variable", "Recuperable"].map((n) => nat[n] ? lineKV(n, fmt(nat[n]) + ` · ${totalInc ? ((nat[n] / totalInc) * 100).toFixed(0) : 0}%`) : "").join("") || `<div class="muted small">Sin ingresos</div>`}
@@ -106,6 +113,53 @@ export function renderSummary(root) {
 
     <p class="tiny muted mt-3">*Patrimonio neto = saldo en cuentas. No incluye deudas pendientes (no registradas en esta versión).<br>
     † <b>Balance − Patrimonio</b> = parte de tu flujo neto histórico que no está en las cuentas registradas (gastos en bienes, dinero prestado/regalado o cuentas sin registrar). <b>Diferencia</b> = ese monto como % del balance.</p>`;
+
+  root.querySelector("#add-goal").onclick = () => openGoalModal(root, null);
+  drawGoals(root);
+}
+
+async function saveGoals(root) {
+  const s = getState();
+  await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: s.vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals });
+  forcePersistLocal(s.user.uid);
+}
+function drawGoals(root) {
+  const goals = getState().goals || [];
+  const el = root.querySelector("#goals-list");
+  if (!el) return;
+  if (!goals.length) { el.innerHTML = `<div class="muted small">Sin metas. Toca "+ Meta" para crear una (ej: Fondo de emergencia, Viaje, Moto nueva).</div>`; return; }
+  el.innerHTML = goals.map((g) => {
+    const pct = g.objetivo ? Math.min(100, (g.ahorrado / g.objetivo) * 100) : 0, done = pct >= 100;
+    return `<div class="mb-3">
+      <div class="row between small mb-1"><span>${escapeHtml(g.nombre)}${done ? " ✅" : ""}${g.fecha ? ` <span class="tiny muted">(${g.fecha})</span>` : ""}</span><span class="muted">${fmt(g.ahorrado)} / ${fmt(g.objetivo)} · ${pct.toFixed(0)}%</span></div>
+      <div class="bar"><span style="width:${pct}%;background:${done ? "var(--green)" : "var(--gold)"}"></span></div>
+      <div class="row gap-2 mt-1"><button class="btn btn-ghost btn-sm" data-eg="${g.id}">Editar</button><button class="btn btn-ghost btn-sm" data-dg="${g.id}">Eliminar</button></div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll("[data-eg]").forEach((b) => b.onclick = () => openGoalModal(root, getState().goals.find((x) => x.id === b.getAttribute("data-eg"))));
+  el.querySelectorAll("[data-dg]").forEach((b) => b.onclick = () => confirmDialog("¿Eliminar esta meta?", async () => {
+    setState({ goals: getState().goals.filter((x) => x.id !== b.getAttribute("data-dg")) });
+    await saveGoals(root); drawGoals(root); toast("Meta eliminada");
+  }));
+}
+function openGoalModal(root, existing) {
+  const f = (l, h) => `<div class="field"><label class="label">${l}</label>${h}</div>`;
+  openModal(existing ? "Editar meta" : "Nueva meta", `
+    ${f("Nombre", `<input id="g-nom" class="input" value="${existing ? escapeHtml(existing.nombre) : ""}" placeholder="Ej: Fondo de emergencia">`)}
+    ${f("Objetivo (COP)", `<input id="g-obj" class="input" type="number" value="${existing ? existing.objetivo : ""}" placeholder="0">`)}
+    ${f("Ahorrado hasta hoy (COP)", `<input id="g-ah" class="input" type="number" value="${existing ? existing.ahorrado : ""}" placeholder="0">`)}
+    ${f("Fecha objetivo (opcional)", `<input id="g-fecha" class="input" type="date" value="${existing ? (existing.fecha || "") : ""}">`)}
+    <button id="g-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar" : "Crear meta"}</button>`, {
+    onMount(b) {
+      b.querySelector("#g-save").onclick = async () => {
+        const g = { id: existing ? existing.id : uid(), nombre: b.querySelector("#g-nom").value.trim(), objetivo: +b.querySelector("#g-obj").value || 0, ahorrado: +b.querySelector("#g-ah").value || 0, fecha: b.querySelector("#g-fecha").value || "" };
+        if (!g.nombre || !g.objetivo) return toast("Falta nombre u objetivo", true);
+        const list = getState().goals || [];
+        setState({ goals: existing ? list.map((x) => (x.id === g.id ? g : x)) : [...list, g] });
+        await saveGoals(root); closeModal(); drawGoals(root); toast(existing ? "Meta actualizada" : "Meta creada");
+      };
+    },
+  });
 }
 
 function kpi(label, val, sm) {
