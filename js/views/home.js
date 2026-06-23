@@ -2,7 +2,7 @@
 import { getState, setState } from "../state.js";
 import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig } from "../firebase-service.js";
 import { fmt, uid, todayISO, escapeHtml } from "../utils.js";
-import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS } from "../config.js";
+import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
 
 let query = "";
@@ -92,6 +92,8 @@ export function openTxModal() {
     <div class="field"><label class="label">Asociar a vehículo (opcional)</label>
       <select id="m-veh" class="input"><option value="">— no asociar —</option>${vehs.map((v) => `<option value="${escapeHtml(v.id)}">${v.tipo === "Moto" ? "🏍️" : "🚗"} ${escapeHtml(v.alias || v.modelo)}</option>`).join("")}</select></div>
     <div id="m-veh-extra" style="display:none">
+      <div class="field"><label class="label">Estación</label><input id="m-est" class="input" placeholder="Ej: Terpel, Texaco"></div>
+      <div class="field"><label class="label">Tipo de combustible</label><select id="m-tipo" class="input">${FUEL_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
       <div class="field"><label class="label">Galones</label><input id="m-gal" class="input" type="number" step="0.001" placeholder="Ej: 2.5"></div>
       <div class="field"><label class="label">Odómetro (km del tablero)</label><input id="m-odo" class="input" type="number"></div>
       <div class="field"><label class="label">¿Tanque lleno?</label><select id="m-lleno" class="input"><option>Sí</option><option>No</option></select></div>
@@ -118,6 +120,8 @@ export function openTxModal() {
         const v = s.vehicles.find((x) => x.id === vehSel.value);
         const odoIn = b.querySelector("#m-odo");
         if (v && odoIn && !odoIn.value) odoIn.value = v.odometro ?? "";
+        const tipoIn = b.querySelector("#m-tipo");
+        if (v && tipoIn && v.combustible) tipoIn.value = v.combustible;
       };
       b.querySelector("#m-save").onclick = async () => {
         const tx = {
@@ -132,7 +136,7 @@ export function openTxModal() {
           const v = s.vehicles.find((x) => x.id === vehId);
           const galv = +b.querySelector("#m-gal").value, odov = +b.querySelector("#m-odo").value;
           if (!galv || !odov) return toast("Para asociar al vehículo, pon galones y odómetro", true);
-          const frec = { id: uid(), vehicleId: vehId, fecha: tx.date, estacion: "", tipoCombustible: v?.combustible || "Corriente", galones: galv, odometro: odov, costo: tx.amount, tanqueLleno: b.querySelector("#m-lleno").value, gastoId: tx.id };
+          const frec = { id: uid(), vehicleId: vehId, fecha: tx.date, estacion: b.querySelector("#m-est").value.trim(), tipoCombustible: b.querySelector("#m-tipo").value, galones: galv, odometro: odov, costo: tx.amount, tanqueLleno: b.querySelector("#m-lleno").value, gastoId: tx.id };
           tx.vehicleId = vehId; tx.fuelId = frec.id;
           if (isCloud()) { await addFuel(s.user.uid, frec); }
           else { const ex = await loadFuel(s.user.uid); ex.push(frec); persistFuelLocal(s.user.uid, ex); }
