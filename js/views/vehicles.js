@@ -1,6 +1,6 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal } from "../firebase-service.js";
+import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal, deleteTx } from "../firebase-service.js";
 import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
@@ -264,8 +264,14 @@ function drawFuelList(root, v, m) {
   });
   root.querySelectorAll("[data-delf]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este tanqueo?", async () => {
     const id = b.getAttribute("data-delf");
+    const rec = allFuel.find((x) => x.id === id);
     allFuel = allFuel.filter((x) => x.id !== id);
     await deleteFuel(getState().user.uid, id); persistFuelLocal(getState().user.uid, allFuel);
+    // borrar el gasto vinculado (si lo hay)
+    if (rec && rec.gastoId) {
+      setState({ txs: getState().txs.filter((x) => x.id !== rec.gastoId) });
+      await deleteTx(getState().user.uid, rec.gastoId); forcePersistLocal(getState().user.uid);
+    }
     drawFuel(root, v); toast("Eliminado");
   }); });
 }
@@ -285,7 +291,8 @@ function openFuelModal(v, root, existing, info) {
     ${f("Tipo de combustible", `<select id="t-tipo" class="input">${fuelOpts}</select>`)}
     ${f("Galones", `<input id="t-gal" class="input" type="number" step="0.001" placeholder="Ej: 2.5" value="${existing ? existing.galones : ""}">`)}
     ${f("Odómetro (km del tablero)", `<input id="t-odo" class="input" type="number" value="${existing ? existing.odometro : (v.odometro ?? "")}" placeholder="0">`)}
-    ${f("Costo (COP)", `<input id="t-costo" class="input" type="number" placeholder="0" value="${existing ? existing.costo : ""}">`)}
+    ${f("Costo (COP)", `<input id="t-costo" class="input" type="number" placeholder="0" value="${existing ? existing.costo : ""}" ${existing && existing.gastoId ? "readonly style='opacity:.55'" : ""}>`)}
+    ${existing && existing.gastoId ? `<p class="tiny muted">🔗 El valor está vinculado a un gasto en Movimientos. Para cambiarlo, edita ese gasto (allí también se sincroniza la fecha).</p>` : ""}
     ${f("¿Tanque lleno?", `<select id="t-lleno" class="input"><option>Sí</option><option>No</option></select>`)}
     <button id="t-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar tanqueo"}</button>`, {
     onMount(b) {

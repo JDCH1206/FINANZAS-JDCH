@@ -1,6 +1,6 @@
 // js/views/home.js
 import { getState, setState } from "../state.js";
-import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig } from "../firebase-service.js";
+import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel } from "../firebase-service.js";
 import { fmt, uid, todayISO, escapeHtml } from "../utils.js";
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
@@ -60,8 +60,15 @@ function drawList() {
     list.querySelectorAll("[data-row]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-del]")) return; openTxModal(getState().txs.find((x) => x.id === r.getAttribute("data-row"))); });
     list.querySelectorAll("[data-del]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este gasto?", async () => {
       const id = b.getAttribute("data-del");
+      const tx = getState().txs.find((x) => x.id === id);
       setState({ txs: getState().txs.filter((x) => x.id !== id) });
-      await deleteTx(s.user.uid, id); forcePersistLocal(s.user.uid); drawList(); toast("Eliminado");
+      await deleteTx(s.user.uid, id); forcePersistLocal(s.user.uid);
+      // borrar el tanqueo vinculado (si lo hay)
+      if (tx && tx.fuelId) {
+        await deleteFuel(s.user.uid, tx.fuelId);
+        if (!isCloud()) { const ex = await loadFuel(s.user.uid); persistFuelLocal(s.user.uid, ex.filter((x) => x.id !== tx.fuelId)); }
+      }
+      drawList(); toast("Eliminado");
     }); });
   } else {
     const f = query ? s.incomes.filter((t) => (t.desc + t.type).toLowerCase().includes(query.toLowerCase())) : s.incomes;
@@ -138,6 +145,11 @@ export function openTxModal(existing) {
         if (existing) {
           setState({ txs: getState().txs.map((x) => (x.id === tx.id ? tx : x)) });
           await addTx(s.user.uid, tx); forcePersistLocal(s.user.uid);
+          // sincronizar el tanqueo vinculado (valor y fecha vienen del gasto)
+          if (tx.fuelId) {
+            if (isCloud()) await updateFuel(s.user.uid, tx.fuelId, { costo: tx.amount, fecha: tx.date });
+            else { const ex = await loadFuel(s.user.uid); const fr = ex.find((x) => x.id === tx.fuelId); if (fr) { fr.costo = tx.amount; fr.fecha = tx.date; persistFuelLocal(s.user.uid, ex); } }
+          }
           closeModal(); drawList(); return toast("Gasto actualizado");
         }
         // asociación opcional a vehículo (crea tanqueo vinculado)

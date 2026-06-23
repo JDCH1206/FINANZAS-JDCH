@@ -298,6 +298,11 @@ export async function bulkSetFuel(uid, vehicleId, recs) {
   }
   if (n) await batch.commit();
 }
+export async function updateFuel(uid, id, fields) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  await fsMod.setDoc(fsMod.doc(db, "users", uid, "fuel", id), fields, { merge: true });
+}
 export function persistFuelLocal(uid, arr) {
   if (!FIREBASE_READY) localStorage.setItem("fz_fuel_" + uid, JSON.stringify(arr));
 }
