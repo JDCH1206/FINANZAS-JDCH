@@ -1,16 +1,28 @@
 // js/views/home.js
 import { getState, setState } from "../state.js";
 import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel } from "../firebase-service.js";
-import { fmt, uid, todayISO, escapeHtml } from "../utils.js";
+import { fmt, uid, todayISO, escapeHtml, ym, monthLabel } from "../utils.js";
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
 
 let query = "";
 let tabKind = "gasto";
+let fMonth = "", fCat = "", fMin = "", fMax = "";
+
+function applyFilters(arr, isGasto) {
+  let f = arr;
+  if (query) f = f.filter((t) => ((t.desc || "") + (t.cat || "") + (t.sub || "") + (t.type || "")).toLowerCase().includes(query.toLowerCase()));
+  if (fMonth) f = f.filter((t) => ym(t.date) === fMonth);
+  if (isGasto && fCat) f = f.filter((t) => t.cat === fCat);
+  if (fMin !== "") f = f.filter((t) => (+t.amount || 0) >= +fMin);
+  if (fMax !== "") f = f.filter((t) => (+t.amount || 0) <= +fMax);
+  return f;
+}
 
 export function renderHome(root) {
   const s = getState();
   const n = tabKind === "gasto" ? s.txs.length : s.incomes.length;
+  const allMonths = [...new Set([...s.txs, ...s.incomes].map((t) => ym(t.date)).filter(Boolean))].sort().reverse();
   root.innerHTML = `
     <h2 class="page-title disp">Movimientos</h2>
     <p class="page-sub">${escapeHtml(s.profile.name)}</p>
@@ -22,10 +34,26 @@ export function renderHome(root) {
     <div class="field" style="position:relative">
       <input id="q" class="input" placeholder="Buscar..." value="${escapeHtml(query)}">
     </div>
+    <div class="card mb-3" style="padding:10px">
+      <div class="row gap-2 wrap">
+        <select id="f-month" class="input" style="flex:1;min-width:130px"><option value="">Todos los meses</option>${allMonths.map((m) => `<option value="${m}" ${m === fMonth ? "selected" : ""}>${monthLabel(m)}</option>`).join("")}</select>
+        ${tabKind === "gasto" ? `<select id="f-cat" class="input" style="flex:1;min-width:130px"><option value="">Todas las categorías</option>${s.cats.map((c) => `<option ${c.name === fCat ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select>` : ""}
+      </div>
+      <div class="row gap-2 wrap mt-2">
+        <input id="f-min" class="input" type="number" placeholder="Monto mín" value="${fMin}" style="flex:1;min-width:90px">
+        <input id="f-max" class="input" type="number" placeholder="Monto máx" value="${fMax}" style="flex:1;min-width:90px">
+        <button id="f-clear" class="btn btn-ghost btn-sm">Limpiar</button>
+      </div>
+    </div>
     <div class="card" style="padding:0" id="list"></div>`;
 
   root.querySelectorAll("[data-kind]").forEach((b) => b.onclick = () => { tabKind = b.getAttribute("data-kind"); renderHome(root); });
   root.querySelector("#q").oninput = (e) => { query = e.target.value; drawList(); };
+  root.querySelector("#f-month").onchange = (e) => { fMonth = e.target.value; drawList(); };
+  const fcatSel = root.querySelector("#f-cat"); if (fcatSel) fcatSel.onchange = (e) => { fCat = e.target.value; drawList(); };
+  root.querySelector("#f-min").oninput = (e) => { fMin = e.target.value; drawList(); };
+  root.querySelector("#f-max").oninput = (e) => { fMax = e.target.value; drawList(); };
+  root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; renderHome(root); };
 
   // FAB fuera del contenedor animado (#view), pegado a la pantalla, siempre visible
   let fab = document.getElementById("fab");
@@ -44,9 +72,9 @@ function drawList() {
   const list = document.getElementById("list");
   if (!list) return;
   if (tabKind === "gasto") {
-    const f = query ? s.txs.filter((t) => (t.desc + t.cat + t.sub).toLowerCase().includes(query.toLowerCase())) : s.txs;
+    const f = applyFilters(s.txs, true);
     const rows = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 300);
-    if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin gastos. Toca + para agregar.</div>`; return; }
+    if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin gastos con esos filtros.</div>`; return; }
     list.innerHTML = rows.map((t) => {
       const ci = s.cats.findIndex((c) => c.name === t.cat);
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
@@ -71,9 +99,9 @@ function drawList() {
       drawList(); toast("Eliminado");
     }); });
   } else {
-    const f = query ? s.incomes.filter((t) => (t.desc + t.type).toLowerCase().includes(query.toLowerCase())) : s.incomes;
+    const f = applyFilters(s.incomes, false);
     const rows = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 300);
-    if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin ingresos. Toca + para agregar.</div>`; return; }
+    if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin ingresos con esos filtros.</div>`; return; }
     list.innerHTML = rows.map((t) => `<div class="tx-row" data-rowi="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:var(--green)"></span>
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}</div>

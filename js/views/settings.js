@@ -47,6 +47,11 @@ export function renderSettings(root, onSignOut) {
     </div>
 
     <div class="card mb-3">
+      <div class="card-title">Apariencia</div>
+      <button id="theme-toggle" class="btn btn-ghost btn-sm"></button>
+    </div>
+
+    <div class="card mb-3">
       <div class="card-title">Módulos opcionales</div>
       <p class="small muted mb-3">🚗 <b>Vehículos</b>: combustible, mantenimiento y obligaciones (SOAT, tecnomecánica, impuesto) con alarmas. Al activarlo aparece en el menú <b>"Más"</b> de la barra inferior.</p>
       <button id="veh-toggle" class="btn btn-sm"></button>
@@ -172,6 +177,17 @@ export function renderSettings(root, onSignOut) {
       btn.disabled = false; btn.textContent = "Borrar todos los movimientos";
     }
   });
+
+  // tema claro/oscuro
+  const themeBtn = root.querySelector("#theme-toggle");
+  const paintTheme = () => { const light = document.documentElement.getAttribute("data-theme") === "light"; themeBtn.textContent = light ? "🌙 Cambiar a tema oscuro" : "☀️ Cambiar a tema claro"; };
+  paintTheme();
+  themeBtn.onclick = () => {
+    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("fz_theme", next);
+    paintTheme();
+  };
 
   // activar/desactivar módulo de Vehículos
   const vehBtn = root.querySelector("#veh-toggle");

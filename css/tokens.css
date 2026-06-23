@@ -31,3 +31,22 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, .35);
   --maxw: 1080px;
 }
+
+/* Tema claro */
+:root[data-theme="light"] {
+  --bg: #f4f6f5;
+  --panel: #ffffff;
+  --panel-2: #eef2f1;
+  --line: #dde4e1;
+  --ink: #1a2326;
+  --sub: #5d6f72;
+  --gold: #b9842b;
+  --gold-ink: #ffffff;
+  --green: #3f8f5a;
+  --green-d: #cfe7d6;
+  --red: #c75a3f;
+  --red-d: #f3d8d0;
+  --yel: #b8902f;
+  --blue: #3f7799;
+  --shadow: 0 8px 24px rgba(20, 40, 50, .12);
+}

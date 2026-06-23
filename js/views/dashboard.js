@@ -52,6 +52,7 @@ export function renderDashboard(root) {
       <div class="card col-span"><div class="card-title">Evolución de la tasa de ahorro (12 meses)</div><div class="chart-box"><canvas id="ch-saverate"></canvas></div><p class="tiny muted mt-2">% del ingreso que te queda cada mes: (ingresos − gastos) ÷ ingresos.</p></div>
       <div class="card col-span"><div class="card-title">Categorías: mes actual vs promedio 12m</div><div class="chart-box"><canvas id="ch-catcmp"></canvas></div><p class="tiny muted mt-2" id="catcmp-cap"></p></div>
       <div class="card col-span"><div class="card-title">Gasto por día de la semana</div><div class="chart-box"><canvas id="ch-dow"></canvas></div><p class="tiny muted mt-2">Suma del gasto del periodo por día. Revela en qué días gastas más.</p></div>
+      <div class="card col-span"><div class="card-title">Balance acumulado en el tiempo</div><div class="chart-box"><canvas id="ch-acum"></canvas></div><p class="tiny muted mt-2">Suma corrida de (ingresos − gastos) mes a mes. Tu colchón de flujo creciendo (o no).</p></div>
       <div class="card col-span"><div class="card-title">Tu % vs. canasta DANE</div><div id="dane"></div></div>
     </div>`;
 
@@ -234,6 +235,12 @@ export function renderDashboard(root) {
   const dowSum = [0, 0, 0, 0, 0, 0, 0];
   filtered.forEach((t) => { const p = (t.date || "").split("-").map(Number); if (p.length === 3 && p[0]) { const wd = new Date(p[0], p[1] - 1, p[2]).getDay(); dowSum[wd] += (+t.amount || 0); } });
   categoryBars("ch-dow", ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"], [dowSum[1], dowSum[2], dowSum[3], dowSum[4], dowSum[5], dowSum[6], dowSum[0]]);
+
+  // ---- Balance acumulado en el tiempo (ingresos − gastos, suma corrida) ----
+  const allMb = [...new Set([...Object.keys(trendMap), ...Object.keys(incMap)])].sort();
+  let acc = 0;
+  const acumData = allMb.map((k) => { acc += (incMap[k] || 0) - (trendMap[k] || 0); return Math.round(acc); });
+  lineTrend("ch-acum", allMb.map((k) => monthLabel(k)), acumData);
 
   // DANE
   root.querySelector("#dane").innerHTML = byCat.map((e, i) => {

@@ -16,6 +16,10 @@ import { openModal, closeModal } from "./components/modals.js";
 
 const app = document.getElementById("app");
 
+// tema (claro/oscuro) — se aplica antes de renderizar
+const savedTheme = localStorage.getItem("fz_theme");
+if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
 // permite que firebase-service persista el estado en modo local
 fbsvc.bindLocalState(() => getState());
 

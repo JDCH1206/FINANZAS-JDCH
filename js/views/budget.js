@@ -1,7 +1,7 @@
 // js/views/budget.js
 import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal } from "../firebase-service.js";
-import { fmt, ym, curMonth, monthLabel, debounce, sum } from "../utils.js";
+import { fmt, ym, curMonth, monthLabel, debounce, sum, escapeHtml } from "../utils.js";
 import { budgetBars } from "../components/charts.js";
 
 let mes = null, mode = "valor";
@@ -23,10 +23,16 @@ export function renderBudget(root) {
   const applied = (c) => mode === "pct" ? ((+b[c.name + "__pct"] || 0) / 100) * (s.profile.income || 0) : (+b[c.name] || 0);
   const totBud = sum(s.cats, applied);
   const totReal = sum(Object.values(realMap));
+  const over = s.cats.map((c) => ({ name: c.name, ap: applied(c), rl: realMap[c.name] || 0 })).filter((o) => o.ap > 0 && o.rl > o.ap);
 
   root.innerHTML = `
     <h2 class="page-title disp">Presupuesto</h2>
     <p class="page-sub">Define el presupuesto de cada mes. Se guarda automáticamente.</p>
+
+    ${over.length ? `<div class="card mb-3" style="border:1px solid var(--red)">
+      <div class="card-title" style="color:var(--red)">⚠ Te pasaste del presupuesto (${monthLabel(mes)})</div>
+      ${over.map((o) => `<div class="row between small" style="padding:4px 0"><span>${escapeHtml(o.name)}</span><span style="color:var(--red)">${fmt(o.rl)} / ${fmt(o.ap)} · ${((o.rl / o.ap) * 100).toFixed(0)}%</span></div>`).join("")}
+    </div>` : ""}
 
     <div class="card mb-3">
       <div class="row gap-2 wrap">
