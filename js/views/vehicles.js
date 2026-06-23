@@ -2,13 +2,25 @@
 import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal } from "../firebase-service.js";
 import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE } from "../config.js";
-import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum } from "../utils.js";
+import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
 
 const icon = (t) => (t === "Moto" ? "🏍️" : "🚗");
 let activeFuelVid = null;   // si está fijo, mostramos la bitácora de ese vehículo
 let allFuel = [];           // cache de todos los tanqueos (todos los vehículos)
+
+function ymAdd(key, delta) {
+  if (!key) return "";
+  const [y, m] = key.split("-").map(Number);
+  const idx = y * 12 + (m - 1) + delta;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`;
+}
+function kpiDelta(label, cur, base) {
+  if (!base) return kpi(label, "—", true);
+  const d = ((cur - base) / base) * 100, up = d >= 0;
+  return `<div class="kpi"><div class="k-label">${label}</div><div class="k-val sm" style="color:${up ? "var(--red)" : "var(--green)"}">${up ? "▲" : "▼"} ${Math.abs(d).toFixed(0)}%</div><div class="tiny muted">base ${fmt(base)}</div></div>`;
+}
 
 async function persistVehicles() {
   const s = getState();
@@ -156,6 +168,10 @@ function drawFuel(root, v) {
   const gastoMes = mKeys.length ? costoTot / mKeys.length : 0;
   const byEst = {}; fuel.forEach((r) => { const e = r.estacion || "—"; byEst[e] = (byEst[e] || 0) + (+r.costo || 0); });
   const estE = Object.entries(byEst).sort((a, b) => b[1] - a[1]);
+  const curM = curMonth(), prevM = ymAdd(curM, -1);
+  const mesActual = months[curM] || 0, mesPasado = months[prevM] || 0;
+  const last12 = mKeys.slice(-12);
+  const avg12 = last12.length ? sum(last12.map((k) => months[k])) / last12.length : 0;
 
   root.innerHTML = `
     <div class="row gap-2 mb-3" style="align-items:center">
@@ -177,6 +193,12 @@ function drawFuel(root, v) {
       ${kpi("Gasto/mes prom.", mKeys.length ? fmt(gastoMes) : "—", true)}
       ${kpi("Galones total", galTot.toFixed(1))}
       ${kpi("Tanqueos", fuel.length, true)}
+    </div>
+
+    <div class="grid-kpi mb-4">
+      ${kpi("Combustible mes actual", fmt(mesActual))}
+      ${kpiDelta("vs mes pasado", mesActual, mesPasado)}
+      ${kpiDelta("vs prom. 12m", mesActual, avg12)}
     </div>
 
     ${fuel.length ? `<div class="grid-cards">

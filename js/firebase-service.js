@@ -198,7 +198,7 @@ export async function addTx(uid, tx) {
   if (FIREBASE_READY) {
     const { db, fsMod } = await initFirebase();
     const ref = fsMod.doc(db, "users", uid, "transactions", tx.id);
-    await fsMod.setDoc(ref, { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub });
+    await fsMod.setDoc(ref, { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "" });
   } else { persistLocal(uid); }
 }
 
