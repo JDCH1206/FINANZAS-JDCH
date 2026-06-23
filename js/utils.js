@@ -9,8 +9,12 @@ export const fmtShort = (n) => {
 };
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const ym = (d) => (d || "").slice(0, 7);
-export const todayISO = () => new Date().toISOString().slice(0, 10);
-export const curMonth = () => new Date().toISOString().slice(0, 7);
+// fecha local (no UTC) → evita el desfase de día en zonas como Colombia (UTC-5)
+export const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+export const curMonth = () => todayISO().slice(0, 7);
 
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 export const monthLabel = (k) => {
