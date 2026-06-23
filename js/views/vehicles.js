@@ -140,21 +140,22 @@ async function renderFuel(root, vid) {
 // rendimiento entre tanqueos llenos (método B): distancia / galones acumulados desde el último lleno
 function computeMetrics(fuel) {
   const sorted = [...fuel].sort((a, b) => (a.odometro || 0) - (b.odometro || 0) || (a.fecha || "").localeCompare(b.fecha || ""));
-  let lastOdo = null, galAcc = 0;
-  const points = [];
+  let lastOdo = null, galAcc = 0, costAcc = 0;
+  const points = [], byId = {};
   for (const r of sorted) {
-    galAcc += +r.galones || 0;
+    galAcc += +r.galones || 0; costAcc += +r.costo || 0;
     const lleno = r.tanqueLleno === "Sí" || r.tanqueLleno === true;
     if (lleno) {
       if (lastOdo != null && r.odometro > lastOdo && galAcc > 0) {
-        const dist = r.odometro - lastOdo;
-        points.push({ fecha: r.fecha, rend: dist / galAcc, dist, gal: galAcc });
+        const dist = r.odometro - lastOdo, rend = dist / galAcc;
+        points.push({ fecha: r.fecha, rend, dist, gal: galAcc });
+        byId[r.id] = { rend, dist, costoKm: costAcc ? costAcc / dist : null };
       }
-      lastOdo = r.odometro; galAcc = 0;
+      lastOdo = r.odometro; galAcc = 0; costAcc = 0;
     }
   }
   const distTot = sum(points, (p) => p.dist), galTot = sum(points, (p) => p.gal);
-  return { sorted, points, rendAvg: galTot ? distTot / galTot : 0, distTot };
+  return { sorted, points, byId, rendAvg: galTot ? distTot / galTot : 0, distTot };
 }
 
 function drawFuel(root, v) {
@@ -222,56 +223,72 @@ function drawFuel(root, v) {
     lineTrend("ch-mes", mKeys.map((k) => monthLabel(k)), mKeys.map((k) => Math.round(months[k])));
     donut("ch-est", estE.map((e) => e[0]), estE.map((e) => e[1]));
     root.querySelector("#leg-est").innerHTML = estE.map((e, i) => `<span class="tiny muted row gap-1"><span style="width:9px;height:9px;border-radius:3px;background:${PALETTE[i % PALETTE.length]}"></span>${escapeHtml(e[0])} ${fmt(e[1])}</span>`).join("");
-    drawFuelList(root, v, m.sorted);
+    drawFuelList(root, v, m);
   }
 }
 
-function drawFuelList(root, v, sorted) {
-  const rows = [...sorted].reverse().slice(0, 300);
-  root.querySelector("#fuel-list").innerHTML = rows.map((r) => `
-    <div class="tx-row">
+function drawFuelList(root, v, m) {
+  const rows = [...m.sorted].reverse().slice(0, 300);
+  root.querySelector("#fuel-list").innerHTML = rows.map((r) => {
+    const info = m.byId[r.id];
+    const extra = info ? ` · ${info.rend.toFixed(1)} km/gal${info.costoKm ? " · " + fmt(info.costoKm) + "/km" : ""}` : "";
+    return `<div class="tx-row" data-rowf="${r.id}" style="cursor:pointer">
       <div class="flex1"><div class="tx-desc">${escapeHtml(r.fecha)} · ${escapeHtml(r.estacion || "—")}${r.tanqueLleno === "No" || r.tanqueLleno === false ? ' <span class="tiny" style="color:var(--yel)">parcial</span>' : ""}</div>
-        <div class="tx-meta">${(+r.galones).toFixed(2)} gal · ${Number(r.odometro).toLocaleString("es-CO")} km${r.rendimiento ? " · " + r.rendimiento + " km/gal" : ""}</div></div>
+        <div class="tx-meta">${(+r.galones).toFixed(2)} gal · ${Number(r.odometro).toLocaleString("es-CO")} km${extra}</div></div>
       <div class="tx-amt">${fmt(r.costo)}</div>
       <button class="icon-btn" data-delf="${r.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
-    </div>`).join("");
-  root.querySelectorAll("[data-delf]").forEach((b) => b.onclick = () => confirmDialog("¿Eliminar este tanqueo?", async () => {
+    </div>`;
+  }).join("");
+  root.querySelectorAll("[data-rowf]").forEach((rw) => rw.onclick = (e) => {
+    if (e.target.closest("[data-delf]")) return;
+    const r = allFuel.find((x) => x.id === rw.getAttribute("data-rowf"));
+    openFuelModal(v, root, r, m.byId[r.id]);
+  });
+  root.querySelectorAll("[data-delf]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este tanqueo?", async () => {
     const id = b.getAttribute("data-delf");
     allFuel = allFuel.filter((x) => x.id !== id);
     await deleteFuel(getState().user.uid, id); persistFuelLocal(getState().user.uid, allFuel);
     drawFuel(root, v); toast("Eliminado");
-  }));
+  }); });
 }
 
-function openFuelModal(v, root) {
+function openFuelModal(v, root, existing, info) {
   const f = (label, html) => `<div class="field"><label class="label">${label}</label>${html}</div>`;
-  const fuelOpts = FUEL_TYPES.map((t) => `<option ${t === (v.combustible || "Corriente") ? "selected" : ""}>${t}</option>`).join("");
-  openModal("Nuevo tanqueo", `
-    ${f("Fecha", `<input id="t-fecha" class="input" type="date" value="${todayISO()}">`)}
-    ${f("Estación", `<input id="t-est" class="input" placeholder="Ej: Terpel">`)}
+  const fuelOpts = FUEL_TYPES.map((t) => `<option>${t}</option>`).join("");
+  const summary = info ? `<div class="card mb-3" style="background:var(--panel-2)">
+      <div class="row between" style="padding:3px 0"><span class="small muted">Rendimiento de esta línea</span><span class="small bold" style="color:var(--green)">${info.rend.toFixed(1)} km/gal</span></div>
+      <div class="row between" style="padding:3px 0"><span class="small muted">Pesos por km</span><span class="small bold">${info.costoKm ? fmt(info.costoKm) + "/km" : "—"}</span></div>
+      <div class="row between" style="padding:3px 0"><span class="small muted">Distancia del tramo</span><span class="small bold">${Number(info.dist).toLocaleString("es-CO")} km</span></div>
+    </div>` : "";
+  openModal(existing ? "Tanqueo" : "Nuevo tanqueo", `
+    ${summary}
+    ${f("Fecha", `<input id="t-fecha" class="input" type="date" value="${existing ? existing.fecha : todayISO()}">`)}
+    ${f("Estación", `<input id="t-est" class="input" placeholder="Ej: Terpel" value="${existing ? escapeHtml(existing.estacion || "") : ""}">`)}
     ${f("Tipo de combustible", `<select id="t-tipo" class="input">${fuelOpts}</select>`)}
-    ${f("Galones", `<input id="t-gal" class="input" type="number" step="0.001" placeholder="Ej: 2.5">`)}
-    ${f("Odómetro (km del tablero)", `<input id="t-odo" class="input" type="number" value="${v.odometro ?? ""}" placeholder="0">`)}
-    ${f("Costo (COP)", `<input id="t-costo" class="input" type="number" placeholder="0">`)}
+    ${f("Galones", `<input id="t-gal" class="input" type="number" step="0.001" placeholder="Ej: 2.5" value="${existing ? existing.galones : ""}">`)}
+    ${f("Odómetro (km del tablero)", `<input id="t-odo" class="input" type="number" value="${existing ? existing.odometro : (v.odometro ?? "")}" placeholder="0">`)}
+    ${f("Costo (COP)", `<input id="t-costo" class="input" type="number" placeholder="0" value="${existing ? existing.costo : ""}">`)}
     ${f("¿Tanque lleno?", `<select id="t-lleno" class="input"><option>Sí</option><option>No</option></select>`)}
-    <button id="t-save" class="btn btn-primary btn-block mt-2">Guardar tanqueo</button>`, {
+    <button id="t-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar tanqueo"}</button>`, {
     onMount(b) {
+      b.querySelector("#t-tipo").value = (existing ? existing.tipoCombustible : v.combustible) || "Corriente";
+      if (existing) b.querySelector("#t-lleno").value = (existing.tanqueLleno === "No" || existing.tanqueLleno === false) ? "No" : "Sí";
       b.querySelector("#t-save").onclick = async () => {
         const rec = {
-          id: uid(), vehicleId: v.id, fecha: b.querySelector("#t-fecha").value,
+          id: existing ? existing.id : uid(), vehicleId: v.id, fecha: b.querySelector("#t-fecha").value,
           estacion: b.querySelector("#t-est").value.trim(), tipoCombustible: b.querySelector("#t-tipo").value,
           galones: +b.querySelector("#t-gal").value, odometro: +b.querySelector("#t-odo").value,
           costo: +b.querySelector("#t-costo").value || 0, tanqueLleno: b.querySelector("#t-lleno").value,
         };
+        if (existing && existing.gastoId) rec.gastoId = existing.gastoId;
         if (!rec.galones || !rec.odometro) return toast("Faltan galones u odómetro", true);
-        allFuel.push(rec);
+        allFuel = existing ? allFuel.map((x) => (x.id === rec.id ? rec : x)) : [...allFuel, rec];
         await addFuel(getState().user.uid, rec); persistFuelLocal(getState().user.uid, allFuel);
-        // avanza el odómetro del vehículo si este es mayor
         if (rec.odometro > (v.odometro || 0)) {
-          const list = getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x));
-          setState({ vehicles: list }); v.odometro = rec.odometro; await persistVehicles();
+          setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x)) });
+          v.odometro = rec.odometro; await persistVehicles();
         }
-        closeModal(); drawFuel(root, v); toast("Tanqueo registrado");
+        closeModal(); drawFuel(root, v); toast(existing ? "Tanqueo actualizado" : "Tanqueo registrado");
       };
     },
   });
