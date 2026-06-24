@@ -3,7 +3,7 @@ import { getState, setState, dataSnapshot } from "../state.js";
 import { saveConfig, bulkSetTx, bulkSetIncomes, signOutUser, isCloud, forcePersistLocal } from "../firebase-service.js";
 import { classify, classifyIncome } from "../config.js";
 import { uid, normDate, escapeHtml } from "../utils.js";
-import { toast, confirmDialog } from "../components/modals.js";
+import { toast, confirmDialog, openModal } from "../components/modals.js";
 
 export function renderSettings(root, onSignOut) {
   const s = getState();
@@ -49,6 +49,11 @@ export function renderSettings(root, onSignOut) {
     <div class="card mb-3">
       <div class="card-title">Apariencia</div>
       <button id="theme-toggle" class="btn btn-ghost btn-sm"></button>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-title">Ayuda</div>
+      <button id="help-btn" class="btn btn-ghost btn-sm">📖 ¿Cómo funciona?</button>
     </div>
 
     <div class="card mb-3">
@@ -178,6 +183,20 @@ export function renderSettings(root, onSignOut) {
       btn.disabled = false; btn.textContent = "Borrar todos los movimientos";
     }
   });
+
+  // ayuda — guía rápida
+  root.querySelector("#help-btn").onclick = () => openModal("Guía rápida", `
+    <div style="font-size:13.5px;line-height:1.55;max-height:60vh;overflow:auto">
+      <p><b>📊 Resumen</b> — tu panorama: disponible, balance, tasa de ahorro y metas de ahorro.</p>
+      <p><b>🧾 Movimientos</b> — registra gastos e ingresos con el botón <b>+</b>. Toca una línea para editarla. Filtra por mes, categoría o monto.</p>
+      <p><b>📈 Tablero</b> — análisis: regla 50/30/20, tendencias, comparativos y recomendación de gasto según tu salario.</p>
+      <p><b>💰 Presupuesto</b> — define topes por categoría; te avisa si te pasas.</p>
+      <p><b>🏦 Cuentas</b> — registra dónde tienes tu dinero (alimenta "Disponible" y "Colchón").</p>
+      <p><b>🏷️ Categorías</b> — crea, renombra o elimina categorías y subcategorías.</p>
+      <p><b>🚗 Más → Vehículos</b> (opcional) — combustible (rendimiento, costo/km), mantenimiento (Taller/Rutina) y obligaciones (SOAT, tecnomecánica, impuesto) con alarmas de vencimiento.</p>
+      <p><b>⚙️ Ajustes</b> — respaldo, tema claro/oscuro, importar/exportar, activar el módulo de vehículos.</p>
+      <p class="muted" style="margin-top:10px">💡 Tus datos se guardan en la nube y se sincronizan entre tus dispositivos en tiempo real. Funciona sin conexión: los cambios se suben al volver.</p>
+    </div>`);
 
   // tema claro/oscuro
   const themeBtn = root.querySelector("#theme-toggle");

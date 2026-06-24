@@ -29,6 +29,37 @@ window.addEventListener("unhandledrejection", (e) => {
   }
 });
 
+// --- PWA: barra "Instalar app" ---
+let deferredPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); deferredPrompt = e;
+  if (localStorage.getItem("fz_install_dismissed")) return;
+  if (document.getElementById("install-bar")) return;
+  const bar = document.createElement("div");
+  bar.id = "install-bar";
+  bar.style.cssText = "position:fixed;left:14px;right:14px;bottom:74px;margin:0 auto;max-width:500px;background:var(--gold);color:var(--gold-ink);padding:10px 14px;border-radius:12px;display:flex;align-items:center;gap:10px;z-index:60;box-shadow:var(--shadow)";
+  bar.innerHTML = `<span style="flex:1;font-weight:600">📲 Instala Finanzas JDCH en tu dispositivo</span><button id="ib-yes" style="background:#0e1417;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">Instalar</button><button id="ib-no" style="background:transparent;border:none;color:inherit;font-size:18px;cursor:pointer">✕</button>`;
+  document.body.appendChild(bar);
+  bar.querySelector("#ib-yes").onclick = async () => { bar.remove(); if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; } };
+  bar.querySelector("#ib-no").onclick = () => { bar.remove(); localStorage.setItem("fz_install_dismissed", "1"); };
+});
+
+// --- indicador de sin conexión ---
+function updateOnline() {
+  let bar = document.getElementById("offline-bar");
+  if (!navigator.onLine) {
+    if (!bar) {
+      bar = document.createElement("div"); bar.id = "offline-bar";
+      bar.style.cssText = "position:fixed;top:0;left:0;right:0;background:var(--red);color:#fff;text-align:center;padding:5px;font-size:12.5px;z-index:70";
+      bar.textContent = "Sin conexión — tus cambios se guardan y se sincronizan al volver";
+      document.body.appendChild(bar);
+    }
+  } else if (bar) { bar.remove(); }
+}
+window.addEventListener("online", updateOnline);
+window.addEventListener("offline", updateOnline);
+updateOnline();
+
 // permite que firebase-service persista el estado en modo local
 fbsvc.bindLocalState(() => getState());
 
