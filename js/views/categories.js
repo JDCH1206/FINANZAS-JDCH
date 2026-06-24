@@ -1,8 +1,33 @@
 // js/views/categories.js
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal } from "../firebase-service.js";
+import { saveConfig, forcePersistLocal, bulkUpdateTx } from "../firebase-service.js";
 import { uid, escapeHtml, debounce } from "../utils.js";
 import { toast, confirmDialog } from "../components/modals.js";
+
+// renombra la categoría en todos los gastos y presupuestos (evita huérfanos)
+async function migrateCatName(oldName, newName) {
+  const s = getState();
+  const affected = s.txs.filter((t) => t.cat === oldName).map((t) => ({ ...t, cat: newName }));
+  if (affected.length) {
+    setState({ txs: s.txs.map((t) => (t.cat === oldName ? { ...t, cat: newName } : t)) });
+    try { await bulkUpdateTx(s.user.uid, affected); } catch (e) { toast("No se pudo migrar en la nube", true); }
+  }
+  const newBudgets = {};
+  for (const [mes, bb] of Object.entries(s.budgets || {})) {
+    const nb = {};
+    for (const [k, v] of Object.entries(bb)) {
+      if (k === oldName) nb[newName] = v;
+      else if (k === oldName + "__pct") nb[newName + "__pct"] = v;
+      else nb[k] = v;
+    }
+    newBudgets[mes] = nb;
+  }
+  setState({ budgets: newBudgets });
+  const s2 = getState();
+  await saveConfig(s2.user.uid, { profile: s2.profile, cats: s2.cats, budgets: newBudgets, accounts: s2.accounts, payMethods: s2.payMethods, vehicles: s2.vehicles, vehiclesEnabled: s2.vehiclesEnabled, goals: s2.goals });
+  forcePersistLocal(s2.user.uid);
+  if (affected.length) toast(`Renombrada · ${affected.length} gastos actualizados`);
+}
 
 let openId = null;
 const persist = debounce(async () => {
@@ -52,7 +77,7 @@ function drawCats(root) {
         </button>
       </div>
       ${open ? `<div class="cat-body">
-        ${c.subs.map((sb) => `<div class="sub-item"><span class="sub-dot"></span><span class="flex1">${escapeHtml(sb)}</span><button class="icon-btn" data-delsub="${c.id}|${escapeHtml(sb)}">✕</button></div>`).join("")}
+        ${c.subs.map((sb, i) => `<div class="sub-item"><span class="sub-dot"></span><span class="flex1">${escapeHtml(sb)}</span><button class="icon-btn" data-delsub="${c.id}|${i}">✕</button></div>`).join("")}
         <div class="row gap-1 mt-2">
           <input class="input" style="font-size:12.5px;padding:7px 10px" placeholder="Nueva subcategoría" data-newsub="${c.id}">
           <button class="btn btn-ghost btn-sm" data-addsub="${c.id}">+</button>
@@ -63,12 +88,27 @@ function drawCats(root) {
 
   // handlers
   host.querySelectorAll("[data-toggle]").forEach((b) => b.onclick = () => { const id = b.getAttribute("data-toggle"); openId = openId === id ? null : id; drawCats(root); });
-  host.querySelectorAll("[data-name]").forEach((inp) => inp.onchange = (e) => { mutate(e.target.getAttribute("data-name"), (c) => c.name = e.target.value); });
+  host.querySelectorAll("[data-name]").forEach((inp) => inp.onchange = (e) => {
+    const id = e.target.getAttribute("data-name");
+    const cat = getState().cats.find((c) => c.id === id);
+    const oldName = cat.name, newName = e.target.value.trim();
+    if (!newName || newName === oldName) return;
+    mutate(id, (c) => c.name = newName);
+    migrateCatName(oldName, newName);
+  });
   host.querySelectorAll("[data-type]").forEach((sel) => sel.onchange = (e) => { mutate(e.target.getAttribute("data-type"), (c) => c.type = e.target.value); });
   host.querySelectorAll("[data-delcat]").forEach((b) => b.onclick = () => {
     const id = b.getAttribute("data-delcat");
-    confirmDialog("¿Eliminar la categoría y sus subcategorías?", () => {
-      setState({ cats: getState().cats.filter((c) => c.id !== id) }); persist(); drawCats(root);
+    const cat = getState().cats.find((c) => c.id === id);
+    const cnt = getState().txs.filter((t) => t.cat === cat.name).length;
+    confirmDialog(`¿Eliminar "${cat.name}"?${cnt ? ` Sus ${cnt} gastos pasarán a Misceláneos.` : ""}`, async () => {
+      setState({ cats: getState().cats.filter((c) => c.id !== id) });
+      if (cnt) {
+        const affected = getState().txs.filter((t) => t.cat === cat.name).map((t) => ({ ...t, cat: "Misceláneos", sub: "Sin clasificar" }));
+        setState({ txs: getState().txs.map((t) => (t.cat === cat.name ? { ...t, cat: "Misceláneos", sub: "Sin clasificar" } : t)) });
+        try { await bulkUpdateTx(getState().user.uid, affected); } catch (e) { toast("No se pudo migrar en la nube", true); }
+      }
+      persist(); drawCats(root); toast(cnt ? `Eliminada · ${cnt} gastos a Misceláneos` : "Categoría eliminada");
     });
   });
   host.querySelectorAll("[data-addsub]").forEach((b) => b.onclick = () => {
@@ -78,8 +118,8 @@ function drawCats(root) {
     mutate(id, (c) => c.subs = [...c.subs, v]); drawCats(root);
   });
   host.querySelectorAll("[data-delsub]").forEach((b) => b.onclick = () => {
-    const [id, sb] = b.getAttribute("data-delsub").split("|");
-    mutate(id, (c) => c.subs = c.subs.filter((x) => x !== sb)); drawCats(root);
+    const [id, idx] = b.getAttribute("data-delsub").split("|");
+    mutate(id, (c) => c.subs = c.subs.filter((_, i) => i !== +idx)); drawCats(root);
   });
 }
 

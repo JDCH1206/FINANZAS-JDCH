@@ -8,6 +8,7 @@ import { openModal, closeModal, toast, confirmDialog } from "../components/modal
 let query = "";
 let tabKind = "gasto";
 let fMonth = "", fCat = "", fMin = "", fMax = "";
+let limit = 300;
 
 function applyFilters(arr, isGasto) {
   let f = arr;
@@ -48,11 +49,11 @@ export function renderHome(root) {
     <div class="card" style="padding:0" id="list"></div>`;
 
   root.querySelectorAll("[data-kind]").forEach((b) => b.onclick = () => { tabKind = b.getAttribute("data-kind"); renderHome(root); });
-  root.querySelector("#q").oninput = (e) => { query = e.target.value; drawList(); };
-  root.querySelector("#f-month").onchange = (e) => { fMonth = e.target.value; drawList(); };
-  const fcatSel = root.querySelector("#f-cat"); if (fcatSel) fcatSel.onchange = (e) => { fCat = e.target.value; drawList(); };
-  root.querySelector("#f-min").oninput = (e) => { fMin = e.target.value; drawList(); };
-  root.querySelector("#f-max").oninput = (e) => { fMax = e.target.value; drawList(); };
+  root.querySelector("#q").oninput = (e) => { query = e.target.value; limit = 300; drawList(); };
+  root.querySelector("#f-month").onchange = (e) => { fMonth = e.target.value; limit = 300; drawList(); };
+  const fcatSel = root.querySelector("#f-cat"); if (fcatSel) fcatSel.onchange = (e) => { fCat = e.target.value; limit = 300; drawList(); };
+  root.querySelector("#f-min").oninput = (e) => { fMin = e.target.value; limit = 300; drawList(); };
+  root.querySelector("#f-max").oninput = (e) => { fMax = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; renderHome(root); };
 
   // FAB fuera del contenedor animado (#view), pegado a la pantalla, siempre visible
@@ -73,7 +74,8 @@ function drawList() {
   if (!list) return;
   if (tabKind === "gasto") {
     const f = applyFilters(s.txs, true);
-    const rows = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 300);
+    const sorted = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const rows = sorted.slice(0, limit), more = sorted.length > limit;
     if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin gastos con esos filtros.</div>`; return; }
     list.innerHTML = rows.map((t) => {
       const ci = s.cats.findIndex((c) => c.name === t.cat);
@@ -85,7 +87,8 @@ function drawList() {
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`;
-    }).join("");
+    }).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btn" style="margin:10px 0">Ver más (${sorted.length - limit} restantes)</button>` : "");
+    if (more) list.querySelector("#more-btn").onclick = () => { limit += 300; drawList(); };
     list.querySelectorAll("[data-row]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-del]")) return; openTxModal(getState().txs.find((x) => x.id === r.getAttribute("data-row"))); });
     list.querySelectorAll("[data-del]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este gasto?", async () => {
       const id = b.getAttribute("data-del");
@@ -101,7 +104,8 @@ function drawList() {
     }); });
   } else {
     const f = applyFilters(s.incomes, false);
-    const rows = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 300);
+    const sorted = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const rows = sorted.slice(0, limit), more = sorted.length > limit;
     if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin ingresos con esos filtros.</div>`; return; }
     list.innerHTML = rows.map((t) => `<div class="tx-row" data-rowi="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:var(--green)"></span>
@@ -109,7 +113,8 @@ function drawList() {
           <div class="tx-meta">${t.date} · ${escapeHtml(t.type || "")}</div></div>
         <div class="tx-amt" style="color:var(--green)">${fmt(t.amount)}</div>
         <button class="icon-btn" data-deli="${t.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
-      </div>`).join("");
+      </div>`).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btni" style="margin:10px 0">Ver más (${sorted.length - limit} restantes)</button>` : "");
+    if (more) list.querySelector("#more-btni").onclick = () => { limit += 300; drawList(); };
     list.querySelectorAll("[data-rowi]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-deli]")) return; openIncomeModal(getState().incomes.find((x) => x.id === r.getAttribute("data-rowi"))); });
     list.querySelectorAll("[data-deli]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este ingreso?", async () => {
       const id = b.getAttribute("data-deli");
@@ -191,7 +196,7 @@ export function openTxModal(existing) {
           pay: b.querySelector("#m-pay").value, acct: b.querySelector("#m-acct").value || "",
         };
         if (existing) { tx.vehicleId = existing.vehicleId || ""; tx.fuelId = existing.fuelId || ""; }
-        if (!tx.desc || !tx.amount) return toast("Falta descripción o monto", true);
+        if (!tx.desc || !tx.amount || tx.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
         if (existing) {
           setState({ txs: getState().txs.map((x) => (x.id === tx.id ? tx : x)) });
           await addTx(s.user.uid, tx); forcePersistLocal(s.user.uid);
@@ -241,7 +246,7 @@ export function openIncomeModal(existing) {
       if (existing) b.querySelector("#i-type").value = existing.type || "Otros ingresos";
       b.querySelector("#i-save").onclick = async () => {
         const inc = { id: existing ? existing.id : uid(), date: b.querySelector("#i-date").value, desc: b.querySelector("#i-desc").value.trim(), amount: +b.querySelector("#i-amt").value, type: b.querySelector("#i-type").value };
-        if (!inc.desc || !inc.amount) return toast("Falta descripción o monto", true);
+        if (!inc.desc || !inc.amount || inc.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
         setState({ incomes: existing ? getState().incomes.map((x) => (x.id === inc.id ? inc : x)) : [inc, ...getState().incomes] });
         await addIncome(s.user.uid, inc); forcePersistLocal(s.user.uid);
         closeModal(); drawList(); toast(existing ? "Ingreso actualizado" : "Ingreso agregado");

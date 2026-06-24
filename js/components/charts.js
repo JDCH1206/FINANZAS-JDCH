@@ -16,16 +16,20 @@ function mount(id, config) {
   registry[id] = new Chart(el.getContext("2d"), config);
 }
 
-const AXIS = "#8aa0a3", GRID = "#26333a";
-const baseScales = {
-  x: { ticks: { color: AXIS, font: { size: 10 } }, grid: { display: false } },
-  y: { ticks: { color: AXIS, font: { size: 10 }, callback: (v) => fmtShort(v) }, grid: { color: GRID } },
-};
+// colores según el tema actual (claro/oscuro) — se leen al crear cada gráfico
+const css = (v, fb) => (getComputedStyle(document.documentElement).getPropertyValue(v).trim() || fb);
+const axis = () => css("--sub", "#8aa0a3");
+const grid = () => css("--line", "#26333a");
+const panel = () => css("--panel", "#161e22");
+const baseScales = () => ({
+  x: { ticks: { color: axis(), font: { size: 10 } }, grid: { display: false } },
+  y: { ticks: { color: axis(), font: { size: 10 }, callback: (v) => fmtShort(v) }, grid: { color: grid() } },
+});
 
 export function donut(id, labels, data) {
   mount(id, {
     type: "doughnut",
-    data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderColor: "#161e22", borderWidth: 2 }] },
+    data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderColor: panel(), borderWidth: 2 }] },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: "58%",
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${fmt(c.raw)}` } } },
@@ -37,7 +41,7 @@ export function lineTrend(id, labels, data) {
   mount(id, {
     type: "line",
     data: { labels, datasets: [{ data, borderColor: "#d8a657", backgroundColor: "rgba(216,166,87,.12)", borderWidth: 2.5, fill: true, tension: .3, pointRadius: 3, pointBackgroundColor: "#d8a657" }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => " " + fmt(c.raw) } } }, scales: baseScales },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => " " + fmt(c.raw) } } }, scales: baseScales() },
   });
 }
 
@@ -50,8 +54,8 @@ export function lineTrendPct(id, labels, data) {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => " " + c.raw + "%" } } },
       scales: {
-        x: { ticks: { color: AXIS, font: { size: 10 } }, grid: { display: false } },
-        y: { ticks: { color: AXIS, font: { size: 10 }, callback: (v) => v + "%" }, grid: { color: GRID } },
+        x: { ticks: { color: axis(), font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: axis(), font: { size: 10 }, callback: (v) => v + "%" }, grid: { color: grid() } },
       },
     },
   });
@@ -66,8 +70,8 @@ export function lineNum(id, labels, data, color = "#5a8fb0", suffix = "") {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => " " + c.raw + suffix } } },
       scales: {
-        x: { ticks: { color: AXIS, font: { size: 9 }, maxTicksLimit: 8 }, grid: { display: false } },
-        y: { ticks: { color: AXIS, font: { size: 10 }, callback: (v) => v + suffix }, grid: { color: GRID } },
+        x: { ticks: { color: axis(), font: { size: 9 }, maxTicksLimit: 8 }, grid: { display: false } },
+        y: { ticks: { color: axis(), font: { size: 10 }, callback: (v) => v + suffix }, grid: { color: grid() } },
       },
     },
   });
@@ -85,8 +89,8 @@ export function budgetBars(id, labels, presup, real) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: AXIS, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.raw)}` } } },
-      scales: baseScales,
+      plugins: { legend: { labels: { color: axis(), font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.raw)}` } } },
+      scales: baseScales(),
     },
   });
 }
@@ -104,8 +108,8 @@ export function groupedBars(id, labels, a, b, la, lb) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: AXIS, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.raw)}` } } },
-      scales: baseScales,
+      plugins: { legend: { labels: { color: axis(), font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.raw)}` } } },
+      scales: baseScales(),
     },
   });
 }
@@ -119,8 +123,8 @@ export function categoryBars(id, labels, data) {
       indexAxis: "y", responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => " " + fmt(c.raw) } } },
       scales: {
-        x: { ticks: { color: AXIS, font: { size: 10 }, callback: (v) => fmtShort(v) }, grid: { color: GRID } },
-        y: { ticks: { color: AXIS, font: { size: 11 } }, grid: { display: false } },
+        x: { ticks: { color: axis(), font: { size: 10 }, callback: (v) => fmtShort(v) }, grid: { color: grid() } },
+        y: { ticks: { color: axis(), font: { size: 11 } }, grid: { display: false } },
       },
     },
   });

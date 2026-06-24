@@ -1,6 +1,7 @@
 // js/app.js — orquestador principal
 import { getState, setState } from "./state.js";
-import { onAuth, subscribeData, isCloud } from "./firebase-service.js";
+import { onAuth, subscribeData, isCloud, loadOblig } from "./firebase-service.js";
+import { todayISO } from "./utils.js";
 import * as fbsvc from "./firebase-service.js";
 import { renderLogin } from "./views/login.js";
 import { renderOnboarding } from "./views/onboarding.js";
@@ -19,6 +20,14 @@ const app = document.getElementById("app");
 // tema (claro/oscuro) — se aplica antes de renderizar
 const savedTheme = localStorage.getItem("fz_theme");
 if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
+// red de seguridad: avisa si una escritura a la nube falla (offline, permiso, cuota)
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = String((e.reason && e.reason.message) || e.reason || "");
+  if (/firestore|permission|unavailable|network|backend|deadline|quota/i.test(msg)) {
+    toast("No se pudo guardar en la nube. Revisa tu conexión; se reintenta al volver.", true);
+  }
+});
 
 // permite que firebase-service persista el estado en modo local
 fbsvc.bindLocalState(() => getState());
@@ -89,7 +98,7 @@ function startSession(user) {
     if (!booted) {
       booted = true;
       if (data.isNew) { renderOnboarding(app, () => mountShell("summary")); }
-      else { mountShell("summary"); checkBackupReminder(); }
+      else { mountShell("summary"); checkBackupReminder(); checkVehicleAlerts(); }
     } else if (data.fromRemote) {
       liveRefresh();
     }
@@ -162,6 +171,30 @@ function checkBackupReminder() {
     const last = localStorage.getItem("fz_last_backup");
     const days = last ? Math.round((Date.now() - new Date(last + "T00:00:00")) / 86400000) : 999;
     if (days >= 30) setTimeout(() => toast(last ? `Hace ${days} días no descargas un respaldo. Ajustes → Descargar respaldo.` : "Tip: descarga un respaldo en Ajustes para proteger tus datos."), 1800);
+  } catch (e) { /* noop */ }
+}
+
+// badge de obligaciones por vencer/vencidas en el botón "Más"
+async function checkVehicleAlerts() {
+  const s = getState();
+  if (!s.vehiclesEnabled) return;
+  try {
+    const obl = await loadOblig(s.user.uid);
+    const today = todayISO();
+    let pend = 0;
+    for (const o of obl) {
+      if (o.estado === "TRAMITE" || !o.fechaVencimiento) continue;
+      const dias = Math.round((new Date(o.fechaVencimiento + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
+      if (dias <= (o.diasAviso || 30)) pend++;
+    }
+    const moreBtn = document.querySelector('#nav button[data-route="more"]');
+    if (moreBtn && pend > 0 && !moreBtn.querySelector(".nav-badge")) {
+      const badge = document.createElement("span");
+      badge.className = "nav-badge"; badge.textContent = pend;
+      badge.style.cssText = "position:absolute;top:3px;right:14px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;line-height:1;padding:2px 5px;font-weight:700";
+      moreBtn.style.position = "relative";
+      moreBtn.appendChild(badge);
+    }
   } catch (e) { /* noop */ }
 }
 

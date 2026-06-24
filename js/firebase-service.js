@@ -212,6 +212,18 @@ export async function deleteTx(uid, txId) {
   } else { persistLocal(uid); }
 }
 
+// actualiza solo las transacciones dadas (sin borrar el resto) — para migrar categorías
+export async function bulkUpdateTx(uid, txs) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  let batch = fsMod.writeBatch(db), n = 0;
+  for (const tx of txs) {
+    batch.set(fsMod.doc(db, "users", uid, "transactions", tx.id), { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "" });
+    if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
+  }
+  if (n) await batch.commit();
+}
+
 export async function bulkSetTx(uid, txs) {
   if (FIREBASE_READY) {
     const { db, fsMod } = await initFirebase();

@@ -20,6 +20,8 @@ export function renderSummary(root) {
   const disponible = sum(s.accounts || [], (a) => a.balance);
   const gap = ahorroFlujo - disponible;                       // flujo no reflejado en cuentas
   const gapPct = ahorroFlujo ? (gap / ahorroFlujo) * 100 : 0;
+  const lastBk = localStorage.getItem("fz_last_backup");
+  const bkDays = lastBk ? Math.round((Date.now() - new Date(lastBk + "T00:00:00")) / 86400000) : 999;
 
   // mes actual
   const cm = curMonth();
@@ -49,6 +51,8 @@ export function renderSummary(root) {
   root.innerHTML = `
     <h2 class="page-title disp">Resumen</h2>
     <p class="page-sub">Panorama consolidado de tus finanzas</p>
+
+    ${bkDays >= 30 ? `<div class="card mb-3" style="border:1px solid var(--yel)"><div class="small">💾 ${lastBk ? `Hace ${bkDays} días no descargas un respaldo` : "Aún no has descargado un respaldo"}. Hazlo en <b>Ajustes → Descargar respaldo</b> para proteger tus datos.</div></div>` : ""}
 
     <div class="grid-kpi mb-4">
       ${kpi("Total ingresos", fmt(totalInc))}
