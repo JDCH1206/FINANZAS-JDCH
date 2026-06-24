@@ -82,6 +82,9 @@ function drawList(root) {
       <div class="row between mt-2" style="border-top:1px solid var(--line);padding-top:8px">
         <span class="small muted">Odómetro</span><span class="small bold">${v.odometro != null ? Number(v.odometro).toLocaleString("es-CO") + " km" : "—"}</span>
       </div>
+      <div class="row between mt-1">
+        <span class="small muted">Gasto asociado a este vehículo</span><span class="small bold" style="color:var(--gold)">${fmt(sum(getState().txs.filter((t) => t.vehicleId === v.id), (t) => t.amount))}</span>
+      </div>
       <div class="row gap-2 mt-3">
         <button class="btn btn-ghost btn-sm flex1" data-fuel="${v.id}">⛽ Combustible</button>
         <button class="btn btn-ghost btn-sm flex1" data-maint="${v.id}">🔧 Mantenimiento</button>

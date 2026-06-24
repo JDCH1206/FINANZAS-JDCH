@@ -77,9 +77,10 @@ function drawList() {
     if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin gastos con esos filtros.</div>`; return; }
     list.innerHTML = rows.map((t) => {
       const ci = s.cats.findIndex((c) => c.name === t.cat);
+      const veh = t.vehicleId ? (s.vehicles || []).find((x) => x.id === t.vehicleId) : null;
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:${PALETTE[(ci + 11) % PALETTE.length]}"></span>
-        <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${t.vehicleId ? " 🏍️" : ""}</div>
+        <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${veh ? (veh.tipo === "Moto" ? " 🏍️" : " 🚗") : ""}</div>
           <div class="tx-meta">${t.date} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}</div></div>
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
@@ -129,12 +130,16 @@ export function openTxModal(existing) {
     <div class="field"><label class="label">Asociar a vehículo (opcional)</label>
       <select id="m-veh" class="input"><option value="">— no asociar —</option>${vehs.map((v) => `<option value="${escapeHtml(v.id)}">${v.tipo === "Moto" ? "🏍️" : "🚗"} ${escapeHtml(v.alias || v.modelo)}</option>`).join("")}</select></div>
     <div id="m-veh-extra" style="display:none">
-      <div class="field"><label class="label">Estación</label><input id="m-est" class="input" placeholder="Ej: Terpel, Texaco"></div>
-      <div class="field"><label class="label">Tipo de combustible</label><select id="m-tipo" class="input">${FUEL_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
-      <div class="field"><label class="label">Galones</label><input id="m-gal" class="input" type="number" step="0.001" placeholder="Ej: 2.5"></div>
-      <div class="field"><label class="label">Odómetro (km del tablero)</label><input id="m-odo" class="input" type="number"></div>
-      <div class="field"><label class="label">¿Tanque lleno?</label><select id="m-lleno" class="input"><option>Sí</option><option>No</option></select></div>
-      <p class="tiny muted">Esto crea un tanqueo en la bitácora del vehículo, vinculado a este gasto (no se duplica la plata).</p>
+      <div class="field"><label class="label">Tipo de gasto del vehículo</label>
+        <select id="m-vtype" class="input"><option value="comb">Combustible</option><option value="otro">Otro (lavado, peaje, repuesto, SOAT…)</option></select></div>
+      <div id="m-fuel-fields">
+        <div class="field"><label class="label">Estación</label><input id="m-est" class="input" placeholder="Ej: Terpel, Texaco"></div>
+        <div class="field"><label class="label">Tipo de combustible</label><select id="m-tipo" class="input">${FUEL_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
+        <div class="field"><label class="label">Galones</label><input id="m-gal" class="input" type="number" step="0.001" placeholder="Ej: 2.5"></div>
+        <div class="field"><label class="label">Odómetro (km del tablero)</label><input id="m-odo" class="input" type="number"></div>
+        <div class="field"><label class="label">¿Tanque lleno?</label><select id="m-lleno" class="input"><option>Sí</option><option>No</option></select></div>
+      </div>
+      <p class="tiny muted">El gasto queda asociado a este vehículo (para separar costos por moto/carro). Si es combustible, crea un tanqueo vinculado.</p>
     </div>` : "";
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
@@ -153,15 +158,21 @@ export function openTxModal(existing) {
       catSel.onchange = fillSubs; fillSubs();
       if (existing) { subSel.value = existing.sub || ""; b.querySelector("#m-pay").value = existing.pay || "Efectivo"; b.querySelector("#m-acct").value = existing.acct || ""; }
       const vehSel = b.querySelector("#m-veh");
-      if (vehSel) vehSel.onchange = () => {
-        const extra = b.querySelector("#m-veh-extra");
-        extra.style.display = vehSel.value ? "block" : "none";
-        const v = s.vehicles.find((x) => x.id === vehSel.value);
-        const odoIn = b.querySelector("#m-odo");
-        if (v && odoIn && !odoIn.value) odoIn.value = v.odometro ?? "";
-        const tipoIn = b.querySelector("#m-tipo");
-        if (v && tipoIn && v.combustible) tipoIn.value = v.combustible;
-      };
+      if (vehSel) {
+        const vtypeSel = b.querySelector("#m-vtype");
+        const toggleFuel = () => { b.querySelector("#m-fuel-fields").style.display = vtypeSel.value === "comb" ? "block" : "none"; };
+        vtypeSel.onchange = toggleFuel;
+        vehSel.onchange = () => {
+          const extra = b.querySelector("#m-veh-extra");
+          extra.style.display = vehSel.value ? "block" : "none";
+          const v = s.vehicles.find((x) => x.id === vehSel.value);
+          const odoIn = b.querySelector("#m-odo");
+          if (v && odoIn && !odoIn.value) odoIn.value = v.odometro ?? "";
+          const tipoIn = b.querySelector("#m-tipo");
+          if (v && tipoIn && v.combustible) tipoIn.value = v.combustible;
+          toggleFuel();
+        };
+      }
       b.querySelector("#m-save").onclick = async () => {
         const tx = {
           id: existing ? existing.id : uid(), date: b.querySelector("#m-date").value, desc: b.querySelector("#m-desc").value.trim(),
@@ -180,19 +191,22 @@ export function openTxModal(existing) {
           }
           closeModal(); drawList(); return toast("Gasto actualizado");
         }
-        // asociación opcional a vehículo (crea tanqueo vinculado)
+        // asociación opcional a vehículo
         const vehId = vehSel ? vehSel.value : "";
         if (vehId) {
           const v = s.vehicles.find((x) => x.id === vehId);
-          const galv = +b.querySelector("#m-gal").value, odov = +b.querySelector("#m-odo").value;
-          if (!galv || !odov) return toast("Para asociar al vehículo, pon galones y odómetro", true);
-          const frec = { id: uid(), vehicleId: vehId, fecha: tx.date, estacion: b.querySelector("#m-est").value.trim(), tipoCombustible: b.querySelector("#m-tipo").value, galones: galv, odometro: odov, costo: tx.amount, tanqueLleno: b.querySelector("#m-lleno").value, gastoId: tx.id };
-          tx.vehicleId = vehId; tx.fuelId = frec.id;
-          if (isCloud()) { await addFuel(s.user.uid, frec); }
-          else { const ex = await loadFuel(s.user.uid); ex.push(frec); persistFuelLocal(s.user.uid, ex); }
-          if (odov > (v?.odometro || 0)) {
-            setState({ vehicles: getState().vehicles.map((x) => (x.id === vehId ? { ...x, odometro: odov } : x)) });
-            await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: getState().vehicles, vehiclesEnabled: s.vehiclesEnabled });
+          tx.vehicleId = vehId; // etiqueta el gasto al vehículo (separa costos por moto/carro)
+          if (b.querySelector("#m-vtype").value === "comb") {
+            const galv = +b.querySelector("#m-gal").value, odov = +b.querySelector("#m-odo").value;
+            if (!galv || !odov) return toast("Para combustible, pon galones y odómetro", true);
+            const frec = { id: uid(), vehicleId: vehId, fecha: tx.date, estacion: b.querySelector("#m-est").value.trim(), tipoCombustible: b.querySelector("#m-tipo").value, galones: galv, odometro: odov, costo: tx.amount, tanqueLleno: b.querySelector("#m-lleno").value, gastoId: tx.id };
+            tx.fuelId = frec.id;
+            if (isCloud()) { await addFuel(s.user.uid, frec); }
+            else { const ex = await loadFuel(s.user.uid); ex.push(frec); persistFuelLocal(s.user.uid, ex); }
+            if (odov > (v?.odometro || 0)) {
+              setState({ vehicles: getState().vehicles.map((x) => (x.id === vehId ? { ...x, odometro: odov } : x)) });
+              await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: getState().vehicles, vehiclesEnabled: s.vehiclesEnabled });
+            }
           }
         }
         setState({ txs: [tx, ...s.txs] });
