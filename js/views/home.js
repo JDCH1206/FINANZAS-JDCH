@@ -219,9 +219,9 @@ export function openTxModal(existing) {
             tx.fuelId = frec.id;
             if (isCloud()) { await addFuel(s.user.uid, frec); }
             else { const ex = await loadFuel(s.user.uid); ex.push(frec); persistFuelLocal(s.user.uid, ex); }
-            if (odov > (v?.odometro || 0)) {
+            if (odov && odov !== (v?.odometro || 0)) {
               setState({ vehicles: getState().vehicles.map((x) => (x.id === vehId ? { ...x, odometro: odov } : x)) });
-              await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: getState().vehicles, vehiclesEnabled: s.vehiclesEnabled });
+              await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: getState().vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals });
             }
           }
         }

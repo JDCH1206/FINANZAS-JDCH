@@ -50,8 +50,20 @@ function kpiDelta(label, cur, base) {
 
 async function persistVehicles() {
   const s = getState();
-  await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: s.vehicles, vehiclesEnabled: s.vehiclesEnabled });
+  await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: s.vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals });
   forcePersistLocal(s.user.uid);
+}
+
+// el odómetro del vehículo = el del tanqueo MÁS RECIENTE reportado (refleja lo último que reportas)
+async function syncVehicleOdo(v) {
+  const fuel = allFuel.filter((r) => r.vehicleId === v.id);
+  if (!fuel.length) return;
+  const latest = fuel.reduce((m, r) => (!m || (r.fecha || "") > m.fecha || ((r.fecha || "") === m.fecha && (+r.odometro || 0) > (+m.odometro || 0)) ? r : m), null);
+  const newOdo = +latest.odometro || 0;
+  if (newOdo !== (v.odometro || 0)) {
+    setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: newOdo } : x)) });
+    v.odometro = newOdo; await persistVehicles();
+  }
 }
 
 export function renderVehicles(root) {
@@ -306,6 +318,7 @@ function drawFuelList(root, v, m) {
     const rec = allFuel.find((x) => x.id === id);
     allFuel = allFuel.filter((x) => x.id !== id);
     await deleteFuel(getState().user.uid, id); persistFuelLocal(getState().user.uid, allFuel);
+    await syncVehicleOdo(v);
     // borrar el gasto vinculado (si lo hay)
     if (rec && rec.gastoId) {
       setState({ txs: getState().txs.filter((x) => x.id !== rec.gastoId) });
@@ -348,10 +361,7 @@ function openFuelModal(v, root, existing, info) {
         if (!rec.galones || !rec.odometro) return toast("Faltan galones u odómetro", true);
         allFuel = existing ? allFuel.map((x) => (x.id === rec.id ? rec : x)) : [...allFuel, rec];
         await addFuel(getState().user.uid, rec); persistFuelLocal(getState().user.uid, allFuel);
-        if (rec.odometro > (v.odometro || 0)) {
-          setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x)) });
-          v.odometro = rec.odometro; await persistVehicles();
-        }
+        await syncVehicleOdo(v);
         closeModal(); drawFuel(root, v); toast(existing ? "Tanqueo actualizado" : "Tanqueo registrado");
       };
     },
@@ -414,8 +424,7 @@ async function importFuelXlsx(v, root, input) {
     toast("Importando " + recs.length + " tanqueos...");
     allFuel = allFuel.filter((x) => x.vehicleId !== v.id).concat(recs);
     await bulkSetFuel(getState().user.uid, v.id, recs); persistFuelLocal(getState().user.uid, allFuel);
-    const maxOdo = Math.max(...recs.map((r) => r.odometro));
-    if (maxOdo > (v.odometro || 0)) { const list = getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: maxOdo } : x)); setState({ vehicles: list }); v.odometro = maxOdo; await persistVehicles(); }
+    await syncVehicleOdo(v);
     drawFuel(root, v); toast(recs.length + " tanqueos importados");
   } catch (e) { console.error(e); toast("Error al leer el Excel", true); }
   input.value = "";
