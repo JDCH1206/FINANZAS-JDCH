@@ -51,6 +51,13 @@ export const DEFAULT_PAY_METHODS = ["Efectivo", "Transferencia", "Tarjeta débit
 export const VEHICLE_TYPES = ["Moto", "Carro"];
 export const FUEL_TYPES = ["Corriente", "Extra", "Diésel", "Gas"];
 export const SERVICE_TYPES = ["Particular", "Público"];
+export const OBLIG_TIPOS = [
+  { key: "SOAT", label: "SOAT" },
+  { key: "RTM", label: "Tecnomecánica (RTM)" },
+  { key: "IMPUESTO", label: "Impuesto vehicular" },
+  { key: "LICENCIA", label: "Licencia de conducción" },
+];
+export const AVISO_DIAS = [15, 30, 60];
 export const MAINT_CATEGORIES = ["Taller", "Rutina"];
 export const MAINT_TIPOS = {
   Taller: ["Cambio de aceite", "Filtro de aceite", "Llantas", "Frenos (pastillas)", "Kit de arrastre", "Bujía", "Sincronización / válvulas", "Batería", "Reparación", "Otro"],

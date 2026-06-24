@@ -336,6 +336,32 @@ export function persistMaintLocal(uid, arr) {
   if (!FIREBASE_READY) localStorage.setItem("fz_maint_" + uid, JSON.stringify(arr));
 }
 
+/* ---------- Obligaciones legales (subcolección users/{uid}/obligations) ---------- */
+export async function loadOblig(uid) {
+  if (FIREBASE_READY) {
+    const { db, fsMod } = await initFirebase();
+    const snap = await fsMod.getDocs(fsMod.collection(db, "users", uid, "obligations"));
+    const arr = []; snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+    return arr;
+  }
+  const raw = localStorage.getItem("fz_oblig_" + uid);
+  return raw ? JSON.parse(raw) : [];
+}
+export async function addOblig(uid, rec) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  const { id, ...rest } = rec;
+  await fsMod.setDoc(fsMod.doc(db, "users", uid, "obligations", id), rest);
+}
+export async function deleteOblig(uid, id) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  await fsMod.deleteDoc(fsMod.doc(db, "users", uid, "obligations", id));
+}
+export function persistObligLocal(uid, arr) {
+  if (!FIREBASE_READY) localStorage.setItem("fz_oblig_" + uid, JSON.stringify(arr));
+}
+
 /* ---------- persistencia local (modo sin Firebase) ---------- */
 let _stateGetter = null;
 export function bindLocalState(getter) { _stateGetter = getter; }

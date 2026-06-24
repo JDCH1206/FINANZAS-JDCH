@@ -1,7 +1,7 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal, deleteTx } from "../firebase-service.js";
-import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
+import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal, deleteTx, loadOblig, addOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
+import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
@@ -9,8 +9,21 @@ import { donut, lineTrend, lineNum } from "../components/charts.js";
 const icon = (t) => (t === "Moto" ? "🏍️" : "🚗");
 let activeFuelVid = null;   // si está fijo, mostramos la bitácora de ese vehículo
 let activeMaintVid = null;  // bitácora de mantenimiento
+let activeObligVid = null;  // obligaciones legales
 let allFuel = [];           // cache de todos los tanqueos (todos los vehículos)
 let allMaint = [];          // cache de mantenimientos
+let allOblig = [];          // cache de obligaciones
+
+const obligLabel = (k) => (OBLIG_TIPOS.find((t) => t.key === k) || {}).label || k;
+function obligStatus(o, today) {
+  if (o.estado === "TRAMITE") return { st: "tramite", lbl: "trámite en curso", color: "var(--blue)", dot: "🔵" };
+  if (!o.fechaVencimiento) return { st: "vigente", lbl: "sin fecha", color: "var(--sub)", dot: "⚪" };
+  const dias = daysBetween(today, o.fechaVencimiento), umbral = o.diasAviso || 30;
+  if (dias < 0) return { st: "vencido", lbl: `vencido hace ${-dias} días`, color: "var(--red)", dot: "🔴" };
+  if (dias === 0) return { st: "vencido", lbl: "vence hoy", color: "var(--red)", dot: "🔴" };
+  if (dias <= umbral) return { st: "porvencer", lbl: `vence en ${dias} días`, color: "var(--yel)", dot: "🟡" };
+  return { st: "vigente", lbl: `vigente · ${dias} días`, color: "var(--green)", dot: "🟢" };
+}
 
 function addDays(iso, days) {
   if (!iso) return "";
@@ -42,20 +55,39 @@ async function persistVehicles() {
 }
 
 export function renderVehicles(root) {
+  if (activeObligVid) return renderOblig(root, activeObligVid);
   if (activeMaintVid) return renderMaint(root, activeMaintVid);
   if (activeFuelVid) return renderFuel(root, activeFuelVid);
   renderList(root);
 }
 
 /* ===================== LISTA / REGISTRO ===================== */
-function renderList(root) {
+async function renderList(root) {
+  const s = getState();
   root.innerHTML = `
     <h2 class="page-title disp">Vehículos</h2>
     <p class="page-sub">Tus vehículos: moto, carro o varios</p>
+    <div id="oblig-alert"></div>
     <button id="add-veh" class="btn btn-primary btn-block mb-4">+ Agregar vehículo</button>
     <div id="veh-list"></div>`;
   root.querySelector("#add-veh").onclick = () => openVehicleModal(null, root);
   drawList(root);
+  allOblig = await loadOblig(s.user.uid);
+  drawObligAlert(root);
+}
+
+function drawObligAlert(root) {
+  const el = root.querySelector("#oblig-alert"); if (!el) return;
+  const today = todayISO();
+  const vmap = Object.fromEntries((getState().vehicles || []).map((v) => [v.id, v]));
+  const pend = allOblig.map((o) => ({ o, v: vmap[o.vehicleId], st: obligStatus(o, today) })).filter((x) => x.v && (x.st.st === "vencido" || x.st.st === "porvencer"));
+  pend.sort((a, b) => (a.st.st === "vencido" ? 0 : 1) - (b.st.st === "vencido" ? 0 : 1));
+  if (!pend.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="card mb-3" style="border:1px solid var(--yel)">
+    <div class="card-title">⏰ Próximos vencimientos</div>
+    ${pend.map((p) => `<div class="row between" style="padding:6px 0;border-top:1px solid var(--line)">
+      <span class="small">${p.st.dot} ${escapeHtml(obligLabel(p.o.tipo))} · ${escapeHtml(p.v.alias || p.v.modelo)}</span>
+      <span class="small bold" style="color:${p.st.color}">${p.st.lbl}</span></div>`).join("")}</div>`;
 }
 
 function drawList(root) {
@@ -85,19 +117,21 @@ function drawList(root) {
       <div class="row between mt-1">
         <span class="small muted">Gasto asociado a este vehículo</span><span class="small bold" style="color:var(--gold)">${fmt(sum(getState().txs.filter((t) => t.vehicleId === v.id), (t) => t.amount))}</span>
       </div>
-      <div class="row gap-2 mt-3">
+      <div class="row gap-2 mt-3 wrap">
         <button class="btn btn-ghost btn-sm flex1" data-fuel="${v.id}">⛽ Combustible</button>
         <button class="btn btn-ghost btn-sm flex1" data-maint="${v.id}">🔧 Mantenimiento</button>
+        <button class="btn btn-ghost btn-sm flex1" data-oblig="${v.id}">📋 Obligaciones</button>
       </div>
     </div>`).join("");
 
-  list.querySelectorAll("[data-maint]").forEach((b) => b.onclick = () => { activeFuelVid = null; activeMaintVid = b.getAttribute("data-maint"); renderMaint(root, activeMaintVid); });
+  list.querySelectorAll("[data-oblig]").forEach((b) => b.onclick = () => { activeFuelVid = null; activeMaintVid = null; activeObligVid = b.getAttribute("data-oblig"); renderOblig(root, activeObligVid); });
+  list.querySelectorAll("[data-maint]").forEach((b) => b.onclick = () => { activeFuelVid = null; activeObligVid = null; activeMaintVid = b.getAttribute("data-maint"); renderMaint(root, activeMaintVid); });
   list.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openVehicleModal(getState().vehicles.find((x) => x.id === b.getAttribute("data-edit")), root));
   list.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => confirmDialog("¿Eliminar este vehículo?", async () => {
     setState({ vehicles: getState().vehicles.filter((x) => x.id !== b.getAttribute("data-del")) });
     await persistVehicles(); drawList(root); toast("Vehículo eliminado");
   }));
-  list.querySelectorAll("[data-fuel]").forEach((b) => b.onclick = () => { activeMaintVid = null; activeFuelVid = b.getAttribute("data-fuel"); renderFuel(root, activeFuelVid); });
+  list.querySelectorAll("[data-fuel]").forEach((b) => b.onclick = () => { activeMaintVid = null; activeObligVid = null; activeFuelVid = b.getAttribute("data-fuel"); renderFuel(root, activeFuelVid); });
 }
 
 function openVehicleModal(v, root) {
@@ -482,6 +516,81 @@ function openMaintModal(v, root, existing) {
         await addMaint(getState().user.uid, rec); persistMaintLocal(getState().user.uid, allMaint);
         if ((rec.odometro || 0) > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x)) }); v.odometro = rec.odometro; await persistVehicles(); }
         closeModal(); drawMaint(root, v); toast(existing ? "Mantenimiento actualizado" : "Mantenimiento registrado");
+      };
+    },
+  });
+}
+
+/* ===================== OBLIGACIONES LEGALES ===================== */
+async function renderOblig(root, vid) {
+  const s = getState();
+  const v = (s.vehicles || []).find((x) => x.id === vid);
+  if (!v) { activeObligVid = null; return renderList(root); }
+  root.innerHTML = `<div style="min-height:50vh;display:grid;place-items:center"><div class="loader spin"></div></div>`;
+  allOblig = await loadOblig(s.user.uid);
+  drawOblig(root, v);
+}
+
+function drawOblig(root, v) {
+  const items = allOblig.filter((r) => r.vehicleId === v.id).sort((a, b) => (a.fechaVencimiento || "9999").localeCompare(b.fechaVencimiento || "9999"));
+  const today = todayISO();
+  root.innerHTML = `
+    <div class="row gap-2 mb-3" style="align-items:center">
+      <button id="back" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div><div class="page-title disp" style="font-size:21px;margin:0">📋 Obligaciones</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)}</div></div>
+    </div>
+    <button id="add-oblig" class="btn btn-primary btn-block mb-3">+ Obligación</button>
+    ${items.length ? `<div class="card" style="padding:0" id="oblig-list"></div>` : `<div class="empty"><p>Sin obligaciones. Registra SOAT, tecnomecánica, impuesto o licencia con su fecha de vencimiento para recibir alarmas.</p></div>`}
+    <p class="tiny muted mt-3">Las reglas y fechas varían por departamento y cambian cada año. Es un recordatorio configurable, no una autoridad legal. Verifica en RUNT / Secretaría de Movilidad / Gobernación.</p>`;
+  root.querySelector("#back").onclick = () => { activeObligVid = null; renderList(root); };
+  root.querySelector("#add-oblig").onclick = () => openObligModal(v, root);
+  if (items.length) {
+    root.querySelector("#oblig-list").innerHTML = items.map((o) => {
+      const st = obligStatus(o, today);
+      return `<div class="tx-row" data-rowo="${o.id}" style="cursor:pointer">
+        <div class="flex1"><div class="tx-desc">${st.dot} ${escapeHtml(obligLabel(o.tipo))}</div>
+          <div class="tx-meta">${o.fechaVencimiento ? "Vence " + escapeHtml(o.fechaVencimiento) : "sin fecha"}${o.entidad ? " · " + escapeHtml(o.entidad) : ""} · <span style="color:${st.color}">${st.lbl}</span></div></div>
+        <div class="tx-amt">${o.costo ? fmt(o.costo) : ""}</div>
+        <button class="icon-btn" data-delo="${o.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
+      </div>`;
+    }).join("");
+    root.querySelectorAll("[data-rowo]").forEach((rw) => rw.onclick = (e) => { if (e.target.closest("[data-delo]")) return; openObligModal(v, root, allOblig.find((x) => x.id === rw.getAttribute("data-rowo"))); });
+    root.querySelectorAll("[data-delo]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar esta obligación?", async () => {
+      const id = b.getAttribute("data-delo"); allOblig = allOblig.filter((x) => x.id !== id);
+      await deleteOblig(getState().user.uid, id); persistObligLocal(getState().user.uid, allOblig); drawOblig(root, v); toast("Eliminado");
+    }); });
+  }
+}
+
+function openObligModal(v, root, existing) {
+  const f = (l, h) => `<div class="field"><label class="label">${l}</label>${h}</div>`;
+  const tipoOpts = OBLIG_TIPOS.map((t) => `<option value="${t.key}" ${existing && existing.tipo === t.key ? "selected" : ""}>${t.label}</option>`).join("");
+  const avisoOpts = AVISO_DIAS.map((d) => `<option value="${d}" ${existing && existing.diasAviso === d ? "selected" : (!existing && d === 30 ? "selected" : "")}>${d} días antes</option>`).join("");
+  const val = (x) => (x != null && x !== "" ? x : "");
+  openModal(existing ? "Obligación" : "Nueva obligación", `
+    ${f("Tipo", `<select id="o-tipo" class="input">${tipoOpts}</select>`)}
+    ${f("Fecha de vencimiento", `<input id="o-venc" type="date" class="input" value="${existing ? val(existing.fechaVencimiento) : ""}">`)}
+    ${f("Fecha de expedición (opcional)", `<input id="o-exp" type="date" class="input" value="${existing ? val(existing.fechaExpedicion) : ""}">`)}
+    ${f("Costo (COP)", `<input id="o-costo" type="number" class="input" value="${existing ? val(existing.costo) : ""}" placeholder="0">`)}
+    ${f("Entidad", `<input id="o-ent" class="input" value="${existing ? escapeHtml(existing.entidad || "") : ""}" placeholder="Aseguradora, CDA, gobernación…">`)}
+    ${f("N° / referencia", `<input id="o-num" class="input" value="${existing ? escapeHtml(existing.numero || "") : ""}" placeholder="Opcional">`)}
+    ${f("Avisar con", `<select id="o-aviso" class="input">${avisoOpts}</select>`)}
+    ${f("Estado", `<select id="o-estado" class="input"><option value="">Normal (según fecha)</option><option value="TRAMITE" ${existing && existing.estado === "TRAMITE" ? "selected" : ""}>Trámite en curso / pagado</option></select>`)}
+    ${f("Notas", `<input id="o-notas" class="input" value="${existing ? escapeHtml(existing.notas || "") : ""}" placeholder="Opcional">`)}
+    <button id="o-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
+    onMount(b) {
+      b.querySelector("#o-save").onclick = async () => {
+        const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
+        const rec = {
+          id: existing ? existing.id : uid(), vehicleId: v.id, tipo: b.querySelector("#o-tipo").value,
+          fechaVencimiento: b.querySelector("#o-venc").value || "", fechaExpedicion: b.querySelector("#o-exp").value || "",
+          costo: num("o-costo") || 0, entidad: b.querySelector("#o-ent").value.trim(), numero: b.querySelector("#o-num").value.trim(),
+          diasAviso: +b.querySelector("#o-aviso").value || 30, estado: b.querySelector("#o-estado").value || "", notas: b.querySelector("#o-notas").value.trim(),
+        };
+        if (!rec.fechaVencimiento && rec.estado !== "TRAMITE") return toast("Pon la fecha de vencimiento", true);
+        allOblig = existing ? allOblig.map((x) => (x.id === rec.id ? rec : x)) : [...allOblig, rec];
+        await addOblig(getState().user.uid, rec); persistObligLocal(getState().user.uid, allOblig);
+        closeModal(); drawOblig(root, v); toast(existing ? "Obligación actualizada" : "Obligación registrada");
       };
     },
   });
