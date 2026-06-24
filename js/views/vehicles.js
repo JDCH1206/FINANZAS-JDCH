@@ -238,6 +238,7 @@ function drawFuel(root, v) {
       <button id="add-fuel" class="btn btn-primary btn-sm">+ Tanqueo</button>
       <input id="imp-fuel" type="file" accept=".xlsx,.xls" hidden>
       <button id="imp-fuel-btn" class="btn btn-ghost btn-sm">⬆ Importar Excel</button>
+      <button id="adj-odo-btn" class="btn btn-ghost btn-sm">⚙ Odómetro real</button>
       <button id="exp-xls" class="btn btn-ghost btn-sm">⬇ Excel</button>
       <button id="exp-json" class="btn btn-ghost btn-sm">⬇ JSON</button>
     </div>
@@ -272,6 +273,7 @@ function drawFuel(root, v) {
   imp.onchange = () => importFuelXlsx(v, root, imp);
   root.querySelector("#exp-json").onclick = () => exportJson(v, fuel);
   root.querySelector("#exp-xls").onclick = () => exportXlsx(v, fuel);
+  root.querySelector("#adj-odo-btn").onclick = () => openAdjustOdoModal(v, root);
 
   if (fuel.length) {
     lineNum("ch-rend", m.points.map((p) => p.fecha), m.points.map((p) => +p.rend.toFixed(1)), "#7fbf7f", "");
@@ -351,6 +353,37 @@ function openFuelModal(v, root, existing, info) {
           v.odometro = rec.odometro; await persistVehicles();
         }
         closeModal(); drawFuel(root, v); toast(existing ? "Tanqueo actualizado" : "Tanqueo registrado");
+      };
+    },
+  });
+}
+
+// Ajusta el odómetro reconstruido al real reportado, desplazando todos los tanqueos por igual
+function openAdjustOdoModal(v, root) {
+  const fuel = allFuel.filter((r) => r.vehicleId === v.id);
+  if (!fuel.length) return toast("No hay tanqueos para ajustar", true);
+  const latest = fuel.reduce((m, r) => ((r.odometro || 0) > (m ? m.odometro : -1) ? r : m), null);
+  const curMax = latest.odometro || 0;
+  const minOdo = Math.min(...fuel.map((r) => r.odometro || 0));
+  openModal("Ajustar odómetro real", `
+    <p class="small muted mb-3">Los tanqueos importados usan un odómetro <b>reconstruido</b> (aproximado, empieza en 0). Pon el odómetro <b>real del último tanqueo</b> (${escapeHtml(latest.fecha)}, hoy en ${Number(curMax).toLocaleString("es-CO")} km reconstruidos) y la app ajusta todos los registros por igual, <b>sin cambiar los rendimientos</b>.</p>
+    <div class="field"><label class="label">Odómetro real del último tanqueo (km)</label><input id="adj-odo" class="input" type="number" value="${curMax}"></div>
+    <button id="adj-save" class="btn btn-primary btn-block">Ajustar</button>`, {
+    onMount(b) {
+      b.querySelector("#adj-save").onclick = async () => {
+        const real = +b.querySelector("#adj-odo").value;
+        if (!real) return toast("Pon el odómetro real", true);
+        const offset = real - curMax;
+        if (offset === 0) { closeModal(); return; }
+        if (minOdo + offset < 0) return toast("Ese valor haría odómetros negativos. Usa un número más alto.", true);
+        const updated = fuel.map((r) => ({ ...r, odometro: (r.odometro || 0) + offset }));
+        allFuel = allFuel.filter((x) => x.vehicleId !== v.id).concat(updated);
+        await bulkSetFuel(getState().user.uid, v.id, updated);
+        persistFuelLocal(getState().user.uid, allFuel);
+        const newVehOdo = Math.max(...updated.map((r) => r.odometro || 0));
+        setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: newVehOdo } : x)) });
+        v.odometro = newVehOdo; await persistVehicles();
+        closeModal(); drawFuel(root, v); toast("Odómetro ajustado");
       };
     },
   });
