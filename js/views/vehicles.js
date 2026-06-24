@@ -244,7 +244,7 @@ function drawFuel(root, v) {
   root.innerHTML = `
     <div class="row gap-2 mb-3" style="align-items:center">
       <button id="back" class="icon-btn" title="Volver"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
-      <div><div class="page-title disp" style="font-size:21px;margin:0">⛽ Combustible</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)}</div></div>
+      <div><div class="page-title disp" style="font-size:21px;margin:0">⛽ Combustible</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)} · ${Number(v.odometro || 0).toLocaleString("es-CO")} km</div></div>
     </div>
     <div class="row gap-2 wrap mb-3">
       <button id="add-fuel" class="btn btn-primary btn-sm">+ Tanqueo</button>
