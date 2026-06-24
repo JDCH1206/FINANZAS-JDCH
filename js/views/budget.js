@@ -47,8 +47,8 @@ export function renderBudget(root) {
           </select></div>
         ${mode === "pct" ? `<div><label class="label">Ingreso/mes</label><input id="b-inc" class="input" type="number" value="${s.profile.income}" style="width:140px"></div>` : ""}
       </div>
-      <button id="b-auto" class="btn btn-ghost btn-sm mt-3">⚡ Calcular automático (50/30/20)</button>
-      <p class="tiny muted mt-2">Reparte tu ingreso mensual (${fmt(s.profile.income || 0)}) en las categorías según la regla 50/30/20 y el peso DANE. Luego ajusta lo que quieras.</p>
+      <button id="b-auto" class="btn btn-ghost btn-sm mt-3">⚡ Calcular automático (según tu historial)</button>
+      <p class="tiny muted mt-2">Reparte tu ingreso mensual (${fmt(s.profile.income || 0)}) con la regla 50/30/20, pesando cada categoría según <b>lo que realmente gastas</b> (últimos 12 meses): las que casi no mueves reciben poco o nada. Luego ajusta lo que quieras.</p>
     </div>
 
     <div class="card mb-3">
@@ -67,18 +67,26 @@ export function renderBudget(root) {
   root.querySelector("#b-auto").onclick = () => {
     const income = s.profile.income || 0;
     if (!income) return toast("Define tu ingreso mensual en Resumen/Ajustes primero", true);
-    confirmDialog(`¿Calcular el presupuesto de ${monthLabel(mes)} con tu ingreso (${fmt(income)})? Reemplaza los valores de este mes; luego puedes ajustarlos.`, () => {
+    confirmDialog(`¿Calcular el presupuesto de ${monthLabel(mes)} con tu ingreso (${fmt(income)}) y tu historial? Reemplaza los valores de este mes; luego puedes ajustarlos.`, () => {
+      // gasto promedio mensual por categoría (últimos 12 meses) → categorías que casi no usas pesan poco
+      const meses = [...new Set(s.txs.map((t) => ym(t.date)).filter(Boolean))].sort().slice(-12);
+      const set12 = new Set(meses), nM = meses.length || 1;
+      const catAvg = {}; s.cats.forEach((c) => (catAvg[c.name] = 0));
+      s.txs.forEach((t) => { if (set12.has(ym(t.date)) && catAvg[t.cat] != null) catAvg[t.cat] += (+t.amount || 0); });
+      Object.keys(catAvg).forEach((k) => (catAvg[k] = catAvg[k] / nM));
+
       const nb = {};
       ["Necesidad", "Deseo", "Deuda"].forEach((type) => {
         const cot = s.cats.filter((c) => c.type === type);
-        const weights = cot.map((c) => c.dane || 5);
+        let weights = cot.map((c) => catAvg[c.name] || 0);            // peso = histórico real
+        if (weights.reduce((a, b) => a + b, 0) <= 0) weights = cot.map((c) => c.dane || 5); // sin historial → DANE
         const totalW = weights.reduce((a, b) => a + b, 0) || 1;
         const bucket = income * ((RULE_503020[type] || 0) / 100);
         cot.forEach((c, i) => { nb[c.name] = Math.round(bucket * (weights[i] / totalW) / 1000) * 1000; });
       });
       mode = "valor";
       setState({ budgets: { ...getState().budgets, [mes]: nb } });
-      saveBudgets(); renderBudget(root); toast("Presupuesto calculado · ajústalo a tu gusto");
+      saveBudgets(); renderBudget(root); toast("Presupuesto calculado según tu historial · ajústalo");
     });
   };
   if (mode === "pct") root.querySelector("#b-inc").onchange = (e) => { setState({ profile: { ...s.profile, income: +e.target.value } }); saveBudgets(); renderBudget(root); };
