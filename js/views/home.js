@@ -127,6 +127,7 @@ export function openTxModal(existing) {
   const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
   const vehs = (!existing && s.vehiclesEnabled && (s.vehicles || []).length) ? s.vehicles : [];
   const vehBlock = vehs.length ? `
+    <div id="m-veh-wrap" style="display:none">
     <div class="field"><label class="label">Asociar a vehículo (opcional)</label>
       <select id="m-veh" class="input"><option value="">— no asociar —</option>${vehs.map((v) => `<option value="${escapeHtml(v.id)}">${v.tipo === "Moto" ? "🏍️" : "🚗"} ${escapeHtml(v.alias || v.modelo)}</option>`).join("")}</select></div>
     <div id="m-veh-extra" style="display:none">
@@ -140,6 +141,7 @@ export function openTxModal(existing) {
         <div class="field"><label class="label">¿Tanque lleno?</label><select id="m-lleno" class="input"><option>Sí</option><option>No</option></select></div>
       </div>
       <p class="tiny muted">El gasto queda asociado a este vehículo (para separar costos por moto/carro). Si es combustible, crea un tanqueo vinculado.</p>
+    </div>
     </div>` : "";
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
@@ -154,8 +156,17 @@ export function openTxModal(existing) {
     onMount(b) {
       const catSel = b.querySelector("#m-cat"), subSel = b.querySelector("#m-sub");
       const fillSubs = () => { const c = s.cats.find((x) => x.name === catSel.value); subSel.innerHTML = (c?.subs || []).map((x) => `<option>${escapeHtml(x)}</option>`).join(""); };
+      // el bloque de vehículo solo aparece en categorías de vehículo (Moto, Carro, Vehículo, variantes)
+      const isVehCat = (n) => /moto|carro|veh[ií]culo|autom[oó]vil|\bauto\b/i.test(n || "");
+      const vehWrap = b.querySelector("#m-veh-wrap"), vehSelEl = b.querySelector("#m-veh");
+      const toggleVehWrap = () => {
+        if (!vehWrap) return;
+        const show = isVehCat(catSel.value);
+        vehWrap.style.display = show ? "block" : "none";
+        if (!show && vehSelEl) { vehSelEl.value = ""; const ex = b.querySelector("#m-veh-extra"); if (ex) ex.style.display = "none"; }
+      };
       if (existing) catSel.value = existing.cat;
-      catSel.onchange = fillSubs; fillSubs();
+      catSel.onchange = () => { fillSubs(); toggleVehWrap(); }; fillSubs(); toggleVehWrap();
       if (existing) { subSel.value = existing.sub || ""; b.querySelector("#m-pay").value = existing.pay || "Efectivo"; b.querySelector("#m-acct").value = existing.acct || ""; }
       const vehSel = b.querySelector("#m-veh");
       if (vehSel) {
