@@ -3,6 +3,8 @@ import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal } from "../firebase-service.js";
 import { fmt, ym, curMonth, monthLabel, debounce, sum, escapeHtml } from "../utils.js";
 import { budgetBars } from "../components/charts.js";
+import { toast, confirmDialog } from "../components/modals.js";
+import { RULE_503020 } from "../config.js";
 
 let mes = null, mode = "valor";
 const saveBudgets = debounce(async () => {
@@ -45,6 +47,8 @@ export function renderBudget(root) {
           </select></div>
         ${mode === "pct" ? `<div><label class="label">Ingreso/mes</label><input id="b-inc" class="input" type="number" value="${s.profile.income}" style="width:140px"></div>` : ""}
       </div>
+      <button id="b-auto" class="btn btn-ghost btn-sm mt-3">⚡ Calcular automático (50/30/20)</button>
+      <p class="tiny muted mt-2">Reparte tu ingreso mensual (${fmt(s.profile.income || 0)}) en las categorías según la regla 50/30/20 y el peso DANE. Luego ajusta lo que quieras.</p>
     </div>
 
     <div class="card mb-3">
@@ -60,6 +64,23 @@ export function renderBudget(root) {
 
   root.querySelector("#b-mes").onchange = (e) => { mes = e.target.value; renderBudget(root); };
   root.querySelector("#b-mode").onchange = (e) => { mode = e.target.value; renderBudget(root); };
+  root.querySelector("#b-auto").onclick = () => {
+    const income = s.profile.income || 0;
+    if (!income) return toast("Define tu ingreso mensual en Resumen/Ajustes primero", true);
+    confirmDialog(`¿Calcular el presupuesto de ${monthLabel(mes)} con tu ingreso (${fmt(income)})? Reemplaza los valores de este mes; luego puedes ajustarlos.`, () => {
+      const nb = {};
+      ["Necesidad", "Deseo", "Deuda"].forEach((type) => {
+        const cot = s.cats.filter((c) => c.type === type);
+        const weights = cot.map((c) => c.dane || 5);
+        const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+        const bucket = income * ((RULE_503020[type] || 0) / 100);
+        cot.forEach((c, i) => { nb[c.name] = Math.round(bucket * (weights[i] / totalW) / 1000) * 1000; });
+      });
+      mode = "valor";
+      setState({ budgets: { ...getState().budgets, [mes]: nb } });
+      saveBudgets(); renderBudget(root); toast("Presupuesto calculado · ajústalo a tu gusto");
+    });
+  };
   if (mode === "pct") root.querySelector("#b-inc").onchange = (e) => { setState({ profile: { ...s.profile, income: +e.target.value } }); saveBudgets(); renderBudget(root); };
 
   // rows
