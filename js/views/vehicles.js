@@ -532,6 +532,7 @@ function openMaintModal(v, root, existing) {
   const catOpts = MAINT_CATEGORIES.map((c) => `<option ${existing && existing.categoria === c ? "selected" : ""}>${c}</option>`).join("");
   const val = (x) => (x != null && x !== "" ? x : "");
   openModal(existing ? "Mantenimiento" : "Nuevo mantenimiento", `
+    ${!existing ? `<p class="tiny muted" style="margin:-4px 0 10px">💡 Esto se guarda solo en la bitácora del vehículo. Si quieres que el costo <b>también cuente en tus gastos</b>, regístralo desde <b>Movimientos → + → asociar al vehículo → Mantenimiento</b>.</p>` : ""}
     ${f("Categoría", `<select id="ma-cat" class="input">${catOpts}</select>`)}
     ${f("Tipo", `<select id="ma-tipo" class="input"></select>`)}
     ${f("Fecha", `<input id="ma-fecha" type="date" class="input" value="${existing ? existing.fecha : todayISO()}">`)}
