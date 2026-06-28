@@ -344,6 +344,11 @@ export async function deleteMaint(uid, id) {
   const { db, fsMod } = await initFirebase();
   await fsMod.deleteDoc(fsMod.doc(db, "users", uid, "maintenance", id));
 }
+export async function updateMaint(uid, id, fields) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  await fsMod.setDoc(fsMod.doc(db, "users", uid, "maintenance", id), fields, { merge: true });
+}
 export function persistMaintLocal(uid, arr) {
   if (!FIREBASE_READY) localStorage.setItem("fz_maint_" + uid, JSON.stringify(arr));
 }

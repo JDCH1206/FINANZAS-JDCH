@@ -514,8 +514,15 @@ function drawMaint(root, v) {
       </div>`).join("");
     root.querySelectorAll("[data-rowm]").forEach((rw) => rw.onclick = (e) => { if (e.target.closest("[data-delm]")) return; openMaintModal(v, root, allMaint.find((x) => x.id === rw.getAttribute("data-rowm"))); });
     root.querySelectorAll("[data-delm]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este mantenimiento?", async () => {
-      const id = b.getAttribute("data-delm"); allMaint = allMaint.filter((x) => x.id !== id);
-      await deleteMaint(getState().user.uid, id); persistMaintLocal(getState().user.uid, allMaint); drawMaint(root, v); toast("Eliminado");
+      const id = b.getAttribute("data-delm"); const rec = allMaint.find((x) => x.id === id);
+      allMaint = allMaint.filter((x) => x.id !== id);
+      await deleteMaint(getState().user.uid, id); persistMaintLocal(getState().user.uid, allMaint);
+      // borrar el gasto vinculado (si lo hay)
+      if (rec && rec.gastoId) {
+        setState({ txs: getState().txs.filter((x) => x.id !== rec.gastoId) });
+        await deleteTx(getState().user.uid, rec.gastoId); forcePersistLocal(getState().user.uid);
+      }
+      drawMaint(root, v); toast("Eliminado");
     }); });
   }
 }
@@ -532,7 +539,8 @@ function openMaintModal(v, root, existing) {
     ${f("Descripción", `<input id="ma-desc" class="input" value="${existing ? escapeHtml(existing.descripcion || "") : ""}" placeholder="Detalle (opcional)">`)}
     ${f("Repuesto", `<input id="ma-rep" class="input" value="${existing ? escapeHtml(existing.repuesto || "") : ""}" placeholder="Opcional">`)}
     ${f("Taller", `<input id="ma-taller" class="input" value="${existing ? escapeHtml(existing.taller || "") : ""}" placeholder="Opcional">`)}
-    ${f("Costo (COP)", `<input id="ma-costo" type="number" class="input" value="${existing ? val(existing.costo) : ""}" placeholder="0">`)}
+    ${f("Costo (COP)", `<input id="ma-costo" type="number" class="input" value="${existing ? val(existing.costo) : ""}" placeholder="0" ${existing && existing.gastoId ? "readonly style='opacity:.55'" : ""}>`)}
+    ${existing && existing.gastoId ? `<p class="tiny muted">🔗 El valor y la fecha están vinculados a un gasto en Movimientos. Para cambiarlos, edita ese gasto.</p>` : ""}
     <div class="card-title" style="margin-top:10px;font-size:13px">Próximo aviso (opcional)</div>
     ${f("Avisar a los (km)", `<input id="ma-pkm" type="number" class="input" value="${existing ? val(existing.proximoKm) : ""}" placeholder="km absoluto, ej: 12000">`)}
     ${f("o repetir cada (km)", `<input id="ma-rkm" type="number" class="input" value="${existing ? val(existing.recurrenteKm) : ""}" placeholder="ej: 1000 (cadena)">`)}
@@ -553,6 +561,7 @@ function openMaintModal(v, root, existing) {
           taller: b.querySelector("#ma-taller").value.trim(), costo: num("ma-costo") || 0,
           proximoKm: num("ma-pkm"), recurrenteKm: num("ma-rkm"), proximaFecha: b.querySelector("#ma-pfecha").value || "", recurrenteDias: num("ma-rdias"),
         };
+        if (existing && existing.gastoId) rec.gastoId = existing.gastoId; // conserva el vínculo con el gasto
         if (!rec.fecha || rec.odometro == null) return toast("Falta fecha u odómetro", true);
         allMaint = existing ? allMaint.map((x) => (x.id === rec.id ? rec : x)) : [...allMaint, rec];
         await addMaint(getState().user.uid, rec); persistMaintLocal(getState().user.uid, allMaint);

@@ -1,8 +1,8 @@
 // js/views/home.js
 import { getState, setState } from "../state.js";
-import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel } from "../firebase-service.js";
+import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel, addMaint, loadMaint, deleteMaint, updateMaint, persistMaintLocal } from "../firebase-service.js";
 import { fmt, uid, todayISO, escapeHtml, ym, monthLabel } from "../utils.js";
-import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES } from "../config.js";
+import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
 
 let query = "";
@@ -100,6 +100,11 @@ function drawList() {
         await deleteFuel(s.user.uid, tx.fuelId);
         if (!isCloud()) { const ex = await loadFuel(s.user.uid); persistFuelLocal(s.user.uid, ex.filter((x) => x.id !== tx.fuelId)); }
       }
+      // borrar el mantenimiento vinculado (si lo hay)
+      if (tx && tx.maintId) {
+        await deleteMaint(s.user.uid, tx.maintId);
+        if (!isCloud()) { const ex = await loadMaint(s.user.uid); persistMaintLocal(s.user.uid, ex.filter((x) => x.id !== tx.maintId)); }
+      }
       drawList(); toast("Eliminado");
     }); });
   } else {
@@ -137,7 +142,7 @@ export function openTxModal(existing) {
       <select id="m-veh" class="input"><option value="">— no asociar —</option>${vehs.map((v) => `<option value="${escapeHtml(v.id)}">${v.tipo === "Moto" ? "🏍️" : "🚗"} ${escapeHtml(v.alias || v.modelo)}</option>`).join("")}</select></div>
     <div id="m-veh-extra" style="display:none">
       <div class="field"><label class="label">Tipo de gasto del vehículo</label>
-        <select id="m-vtype" class="input"><option value="comb">Combustible</option><option value="otro">Otro (lavado, peaje, repuesto, SOAT…)</option></select></div>
+        <select id="m-vtype" class="input"><option value="comb">Combustible</option><option value="maint">Mantenimiento</option><option value="otro">Otro (lavado, peaje, SOAT…)</option></select></div>
       <div id="m-fuel-fields">
         <div class="field"><label class="label">Estación</label><input id="m-est" class="input" placeholder="Ej: Terpel, Texaco"></div>
         <div class="field"><label class="label">Tipo de combustible</label><select id="m-tipo" class="input">${FUEL_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
@@ -145,7 +150,18 @@ export function openTxModal(existing) {
         <div class="field"><label class="label">Odómetro (km del tablero)</label><input id="m-odo" class="input" type="number"></div>
         <div class="field"><label class="label">¿Tanque lleno?</label><select id="m-lleno" class="input"><option>Sí</option><option>No</option></select></div>
       </div>
-      <p class="tiny muted">El gasto queda asociado a este vehículo (para separar costos por moto/carro). Si es combustible, crea un tanqueo vinculado.</p>
+      <div id="m-maint-fields" style="display:none">
+        <div class="field"><label class="label">Categoría</label><select id="m-mcat" class="input">${MAINT_CATEGORIES.map((c) => `<option>${c}</option>`).join("")}</select></div>
+        <div class="field"><label class="label">Tipo (servicio)</label><select id="m-mtipo" class="input"></select></div>
+        <div class="field"><label class="label">Odómetro (km)</label><input id="m-modo" class="input" type="number"></div>
+        <div class="field"><label class="label">Taller</label><input id="m-mtaller" class="input" placeholder="Opcional"></div>
+        <div class="card-title" style="margin-top:8px;font-size:13px">Próximo aviso (opcional)</div>
+        <div class="field"><label class="label">Avisar a los (km)</label><input id="m-mpkm" class="input" type="number" placeholder="km absoluto, ej: 12000"></div>
+        <div class="field"><label class="label">o repetir cada (km)</label><input id="m-mrkm" class="input" type="number" placeholder="ej: 5000 (aceite)"></div>
+        <div class="field"><label class="label">Avisar en la fecha</label><input id="m-mpfecha" class="input" type="date"></div>
+        <div class="field"><label class="label">o repetir cada (días)</label><input id="m-mrdias" class="input" type="number" placeholder="ej: 180"></div>
+      </div>
+      <p class="tiny muted">El gasto queda asociado a este vehículo (para separar costos por moto/carro). Si es combustible, crea un tanqueo vinculado; si es mantenimiento, crea un registro en la bitácora de Mantenimiento.</p>
     </div>
     </div>` : "";
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
@@ -176,17 +192,24 @@ export function openTxModal(existing) {
       const vehSel = b.querySelector("#m-veh");
       if (vehSel) {
         const vtypeSel = b.querySelector("#m-vtype");
-        const toggleFuel = () => { b.querySelector("#m-fuel-fields").style.display = vtypeSel.value === "comb" ? "block" : "none"; };
-        vtypeSel.onchange = toggleFuel;
+        const mcatSel = b.querySelector("#m-mcat"), mtipoSel = b.querySelector("#m-mtipo");
+        const fillMtipos = () => { mtipoSel.innerHTML = (MAINT_TIPOS[mcatSel.value] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join(""); };
+        mcatSel.onchange = fillMtipos; fillMtipos();
+        const toggleVtype = () => {
+          b.querySelector("#m-fuel-fields").style.display = vtypeSel.value === "comb" ? "block" : "none";
+          b.querySelector("#m-maint-fields").style.display = vtypeSel.value === "maint" ? "block" : "none";
+        };
+        vtypeSel.onchange = toggleVtype;
         vehSel.onchange = () => {
           const extra = b.querySelector("#m-veh-extra");
           extra.style.display = vehSel.value ? "block" : "none";
           const v = s.vehicles.find((x) => x.id === vehSel.value);
-          const odoIn = b.querySelector("#m-odo");
+          const odoIn = b.querySelector("#m-odo"), modoIn = b.querySelector("#m-modo");
           if (v && odoIn && !odoIn.value) odoIn.value = v.odometro ?? "";
+          if (v && modoIn && !modoIn.value) modoIn.value = v.odometro ?? "";
           const tipoIn = b.querySelector("#m-tipo");
           if (v && tipoIn && v.combustible) tipoIn.value = v.combustible;
-          toggleFuel();
+          toggleVtype();
         };
       }
       b.querySelector("#m-save").onclick = async () => {
@@ -195,7 +218,7 @@ export function openTxModal(existing) {
           amount: +b.querySelector("#m-amt").value, cat: catSel.value, sub: subSel.value,
           pay: b.querySelector("#m-pay").value, acct: b.querySelector("#m-acct").value || "",
         };
-        if (existing) { tx.vehicleId = existing.vehicleId || ""; tx.fuelId = existing.fuelId || ""; }
+        if (existing) { tx.vehicleId = existing.vehicleId || ""; tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; }
         if (!tx.desc || !tx.amount || tx.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
         if (existing) {
           setState({ txs: getState().txs.map((x) => (x.id === tx.id ? tx : x)) });
@@ -205,6 +228,11 @@ export function openTxModal(existing) {
             if (isCloud()) await updateFuel(s.user.uid, tx.fuelId, { costo: tx.amount, fecha: tx.date });
             else { const ex = await loadFuel(s.user.uid); const fr = ex.find((x) => x.id === tx.fuelId); if (fr) { fr.costo = tx.amount; fr.fecha = tx.date; persistFuelLocal(s.user.uid, ex); } }
           }
+          // sincronizar el mantenimiento vinculado (valor y fecha vienen del gasto)
+          if (tx.maintId) {
+            if (isCloud()) await updateMaint(s.user.uid, tx.maintId, { costo: tx.amount, fecha: tx.date });
+            else { const ex = await loadMaint(s.user.uid); const mr = ex.find((x) => x.id === tx.maintId); if (mr) { mr.costo = tx.amount; mr.fecha = tx.date; persistMaintLocal(s.user.uid, ex); } }
+          }
           closeModal(); drawList(); return toast("Gasto actualizado");
         }
         // asociación opcional a vehículo
@@ -212,7 +240,8 @@ export function openTxModal(existing) {
         if (vehId) {
           const v = s.vehicles.find((x) => x.id === vehId);
           tx.vehicleId = vehId; // etiqueta el gasto al vehículo (separa costos por moto/carro)
-          if (b.querySelector("#m-vtype").value === "comb") {
+          const vtype = b.querySelector("#m-vtype").value;
+          if (vtype === "comb") {
             const galv = +b.querySelector("#m-gal").value, odov = +b.querySelector("#m-odo").value;
             if (!galv || !odov) return toast("Para combustible, pon galones y odómetro", true);
             const frec = { id: uid(), vehicleId: vehId, fecha: tx.date, estacion: b.querySelector("#m-est").value.trim(), tipoCombustible: b.querySelector("#m-tipo").value, galones: galv, odometro: odov, costo: tx.amount, tanqueLleno: b.querySelector("#m-lleno").value, gastoId: tx.id };
@@ -221,6 +250,22 @@ export function openTxModal(existing) {
             else { const ex = await loadFuel(s.user.uid); ex.push(frec); persistFuelLocal(s.user.uid, ex); }
             if (odov && odov !== (v?.odometro || 0)) {
               setState({ vehicles: getState().vehicles.map((x) => (x.id === vehId ? { ...x, odometro: odov } : x)) });
+              await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: getState().vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals });
+            }
+          } else if (vtype === "maint") {
+            const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
+            const odom = num("m-modo");
+            const mrec = {
+              id: uid(), vehicleId: vehId, categoria: b.querySelector("#m-mcat").value, tipo: b.querySelector("#m-mtipo").value,
+              fecha: tx.date, odometro: odom, descripcion: tx.desc, repuesto: "", taller: b.querySelector("#m-mtaller").value.trim(),
+              costo: tx.amount, proximoKm: num("m-mpkm"), recurrenteKm: num("m-mrkm"),
+              proximaFecha: b.querySelector("#m-mpfecha").value || "", recurrenteDias: num("m-mrdias"), gastoId: tx.id,
+            };
+            tx.maintId = mrec.id;
+            if (isCloud()) { await addMaint(s.user.uid, mrec); }
+            else { const ex = await loadMaint(s.user.uid); ex.push(mrec); persistMaintLocal(s.user.uid, ex); }
+            if (odom && odom > (v?.odometro || 0)) {
+              setState({ vehicles: getState().vehicles.map((x) => (x.id === vehId ? { ...x, odometro: odom } : x)) });
               await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: getState().vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals });
             }
           }
