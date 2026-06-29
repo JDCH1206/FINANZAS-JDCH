@@ -4,7 +4,10 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v46**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v47**. Cambios por fecha (más reciente primero):
+
+### 2026-06-29 · caché v47 — Presupuesto por subcategoría (opcional)
+- 💰 En **Presupuesto**, cada categoría con subcategorías muestra una flecha ▸ para desplegarlas y ponerle un tope a cada una (ej. dentro de Alimentación: Mercado, Restaurantes, Snacks). Es opcional; el tope de la categoría sigue mandando. Muestra real vs. tope y % por subcategoría. El cálculo automático conserva los topes de subcategoría.
 
 ### 2026-06-29 · caché v46 — Tablero: desglose por subcategoría
 - 📊 Nueva tarjeta **"Gasto por subcategoría"** en el Tablero: eliges una categoría (ej. Alimentación) y ves el reparto entre sus subcategorías (Mercado, Restaurantes, Snacks…) con donut, montos y %. Respeta el filtro de periodo.

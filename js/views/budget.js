@@ -7,6 +7,7 @@ import { toast, confirmDialog } from "../components/modals.js";
 import { RULE_503020 } from "../config.js";
 
 let mes = null, mode = "valor";
+const expanded = new Set(); // categorías con subcategorías desplegadas
 const saveBudgets = debounce(async () => {
   const s = getState();
   await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets });
@@ -20,8 +21,12 @@ export function renderBudget(root) {
   if (!mes) mes = allMonths[0] || curMonth();
 
   const b = s.budgets[mes] || {};
-  const realMap = {};
-  s.txs.filter((t) => ym(t.date) === mes).forEach((t) => { realMap[t.cat] = (realMap[t.cat] || 0) + (+t.amount || 0); });
+  const realMap = {}, realSub = {};
+  s.txs.filter((t) => ym(t.date) === mes).forEach((t) => {
+    realMap[t.cat] = (realMap[t.cat] || 0) + (+t.amount || 0);
+    const sk = t.cat + "›" + (t.sub || "");
+    realSub[sk] = (realSub[sk] || 0) + (+t.amount || 0);
+  });
   const applied = (c) => mode === "pct" ? ((+b[c.name + "__pct"] || 0) / 100) * (s.profile.income || 0) : (+b[c.name] || 0);
   const totBud = sum(s.cats, applied);
   const totReal = sum(Object.values(realMap));
@@ -84,6 +89,9 @@ export function renderBudget(root) {
         const bucket = income * ((RULE_503020[type] || 0) / 100);
         cot.forEach((c, i) => { nb[c.name] = Math.round(bucket * (weights[i] / totalW) / 1000) * 1000; });
       });
+      // conserva los topes por subcategoría que el usuario ya tenía este mes
+      const prev = getState().budgets[mes] || {};
+      Object.keys(prev).forEach((k) => { if (k.includes("›")) nb[k] = prev[k]; });
       mode = "valor";
       setState({ budgets: { ...getState().budgets, [mes]: nb } });
       saveBudgets(); renderBudget(root); toast("Presupuesto calculado según tu historial · ajústalo");
@@ -92,23 +100,39 @@ export function renderBudget(root) {
   if (mode === "pct") root.querySelector("#b-inc").onchange = (e) => { setState({ profile: { ...s.profile, income: +e.target.value } }); saveBudgets(); renderBudget(root); };
 
   // rows
+  const income = s.profile.income || 0;
+  const cellInput = (key) => mode === "pct"
+    ? `<div class="bud-pct"><input data-pct="${escapeHtml(key)}" class="input" style="padding:7px 22px 7px 10px;font-size:13px" type="number" value="${b[key + "__pct"] || ""}" placeholder="0"><span class="pct-sign">%</span></div>`
+    : `<input data-val="${escapeHtml(key)}" class="input" style="padding:7px 10px;font-size:13px" type="number" value="${b[key] || ""}" placeholder="0">`;
   root.querySelector("#b-rows").innerHTML = s.cats.map((c) => {
     const ap = applied(c), rl = realMap[c.name] || 0, ej = ap ? rl / ap : 0;
     const col = ej > 1.1 ? "var(--red)" : ej > 1 ? "var(--yel)" : ej > 0 ? "var(--green)" : "var(--sub)";
-    const inputHtml = mode === "pct"
-      ? `<div class="bud-pct"><input data-pct="${c.name}" class="input" style="padding:7px 22px 7px 10px;font-size:13px" type="number" value="${b[c.name + "__pct"] || ""}" placeholder="0"><span class="pct-sign">%</span></div>`
-      : `<input data-val="${c.name}" class="input" style="padding:7px 10px;font-size:13px" type="number" value="${b[c.name] || ""}" placeholder="0">`;
-    return `<div class="bud-row"><span class="name">${c.name}</span>${inputHtml}<span class="ej" style="color:${col}">${ap ? (ej * 100).toFixed(0) + "%" : "—"}</span></div>`;
+    const hasSubs = (c.subs || []).length > 0, open = expanded.has(c.name);
+    const caret = hasSubs
+      ? `<button data-exp="${escapeHtml(c.name)}" title="Ver subcategorías" style="background:none;border:none;color:var(--gold);cursor:pointer;padding:0 5px 0 0;font-size:12px">${open ? "▾" : "▸"}</button>`
+      : `<span style="display:inline-block;width:14px"></span>`;
+    let html = `<div class="bud-row"><span class="name">${caret}${escapeHtml(c.name)}</span>${cellInput(c.name)}<span class="ej" style="color:${col}">${ap ? (ej * 100).toFixed(0) + "%" : "—"}</span></div>`;
+    if (open && hasSubs) {
+      html += c.subs.map((sub) => {
+        const sk = c.name + "›" + sub;
+        const sap = mode === "pct" ? ((+b[sk + "__pct"] || 0) / 100) * income : (+b[sk] || 0);
+        const srl = realSub[sk] || 0, sej = sap ? srl / sap : 0;
+        const scol = sej > 1.1 ? "var(--red)" : sej > 1 ? "var(--yel)" : sej > 0 ? "var(--green)" : "var(--sub)";
+        const right = sap ? (sej * 100).toFixed(0) + "%" : (srl ? fmt(srl) : "—");
+        return `<div class="bud-row" style="padding-left:20px"><span class="name" style="font-size:13px;opacity:.85">${escapeHtml(sub)}</span>${cellInput(sk)}<span class="ej" style="color:${scol};font-size:12px">${right}</span></div>`;
+      }).join("");
+    }
+    return html;
   }).join("");
 
   const upd = (key, val) => {
     const nb = { ...(s.budgets[mes] || {}), [key]: val };
     setState({ budgets: { ...s.budgets, [mes]: nb } });
     saveBudgets();
-    // recalcular totales sin redibujar todo (evita perder foco): actualizar al salir
   };
   root.querySelectorAll("[data-val]").forEach((inp) => inp.onchange = (e) => { upd(e.target.getAttribute("data-val"), +e.target.value); renderBudget(root); });
   root.querySelectorAll("[data-pct]").forEach((inp) => inp.onchange = (e) => { upd(e.target.getAttribute("data-pct") + "__pct", +e.target.value); renderBudget(root); });
+  root.querySelectorAll("[data-exp]").forEach((btn) => btn.onclick = () => { const n = btn.getAttribute("data-exp"); expanded.has(n) ? expanded.delete(n) : expanded.add(n); renderBudget(root); });
 
   // historial chart
   const hist = allMonths.map((k) => {
