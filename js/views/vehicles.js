@@ -2,7 +2,7 @@
 import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
 import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS } from "../config.js";
-import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth } from "../utils.js";
+import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
 
@@ -419,7 +419,7 @@ async function importFuelXlsx(v, root, input) {
       const odo = +(r["Odometro"] ?? r["odometro"] ?? r["Odómetro"] ?? 0);
       if (!gal || !odo) return;
       let fecha = r["Fecha"] ?? r["fecha"] ?? "";
-      if (fecha instanceof Date) fecha = fecha.toISOString().slice(0, 10); else fecha = String(fecha).slice(0, 10);
+      if (fecha instanceof Date) fecha = isoLocal(fecha); else fecha = String(fecha).slice(0, 10);
       recs.push({
         id: uid(), vehicleId: v.id, fecha, estacion: String(r["Estacion"] ?? r["Estación"] ?? "").trim(),
         tipoCombustible: String(r["Tipo_combustible"] ?? r["TipoCombustible"] ?? "").trim(),

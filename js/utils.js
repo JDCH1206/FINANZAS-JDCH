@@ -15,6 +15,8 @@ export const todayISO = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 export const curMonth = () => todayISO().slice(0, 7);
+// formatea un Date en HORA LOCAL como YYYY-MM-DD (no UTC) → evita desfase de día
+export const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 export const monthLabel = (k) => {
@@ -30,10 +32,11 @@ export function escapeHtml(s) {
 
 // normaliza una fecha de Excel (Date | serial | texto) a YYYY-MM-DD
 export function normDate(v) {
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return isoLocal(v);
   if (typeof v === "number") {
+    // serial de Excel → fecha en UTC para evitar que la zona horaria mueva el día
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
-    return d.toISOString().slice(0, 10);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
   }
   const s = String(v || "").trim();
   // ISO (con o sin hora): 2022-06-20 o 2022-06-20T05:00:00.000Z

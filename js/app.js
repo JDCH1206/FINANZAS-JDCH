@@ -2,6 +2,8 @@
 import { getState, setState } from "./state.js";
 import { onAuth, subscribeData, isCloud, loadOblig } from "./firebase-service.js";
 import { todayISO } from "./utils.js";
+import { OBLIG_TIPOS } from "./config.js";
+import { showReminders } from "./notify.js";
 import * as fbsvc from "./firebase-service.js";
 import { renderLogin } from "./views/login.js";
 import { renderOnboarding } from "./views/onboarding.js";
@@ -205,27 +207,55 @@ function checkBackupReminder() {
   } catch (e) { /* noop */ }
 }
 
-// badge de obligaciones por vencer/vencidas en el botón "Más"
+const OBLIG_LABEL = (k) => (OBLIG_TIPOS.find((t) => t.key === k) || {}).label || k;
+function addDaysISO(iso, days) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+// lista de recordatorios (obligaciones por vencer/vencidas + mantenimientos que tocan)
+function computeReminders(oblig, maint, vehicles, today) {
+  const out = [];
+  const vmap = Object.fromEntries((vehicles || []).map((v) => [v.id, v]));
+  const daysTo = (d) => Math.round((new Date(d + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
+  // obligaciones legales (tienen fecha de vencimiento)
+  for (const o of oblig) {
+    if (o.estado === "TRAMITE" || !o.fechaVencimiento) continue;
+    const dias = daysTo(o.fechaVencimiento);
+    if (dias <= (o.diasAviso || 30)) {
+      const v = vmap[o.vehicleId]; const veh = v ? ` (${v.alias || v.modelo})` : "";
+      out.push(`${OBLIG_LABEL(o.tipo)}${veh}: ${dias < 0 ? `vencido hace ${-dias} d` : dias === 0 ? "vence hoy" : `vence en ${dias} d`}`);
+    }
+  }
+  // mantenimiento: solo el más reciente por (vehículo|categoría|tipo)
+  const latest = {};
+  for (const r of maint) { const k = r.vehicleId + "|" + r.categoria + "|" + r.tipo; if (!latest[k] || (r.fecha || "") > (latest[k].fecha || "")) latest[k] = r; }
+  for (const r of Object.values(latest)) {
+    const v = vmap[r.vehicleId]; if (!v) continue; const veh = ` (${v.alias || v.modelo})`;
+    const nextKm = r.proximoKm || (r.recurrenteKm ? (r.odometro || 0) + r.recurrenteKm : null);
+    const nextDate = r.proximaFecha || (r.recurrenteDias && r.fecha ? addDaysISO(r.fecha, r.recurrenteDias) : null);
+    if (nextKm != null && (v.odometro || 0) >= nextKm) out.push(`${r.tipo}${veh}: toca (${Number(nextKm).toLocaleString("es-CO")} km)`);
+    else if (nextDate) { const dias = daysTo(nextDate); if (dias <= 7) out.push(`${r.tipo}${veh}: ${dias < 0 ? "atrasado" : dias === 0 ? "hoy" : `en ${dias} d`}`); }
+  }
+  return out;
+}
+
+// badge en "Más" + notificación de recordatorios (una vez al día)
 async function checkVehicleAlerts() {
   const s = getState();
   if (!s.vehiclesEnabled) return;
   try {
-    const obl = await loadOblig(s.user.uid);
-    const today = todayISO();
-    let pend = 0;
-    for (const o of obl) {
-      if (o.estado === "TRAMITE" || !o.fechaVencimiento) continue;
-      const dias = Math.round((new Date(o.fechaVencimiento + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
-      if (dias <= (o.diasAviso || 30)) pend++;
-    }
+    const [obl, maint] = await Promise.all([fbsvc.loadOblig(s.user.uid), fbsvc.loadMaint(s.user.uid)]);
+    const items = computeReminders(obl, maint, s.vehicles, todayISO());
     const moreBtn = document.querySelector('#nav button[data-route="more"]');
-    if (moreBtn && pend > 0 && !moreBtn.querySelector(".nav-badge")) {
+    if (moreBtn && items.length > 0 && !moreBtn.querySelector(".nav-badge")) {
       const badge = document.createElement("span");
-      badge.className = "nav-badge"; badge.textContent = pend;
+      badge.className = "nav-badge"; badge.textContent = items.length;
       badge.style.cssText = "position:absolute;top:3px;right:14px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;line-height:1;padding:2px 5px;font-weight:700";
       moreBtn.style.position = "relative";
       moreBtn.appendChild(badge);
     }
+    showReminders(items, todayISO());
   } catch (e) { /* noop */ }
 }
 

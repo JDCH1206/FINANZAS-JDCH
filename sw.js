@@ -1,9 +1,9 @@
 // sw.js — service worker (cache del shell de la app)
-const CACHE = "finanzas-jdch-v44";
+const CACHE = "finanzas-jdch-v45";
 const ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./css/tokens.css", "./css/base.css", "./css/components.css", "./css/pages.css",
-  "./js/app.js", "./js/config.js", "./js/state.js", "./js/utils.js",
+  "./js/app.js", "./js/config.js", "./js/state.js", "./js/utils.js", "./js/notify.js",
   "./js/firebase-service.js", "./firebase-config.js",
   "./js/views/login.js", "./js/views/onboarding.js", "./js/views/home.js", "./js/views/summary.js", "./js/views/accounts.js",
   "./js/views/dashboard.js", "./js/views/budget.js", "./js/views/categories.js", "./js/views/settings.js", "./js/views/vehicles.js",
@@ -17,6 +17,15 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+});
+
+// al tocar una notificación de recordatorio, enfoca o abre la app
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((cls) => {
+    for (const c of cls) { if ("focus" in c) return c.focus(); }
+    if (self.clients.openWindow) return self.clients.openWindow("./");
+  }));
 });
 
 self.addEventListener("fetch", (e) => {

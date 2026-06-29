@@ -3,7 +3,7 @@ import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal } from "../firebase-service.js";
 import { fmt, uid, escapeHtml, debounce, sum } from "../utils.js";
 import { ACCOUNT_TYPES, PALETTE } from "../config.js";
-import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
+import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
 import { donut } from "../components/charts.js";
 
 const persist = debounce(async () => {
@@ -84,14 +84,14 @@ function openAcctModal(root, acct) {
     <div class="field"><label class="label">Saldo actual (COP)</label><input id="a-bal" class="input" type="number" value="${acct?.balance ?? ""}" placeholder="0"></div>
     <button id="a-save" class="btn btn-primary btn-block">${editing ? "Guardar cambios" : "Crear cuenta"}</button>`, {
     onMount(b) {
-      b.querySelector("#a-save").onclick = () => {
+      submitOnce(b.querySelector("#a-save"), async () => {
         const name = b.querySelector("#a-name").value.trim();
         if (!name) return toast("Falta el nombre", true);
         const data = { name, type: b.querySelector("#a-type").value, balance: +b.querySelector("#a-bal").value || 0 };
         if (editing) setState({ accounts: s.accounts.map((a) => a.id === acct.id ? { ...a, ...data } : a) });
         else setState({ accounts: [...s.accounts, { id: uid(), ...data }] });
         persist(); closeModal(); renderAccounts(root); toast(editing ? "Cuenta actualizada" : "Cuenta creada");
-      };
+      });
     },
   });
 }

@@ -4,6 +4,7 @@ import { saveConfig, bulkSetTx, bulkSetIncomes, signOutUser, isCloud, forcePersi
 import { classify, classifyIncome } from "../config.js";
 import { uid, normDate, escapeHtml } from "../utils.js";
 import { toast, confirmDialog, openModal } from "../components/modals.js";
+import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 
 export function renderSettings(root, onSignOut) {
   const s = getState();
@@ -53,6 +54,12 @@ export function renderSettings(root, onSignOut) {
     <div class="card mb-3">
       <div class="card-title">Apariencia</div>
       <button id="theme-toggle" class="btn btn-ghost btn-sm"></button>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-title">Recordatorios 🔔</div>
+      <p class="small muted mb-3">Avisos de vencimientos (SOAT, tecnomecánica, impuesto) y mantenimientos próximos. Aparecen al abrir la app (las notificaciones quedan en tu celular aunque la cierres).${!notifSupported() ? " <b>Tu navegador no los soporta.</b>" : ""}</p>
+      <button id="notif-toggle" class="btn btn-sm"></button>
     </div>
 
     <div class="card mb-3">
@@ -273,6 +280,24 @@ export function renderSettings(root, onSignOut) {
   };
 
   root.querySelector("#logout").onclick = () => confirmDialog("¿Cerrar sesión?", async () => { await signOutUser(); onSignOut(); }, { yesLabel: "Cerrar sesión" });
+
+  // recordatorios (notificaciones)
+  const notifBtn = root.querySelector("#notif-toggle");
+  const paintNotif = () => {
+    if (!notifSupported()) { notifBtn.textContent = "No disponible en este navegador"; notifBtn.disabled = true; notifBtn.className = "btn btn-ghost btn-sm"; return; }
+    const on = notifEnabled();
+    notifBtn.textContent = on ? "🔔 Activados · tocar para desactivar" : "🔕 Activar recordatorios";
+    notifBtn.className = "btn btn-sm " + (on ? "btn-primary" : "btn-ghost");
+  };
+  paintNotif();
+  notifBtn.onclick = async () => {
+    if (notifEnabled()) { disableNotif(); toast("Recordatorios desactivados"); paintNotif(); return; }
+    const res = await enableNotif();
+    if (res === "granted") toast("Recordatorios activados");
+    else if (res === "denied") toast("Permiso bloqueado. Actívalo en los ajustes del navegador.", true);
+    else toast("Tu navegador no soporta notificaciones", true);
+    paintNotif();
+  };
 
   // medios de pago
   const drawPays = () => {

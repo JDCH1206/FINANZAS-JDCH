@@ -3,7 +3,7 @@ import { getState, setState } from "../state.js";
 import { RULE_503020 } from "../config.js";
 import { fmt, ym, monthLabel, sum, curMonth, uid, escapeHtml } from "../utils.js";
 import { saveConfig, forcePersistLocal } from "../firebase-service.js";
-import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
+import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
 
 export function renderSummary(root) {
   const s = getState();
@@ -155,13 +155,13 @@ function openGoalModal(root, existing) {
     ${f("Fecha objetivo (opcional)", `<input id="g-fecha" class="input" type="date" value="${existing ? (existing.fecha || "") : ""}">`)}
     <button id="g-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar" : "Crear meta"}</button>`, {
     onMount(b) {
-      b.querySelector("#g-save").onclick = async () => {
+      submitOnce(b.querySelector("#g-save"), async () => {
         const g = { id: existing ? existing.id : uid(), nombre: b.querySelector("#g-nom").value.trim(), objetivo: +b.querySelector("#g-obj").value || 0, ahorrado: +b.querySelector("#g-ah").value || 0, fecha: b.querySelector("#g-fecha").value || "" };
         if (!g.nombre || !g.objetivo) return toast("Falta nombre u objetivo", true);
         const list = getState().goals || [];
         setState({ goals: existing ? list.map((x) => (x.id === g.id ? g : x)) : [...list, g] });
         await saveGoals(root); closeModal(); drawGoals(root); toast(existing ? "Meta actualizada" : "Meta creada");
-      };
+      });
     },
   });
 }
