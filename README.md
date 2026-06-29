@@ -4,7 +4,10 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v45**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v46**. Cambios por fecha (más reciente primero):
+
+### 2026-06-29 · caché v46 — Tablero: desglose por subcategoría
+- 📊 Nueva tarjeta **"Gasto por subcategoría"** en el Tablero: eliges una categoría (ej. Alimentación) y ves el reparto entre sus subcategorías (Mercado, Restaurantes, Snacks…) con donut, montos y %. Respeta el filtro de periodo.
 
 ### 2026-06-29 · caché v45 — Recordatorios (notificaciones) + arreglos
 - 🔔 **Recordatorios**: en Ajustes puedes activar notificaciones de vencimientos (SOAT/tecnomecánica/impuesto) y mantenimientos próximos (por km o fecha). Se muestran al abrir la app, una vez al día, y quedan en la bandeja del celular. (El aviso con la app totalmente cerrada requeriría un servidor de push; pendiente.)

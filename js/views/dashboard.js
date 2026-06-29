@@ -20,6 +20,7 @@ function deltaBadge(cur, prev) {
 }
 
 let period = "all";
+let subCat = null; // categoría seleccionada para el desglose por subcategoría
 
 export function renderDashboard(root) {
   const s = getState();
@@ -47,6 +48,7 @@ export function renderDashboard(root) {
         <p class="tiny muted mt-2">Basada solo en tu <b>salario</b> (excluye primas y pagos extra). Referencia: regla <b>50/30/20</b> (50% necesidades · 30% deseos · 20% ahorro), ampliamente usada por asesores financieros; estructura de categorías según canasta <b>DANE</b>. Guía general, <b>no asesoría financiera personalizada</b>.</p>
       </div>
       <div class="card"><div class="card-title">Distribución por categoría</div><div class="chart-box"><canvas id="ch-donut"></canvas></div><div id="leg" class="row wrap gap-2 mt-2"></div></div>
+      <div class="card col-span"><div class="row between mb-2" style="align-items:center"><div class="card-title" style="margin:0">Gasto por subcategoría</div><select id="sub-cat" class="input" style="width:auto"></select></div><div class="chart-box"><canvas id="ch-sub"></canvas></div><div id="sub-leg"></div></div>
       <div class="card"><div class="card-title">Regla 50/30/20</div><div id="rule"></div><p class="tiny muted mt-2">La línea marca el objetivo. Verde = en rango (±6%).</p></div>
       <div class="card col-span"><div class="card-title">Tendencia mensual (últimos 12)</div><div class="chart-box"><canvas id="ch-trend"></canvas></div></div>
       <div class="card col-span"><div class="card-title">Evolución de la tasa de ahorro (12 meses)</div><div class="chart-box"><canvas id="ch-saverate"></canvas></div><p class="tiny muted mt-2">% del ingreso que te queda cada mes: (ingresos − gastos) ÷ ingresos.</p></div>
@@ -165,6 +167,29 @@ export function renderDashboard(root) {
   donut("ch-donut", byCat.map((x) => x.name), byCat.map((x) => x.value));
   root.querySelector("#leg").innerHTML = byCat.slice(0, 6).map((e, i) =>
     `<span class="tiny muted row gap-1"><span style="width:9px;height:9px;border-radius:3px;background:${PALETTE[i % PALETTE.length]}"></span>${e.name} ${((e.value / total) * 100).toFixed(0)}%</span>`).join("");
+
+  // ---- Desglose por subcategoría (de la categoría elegida) ----
+  // categorías con gasto en el periodo (priorizamos las que tienen subcategorías)
+  const subSel = root.querySelector("#sub-cat");
+  if (subSel) {
+    const opciones = byCat.map((x) => x.name); // ya vienen ordenadas por gasto, value>0
+    if (!subCat || !opciones.includes(subCat)) subCat = opciones[0] || null;
+    subSel.innerHTML = opciones.map((n) => `<option ${n === subCat ? "selected" : ""}>${escapeHtml(n)}</option>`).join("");
+    subSel.onchange = (e) => { subCat = e.target.value; renderDashboard(root); };
+    const subMap = {};
+    filtered.filter((t) => t.cat === subCat).forEach((t) => { const k = t.sub || "(sin subcategoría)"; subMap[k] = (subMap[k] || 0) + (+t.amount || 0); });
+    const subE = Object.entries(subMap).sort((a, b) => b[1] - a[1]);
+    const subTot = sum(subE.map((e) => e[1]));
+    if (subE.length) {
+      donut("ch-sub", subE.map((e) => e[0]), subE.map((e) => e[1]));
+      root.querySelector("#sub-leg").innerHTML = subE.map((e, i) =>
+        `<div class="dane-row"><span class="muted"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${PALETTE[i % PALETTE.length]};margin-right:5px"></span>${escapeHtml(e[0])}</span>
+         <div class="bar" style="height:7px"><span style="width:${subTot ? Math.min((e[1] / subTot) * 100, 100) : 0}%;background:${PALETTE[i % PALETTE.length]}"></span></div>
+         <span style="text-align:right">${fmt(e[1])} <span class="muted">${subTot ? ((e[1] / subTot) * 100).toFixed(0) : 0}%</span></span></div>`).join("");
+    } else {
+      root.querySelector("#sub-leg").innerHTML = `<div class="muted small">Sin gasto en esta categoría para el periodo.</div>`;
+    }
+  }
 
   // 50/30/20
   const buck = { Necesidad: 0, Deseo: 0, Deuda: 0 };
