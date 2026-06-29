@@ -168,7 +168,7 @@ export function renderSettings(root, onSignOut) {
         await bulkSetIncomes(s.user.uid, incOut);
         forcePersistLocal(s.user.uid);
         toast(out.length + " gastos · " + incOut.length + " ingresos importados");
-      });
+      }, { yesLabel: "Importar", danger: false, busyLabel: "Importando…" });
     } catch (e) { console.error(e); toast("Error al leer el JSON", true); }
     gjson.value = "";
   };
@@ -272,7 +272,7 @@ export function renderSettings(root, onSignOut) {
     toast(on ? "Módulo de Vehículos activado — míralo en 'Más'" : "Módulo de Vehículos desactivado");
   };
 
-  root.querySelector("#logout").onclick = () => confirmDialog("¿Cerrar sesión?", async () => { await signOutUser(); onSignOut(); });
+  root.querySelector("#logout").onclick = () => confirmDialog("¿Cerrar sesión?", async () => { await signOutUser(); onSignOut(); }, { yesLabel: "Cerrar sesión" });
 
   // medios de pago
   const drawPays = () => {

@@ -463,7 +463,7 @@ async function importFuelJson(v, root, input) {
       await bulkSetFuel(getState().user.uid, v.id, recs); persistFuelLocal(getState().user.uid, allFuel);
       await syncVehicleOdo(v);
       drawFuel(root, v); toast(recs.length + " tanqueos importados");
-    });
+    }, { yesLabel: "Importar", danger: false, busyLabel: "Importando…" });
   } catch (e) { console.error(e); toast("Error al leer el JSON", true); }
   input.value = "";
 }

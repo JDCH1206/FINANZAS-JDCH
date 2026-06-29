@@ -87,7 +87,7 @@ export function renderBudget(root) {
       mode = "valor";
       setState({ budgets: { ...getState().budgets, [mes]: nb } });
       saveBudgets(); renderBudget(root); toast("Presupuesto calculado según tu historial · ajústalo");
-    });
+    }, { yesLabel: "Calcular", danger: false });
   };
   if (mode === "pct") root.querySelector("#b-inc").onchange = (e) => { setState({ profile: { ...s.profile, income: +e.target.value } }); saveBudgets(); renderBudget(root); };
 
