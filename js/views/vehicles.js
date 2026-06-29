@@ -250,6 +250,8 @@ function drawFuel(root, v) {
       <button id="add-fuel" class="btn btn-primary btn-sm">+ Tanqueo</button>
       <input id="imp-fuel" type="file" accept=".xlsx,.xls" hidden>
       <button id="imp-fuel-btn" class="btn btn-ghost btn-sm">⬆ Importar Excel</button>
+      <input id="imp-fuel-json" type="file" accept=".json,application/json" hidden>
+      <button id="imp-fuel-json-btn" class="btn btn-ghost btn-sm">⬆ Importar JSON</button>
       <button id="adj-odo-btn" class="btn btn-ghost btn-sm">⚙ Odómetro real</button>
       <button id="exp-xls" class="btn btn-ghost btn-sm">⬇ Excel</button>
       <button id="exp-json" class="btn btn-ghost btn-sm">⬇ JSON</button>
@@ -276,13 +278,16 @@ function drawFuel(root, v) {
       <div class="card"><div class="card-title">Gasto por estación</div><div class="chart-box"><canvas id="ch-est"></canvas></div><div id="leg-est" class="row wrap gap-2 mt-2"></div></div>
     </div>
     <div class="card mt-3" style="padding:0" id="fuel-list"></div>`
-    : `<div class="empty"><p>Sin tanqueos aún. Toca "+ Tanqueo" para registrar, o "Importar Excel" para cargar tu histórico.</p></div>`}`;
+    : `<div class="empty"><p>Sin tanqueos aún. Toca "+ Tanqueo" para registrar, o "Importar Excel/JSON" para cargar tu histórico.</p></div>`}`;
 
   root.querySelector("#back").onclick = () => { activeFuelVid = null; renderList(root); };
   root.querySelector("#add-fuel").onclick = () => openFuelModal(v, root);
   const imp = root.querySelector("#imp-fuel");
   root.querySelector("#imp-fuel-btn").onclick = () => imp.click();
   imp.onchange = () => importFuelXlsx(v, root, imp);
+  const impJ = root.querySelector("#imp-fuel-json");
+  root.querySelector("#imp-fuel-json-btn").onclick = () => impJ.click();
+  impJ.onchange = () => importFuelJson(v, root, impJ);
   root.querySelector("#exp-json").onclick = () => exportJson(v, fuel);
   root.querySelector("#exp-xls").onclick = () => exportXlsx(v, fuel);
   root.querySelector("#adj-odo-btn").onclick = () => openAdjustOdoModal(v, root);
@@ -313,19 +318,21 @@ function drawFuelList(root, v, m) {
     const r = allFuel.find((x) => x.id === rw.getAttribute("data-rowf"));
     openFuelModal(v, root, r, m.byId[r.id]);
   });
-  root.querySelectorAll("[data-delf]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este tanqueo?", async () => {
+  root.querySelectorAll("[data-delf]").forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();
     const id = b.getAttribute("data-delf");
     const rec = allFuel.find((x) => x.id === id);
-    allFuel = allFuel.filter((x) => x.id !== id);
-    await deleteFuel(getState().user.uid, id); persistFuelLocal(getState().user.uid, allFuel);
-    await syncVehicleOdo(v);
-    // borrar el gasto vinculado (si lo hay)
-    if (rec && rec.gastoId) {
-      setState({ txs: getState().txs.filter((x) => x.id !== rec.gastoId) });
-      await deleteTx(getState().user.uid, rec.gastoId); forcePersistLocal(getState().user.uid);
-    }
-    drawFuel(root, v); toast("Eliminado");
-  }); });
+    const msg = rec && rec.gastoId
+      ? "Se quita este tanqueo de la bitácora del vehículo. <b>El gasto NO se borra</b>: sigue en Movimientos; solo se elimina el vínculo con el vehículo."
+      : "¿Eliminar este tanqueo de la bitácora?";
+    confirmDialog(msg, async () => {
+      allFuel = allFuel.filter((x) => x.id !== id);
+      await deleteFuel(getState().user.uid, id); persistFuelLocal(getState().user.uid, allFuel);
+      await syncVehicleOdo(v);
+      if (rec && rec.gastoId) await unlinkGasto(rec.gastoId, "fuelId");
+      drawFuel(root, v); toast(rec && rec.gastoId ? "Tanqueo quitado (el gasto sigue en Movimientos)" : "Tanqueo eliminado");
+    });
+  });
 }
 
 function openFuelModal(v, root, existing, info) {
@@ -430,6 +437,37 @@ async function importFuelXlsx(v, root, input) {
   input.value = "";
 }
 
+// importa tanqueos desde un JSON (acepta el exportado por la app, un arreglo, o gasolina_moto_para_app.json)
+async function importFuelJson(v, root, input) {
+  const file = input.files[0]; if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const arr = Array.isArray(data) ? data : (data.combustible || data.fuel || data.tanqueos || []);
+    const recs = [];
+    arr.forEach((r) => {
+      const gal = +(r.galones ?? r.Galones ?? 0);
+      const odo = +(r.odometro ?? r.Odometro ?? r["Odómetro"] ?? 0);
+      if (!gal || !odo) return;
+      const fecha = String(r.fecha ?? r.Fecha ?? "").slice(0, 10);
+      recs.push({
+        id: uid(), vehicleId: v.id, fecha,
+        estacion: String(r.estacion ?? r.Estacion ?? r["Estación"] ?? "").trim(),
+        tipoCombustible: String(r.tipoCombustible ?? r.tipo_combustible ?? r.Tipo_combustible ?? "").trim(),
+        galones: gal, odometro: odo, costo: +(r.costo ?? r.Costo ?? 0),
+        tanqueLleno: String(r.tanqueLleno ?? r.tanque_lleno ?? "Sí").trim() || "Sí",
+      });
+    });
+    if (!recs.length) { toast("No se encontraron tanqueos en el JSON", true); input.value = ""; return; }
+    confirmDialog(`El JSON trae ${recs.length} tanqueos. Esto <b>reemplaza</b> los tanqueos actuales de ${escapeHtml(v.alias || v.modelo)} (no afecta tus gastos en Movimientos). ¿Continuar?`, async () => {
+      allFuel = allFuel.filter((x) => x.vehicleId !== v.id).concat(recs);
+      await bulkSetFuel(getState().user.uid, v.id, recs); persistFuelLocal(getState().user.uid, allFuel);
+      await syncVehicleOdo(v);
+      drawFuel(root, v); toast(recs.length + " tanqueos importados");
+    });
+  } catch (e) { console.error(e); toast("Error al leer el JSON", true); }
+  input.value = "";
+}
+
 function exportJson(v, fuel) {
   const blob = new Blob([JSON.stringify({ vehiculo: { alias: v.alias, placa: v.placa }, combustible: fuel }, null, 2)], { type: "application/json" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
@@ -527,17 +565,19 @@ function drawMaint(root, v) {
         <button class="icon-btn" data-delm="${r.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`).join("");
     root.querySelectorAll("[data-rowm]").forEach((rw) => rw.onclick = (e) => { if (e.target.closest("[data-delm]")) return; openMaintModal(v, root, allMaint.find((x) => x.id === rw.getAttribute("data-rowm"))); });
-    root.querySelectorAll("[data-delm]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este mantenimiento?", async () => {
+    root.querySelectorAll("[data-delm]").forEach((b) => b.onclick = (e) => {
+      e.stopPropagation();
       const id = b.getAttribute("data-delm"); const rec = allMaint.find((x) => x.id === id);
-      allMaint = allMaint.filter((x) => x.id !== id);
-      await deleteMaint(getState().user.uid, id); persistMaintLocal(getState().user.uid, allMaint);
-      // borrar el gasto vinculado (si lo hay)
-      if (rec && rec.gastoId) {
-        setState({ txs: getState().txs.filter((x) => x.id !== rec.gastoId) });
-        await deleteTx(getState().user.uid, rec.gastoId); forcePersistLocal(getState().user.uid);
-      }
-      drawMaint(root, v); toast("Eliminado");
-    }); });
+      const msg = rec && rec.gastoId
+        ? "Se quita este mantenimiento de la bitácora. <b>El gasto NO se borra</b>: sigue en Movimientos; solo se elimina el vínculo con el vehículo."
+        : "¿Eliminar este mantenimiento de la bitácora?";
+      confirmDialog(msg, async () => {
+        allMaint = allMaint.filter((x) => x.id !== id);
+        await deleteMaint(getState().user.uid, id); persistMaintLocal(getState().user.uid, allMaint);
+        if (rec && rec.gastoId) await unlinkGasto(rec.gastoId, "maintId");
+        drawMaint(root, v); toast(rec && rec.gastoId ? "Mantenimiento quitado (el gasto sigue en Movimientos)" : "Mantenimiento eliminado");
+      });
+    });
   }
 }
 
@@ -635,10 +675,19 @@ function drawOblig(root, v) {
       </div>`;
     }).join("");
     root.querySelectorAll("[data-rowo]").forEach((rw) => rw.onclick = (e) => { if (e.target.closest("[data-delo]")) return; openObligModal(v, root, allOblig.find((x) => x.id === rw.getAttribute("data-rowo"))); });
-    root.querySelectorAll("[data-delo]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar esta obligación?", async () => {
-      const id = b.getAttribute("data-delo"); allOblig = allOblig.filter((x) => x.id !== id);
-      await deleteOblig(getState().user.uid, id); persistObligLocal(getState().user.uid, allOblig); drawOblig(root, v); toast("Eliminado");
-    }); });
+    root.querySelectorAll("[data-delo]").forEach((b) => b.onclick = (e) => {
+      e.stopPropagation();
+      const id = b.getAttribute("data-delo"); const rec = allOblig.find((x) => x.id === id);
+      const msg = rec && rec.gastoId
+        ? "Se quita esta obligación del módulo. <b>El gasto NO se borra</b>: sigue en Movimientos; solo se elimina el vínculo con el vehículo."
+        : "¿Eliminar esta obligación?";
+      confirmDialog(msg, async () => {
+        allOblig = allOblig.filter((x) => x.id !== id);
+        await deleteOblig(getState().user.uid, id); persistObligLocal(getState().user.uid, allOblig);
+        if (rec && rec.gastoId) await unlinkGasto(rec.gastoId, "obligId");
+        drawOblig(root, v); toast(rec && rec.gastoId ? "Obligación quitada (el gasto sigue en Movimientos)" : "Obligación eliminada");
+      });
+    });
   }
 }
 
@@ -691,6 +740,14 @@ function planDedupe(items) {
   const delIds = [], keepByGasto = {};
   Object.entries(byG).forEach(([g, grp]) => { if (grp.length > 1) { keepByGasto[g] = grp[0].id; grp.slice(1).forEach((r) => delIds.push(r.id)); } });
   return { delIds, keepByGasto };
+}
+// quita el vínculo de un gasto con el módulo (NO borra el gasto): limpia fuelId/maintId/obligId
+async function unlinkGasto(gastoId, field) {
+  const tx = getState().txs.find((x) => x.id === gastoId);
+  if (!tx) return;
+  const updated = { ...tx, [field]: "" };
+  setState({ txs: getState().txs.map((x) => (x.id === gastoId ? updated : x)) });
+  await bulkUpdateTx(getState().user.uid, [updated]); forcePersistLocal(getState().user.uid);
 }
 // palabras que delatan una obligación legal (no van a mantenimiento)
 const OBLIG_RX = /impuesto|soat|tecnomec|tecno\s?mec|\brtm\b|revisi[oó]n t[eé]cnico|licencia|matr[ií]cula|matricula|p[oó]liza/i;
