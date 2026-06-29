@@ -3,7 +3,7 @@ import { getState, setState } from "../state.js";
 import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel, addMaint, loadMaint, deleteMaint, updateMaint, persistMaintLocal } from "../firebase-service.js";
 import { fmt, uid, todayISO, escapeHtml, ym, monthLabel } from "../utils.js";
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
-import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
+import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
 
 let query = "";
 let tabKind = "gasto";
@@ -212,7 +212,7 @@ export function openTxModal(existing) {
           toggleVtype();
         };
       }
-      b.querySelector("#m-save").onclick = async () => {
+      submitOnce(b.querySelector("#m-save"), async () => {
         const tx = {
           id: existing ? existing.id : uid(), date: b.querySelector("#m-date").value, desc: b.querySelector("#m-desc").value.trim(),
           amount: +b.querySelector("#m-amt").value, cat: catSel.value, sub: subSel.value,
@@ -273,7 +273,7 @@ export function openTxModal(existing) {
         setState({ txs: [tx, ...s.txs] });
         await addTx(s.user.uid, tx); forcePersistLocal(s.user.uid);
         closeModal(); drawList(); toast(vehId ? "Gasto agregado y registrado en el vehículo" : "Gasto agregado");
-      };
+      });
     },
   });
 }
@@ -289,13 +289,13 @@ export function openIncomeModal(existing) {
     <button id="i-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
       if (existing) b.querySelector("#i-type").value = existing.type || "Otros ingresos";
-      b.querySelector("#i-save").onclick = async () => {
+      submitOnce(b.querySelector("#i-save"), async () => {
         const inc = { id: existing ? existing.id : uid(), date: b.querySelector("#i-date").value, desc: b.querySelector("#i-desc").value.trim(), amount: +b.querySelector("#i-amt").value, type: b.querySelector("#i-type").value };
         if (!inc.desc || !inc.amount || inc.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
         setState({ incomes: existing ? getState().incomes.map((x) => (x.id === inc.id ? inc : x)) : [inc, ...getState().incomes] });
         await addIncome(s.user.uid, inc); forcePersistLocal(s.user.uid);
         closeModal(); drawList(); toast(existing ? "Ingreso actualizado" : "Ingreso agregado");
-      };
+      });
     },
   });
 }

@@ -344,6 +344,18 @@ export async function deleteMaint(uid, id) {
   const { db, fsMod } = await initFirebase();
   await fsMod.deleteDoc(fsMod.doc(db, "users", uid, "maintenance", id));
 }
+// escribe varios mantenimientos en un solo lote (rápido para importar)
+export async function bulkAddMaint(uid, recs) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  let batch = fsMod.writeBatch(db), n = 0;
+  for (const rec of recs) {
+    const { id, ...rest } = rec;
+    batch.set(fsMod.doc(db, "users", uid, "maintenance", id), rest);
+    if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
+  }
+  if (n) await batch.commit();
+}
 export async function updateMaint(uid, id, fields) {
   if (!FIREBASE_READY) return;
   const { db, fsMod } = await initFirebase();
@@ -369,6 +381,18 @@ export async function addOblig(uid, rec) {
   const { db, fsMod } = await initFirebase();
   const { id, ...rest } = rec;
   await fsMod.setDoc(fsMod.doc(db, "users", uid, "obligations", id), rest);
+}
+// escribe varias obligaciones en un solo lote (rápido para importar)
+export async function bulkAddOblig(uid, recs) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  let batch = fsMod.writeBatch(db), n = 0;
+  for (const rec of recs) {
+    const { id, ...rest } = rec;
+    batch.set(fsMod.doc(db, "users", uid, "obligations", id), rest);
+    if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
+  }
+  if (n) await batch.commit();
 }
 export async function deleteOblig(uid, id) {
   if (!FIREBASE_READY) return;

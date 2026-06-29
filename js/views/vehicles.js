@@ -1,9 +1,9 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal, deleteTx, bulkUpdateTx, loadOblig, addOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
+import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
 import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth } from "../utils.js";
-import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
+import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
 
 const icon = (t) => (t === "Moto" ? "🏍️" : "🚗");
@@ -172,7 +172,7 @@ function openVehicleModal(v, root) {
     ${f("URL de foto (opcional)", inp("v-foto", v?.foto, "url", "https://..."))}
     <button id="v-save" class="btn btn-primary btn-block mt-2">${v ? "Guardar cambios" : "Crear vehículo"}</button>`, {
     onMount(b) {
-      b.querySelector("#v-save").onclick = async () => {
+      submitOnce(b.querySelector("#v-save"), async () => {
         const get = (id) => b.querySelector("#" + id).value.trim();
         const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
         const data = {
@@ -189,7 +189,7 @@ function openVehicleModal(v, root) {
         const list = getState().vehicles || [];
         setState({ vehicles: v ? list.map((x) => (x.id === data.id ? data : x)) : [...list, data] });
         await persistVehicles(); closeModal(); drawList(root); toast(v ? "Vehículo actualizado" : "Vehículo creado");
-      };
+      });
     },
   });
 }
@@ -350,7 +350,7 @@ function openFuelModal(v, root, existing, info) {
     onMount(b) {
       b.querySelector("#t-tipo").value = (existing ? existing.tipoCombustible : v.combustible) || "Corriente";
       if (existing) b.querySelector("#t-lleno").value = (existing.tanqueLleno === "No" || existing.tanqueLleno === false) ? "No" : "Sí";
-      b.querySelector("#t-save").onclick = async () => {
+      submitOnce(b.querySelector("#t-save"), async () => {
         const rec = {
           id: existing ? existing.id : uid(), vehicleId: v.id, fecha: b.querySelector("#t-fecha").value,
           estacion: b.querySelector("#t-est").value.trim(), tipoCombustible: b.querySelector("#t-tipo").value,
@@ -363,7 +363,7 @@ function openFuelModal(v, root, existing, info) {
         await addFuel(getState().user.uid, rec); persistFuelLocal(getState().user.uid, allFuel);
         await syncVehicleOdo(v);
         closeModal(); drawFuel(root, v); toast(existing ? "Tanqueo actualizado" : "Tanqueo registrado");
-      };
+      });
     },
   });
 }
@@ -380,7 +380,7 @@ function openAdjustOdoModal(v, root) {
     <div class="field"><label class="label">Odómetro real del último tanqueo (km)</label><input id="adj-odo" class="input" type="number" value="${curMax}"></div>
     <button id="adj-save" class="btn btn-primary btn-block">Ajustar</button>`, {
     onMount(b) {
-      b.querySelector("#adj-save").onclick = async () => {
+      submitOnce(b.querySelector("#adj-save"), async () => {
         const real = +b.querySelector("#adj-odo").value;
         if (!real) return toast("Pon el odómetro real", true);
         const offset = real - curMax;
@@ -394,7 +394,7 @@ function openAdjustOdoModal(v, root) {
         setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: newVehOdo } : x)) });
         v.odometro = newVehOdo; await persistVehicles();
         closeModal(); drawFuel(root, v); toast("Odómetro ajustado");
-      };
+      });
     },
   });
 }
@@ -483,6 +483,7 @@ function drawMaint(root, v) {
   Object.values(latest).forEach((r) => { const st = maintStatus(r, v.odometro, today); if (st.st) alerts.push({ r, st }); });
   alerts.sort((a, b) => (a.st.st === "vencido" ? 0 : 1) - (b.st.st === "vencido" ? 0 : 1));
   const badge = (c) => `<span class="badge" style="background:${c === "Taller" ? "var(--blue)" : "var(--gold)"};color:#10171a">${c}</span>`;
+  const maintDupes = dupeCount(items);
 
   root.innerHTML = `
     <div class="row gap-2 mb-3" style="align-items:center">
@@ -490,7 +491,8 @@ function drawMaint(root, v) {
       <div><div class="page-title disp" style="font-size:21px;margin:0">🔧 Mantenimiento</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)} · ${Number(v.odometro || 0).toLocaleString("es-CO")} km</div></div>
     </div>
     <button id="add-maint" class="btn btn-primary btn-block mb-2">+ Mantenimiento</button>
-    <button id="import-maint" class="btn btn-ghost btn-block mb-3">📥 Importar gastos de mantenimiento</button>
+    <button id="import-maint" class="btn btn-ghost btn-block mb-2">📥 Importar gastos de mantenimiento</button>
+    ${maintDupes ? `<button id="dedupe-maint" class="btn btn-ghost btn-block mb-3" style="color:var(--red)">🧹 Quitar ${maintDupes} duplicado(s)</button>` : `<div class="mb-1"></div>`}
     <div class="grid-kpi mb-4">
       ${kpi("Gasto total", fmt(totalCost))}
       ${kpi("Solo Taller", fmt(tallerCost))}
@@ -506,6 +508,16 @@ function drawMaint(root, v) {
   root.querySelector("#back").onclick = () => { activeMaintVid = null; renderList(root); };
   root.querySelector("#add-maint").onclick = () => openMaintModal(v, root);
   root.querySelector("#import-maint").onclick = () => openImportMaint(v, root);
+  const dedupeBtn = root.querySelector("#dedupe-maint");
+  if (dedupeBtn) dedupeBtn.onclick = () => confirmDialog(`Se encontraron ${maintDupes} registro(s) repetido(s) (mismo gasto importado varias veces). Se quitan los repetidos y se deja uno por gasto. No se borra ningún gasto de Movimientos.`, async () => {
+    const { delIds, keepByGasto } = planDedupe(allMaint.filter((r) => r.vehicleId === v.id));
+    allMaint = allMaint.filter((r) => !delIds.includes(r.id));
+    for (const id of delIds) await deleteMaint(getState().user.uid, id);
+    persistMaintLocal(getState().user.uid, allMaint);
+    const changedTx = getState().txs.filter((t) => keepByGasto[t.id] && t.maintId !== keepByGasto[t.id]).map((t) => ({ ...t, maintId: keepByGasto[t.id] }));
+    if (changedTx.length) { const m = Object.fromEntries(changedTx.map((t) => [t.id, t])); setState({ txs: getState().txs.map((x) => m[x.id] || x) }); await bulkUpdateTx(getState().user.uid, changedTx); forcePersistLocal(getState().user.uid); }
+    drawMaint(root, v); toast(`${delIds.length} duplicado(s) eliminado(s)`);
+  });
   if (items.length) {
     root.querySelector("#maint-list").innerHTML = items.slice(0, 300).map((r) => `
       <div class="tx-row" data-rowm="${r.id}" style="cursor:pointer">
@@ -555,7 +567,7 @@ function openMaintModal(v, root, existing) {
       const fillTipos = () => { tipoSel.innerHTML = (MAINT_TIPOS[catSel.value] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join(""); };
       catSel.onchange = fillTipos; fillTipos();
       if (existing && existing.tipo) tipoSel.value = existing.tipo;
-      b.querySelector("#ma-save").onclick = async () => {
+      submitOnce(b.querySelector("#ma-save"), async () => {
         const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
         const rec = {
           id: existing ? existing.id : uid(), vehicleId: v.id, categoria: catSel.value, tipo: tipoSel.value,
@@ -570,7 +582,7 @@ function openMaintModal(v, root, existing) {
         await addMaint(getState().user.uid, rec); persistMaintLocal(getState().user.uid, allMaint);
         if ((rec.odometro || 0) > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x)) }); v.odometro = rec.odometro; await persistVehicles(); }
         closeModal(); drawMaint(root, v); toast(existing ? "Mantenimiento actualizado" : "Mantenimiento registrado");
-      };
+      });
     },
   });
 }
@@ -588,18 +600,30 @@ async function renderOblig(root, vid) {
 function drawOblig(root, v) {
   const items = allOblig.filter((r) => r.vehicleId === v.id).sort((a, b) => (a.fechaVencimiento || "9999").localeCompare(b.fechaVencimiento || "9999"));
   const today = todayISO();
+  const obligDupes = dupeCount(items);
   root.innerHTML = `
     <div class="row gap-2 mb-3" style="align-items:center">
       <button id="back" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
       <div><div class="page-title disp" style="font-size:21px;margin:0">📋 Obligaciones</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)}</div></div>
     </div>
     <button id="add-oblig" class="btn btn-primary btn-block mb-2">+ Obligación</button>
-    <button id="import-oblig" class="btn btn-ghost btn-block mb-3">📥 Importar pagos (impuesto/SOAT/RTM)</button>
+    <button id="import-oblig" class="btn btn-ghost btn-block mb-2">📥 Importar pagos (impuesto/SOAT/RTM)</button>
+    ${obligDupes ? `<button id="dedupe-oblig" class="btn btn-ghost btn-block mb-3" style="color:var(--red)">🧹 Quitar ${obligDupes} duplicado(s)</button>` : ""}
     ${items.length ? `<div class="card" style="padding:0" id="oblig-list"></div>` : `<div class="empty"><p>Sin obligaciones. Registra SOAT, tecnomecánica, impuesto o licencia con su fecha de vencimiento para recibir alarmas.</p></div>`}
     <p class="tiny muted mt-3">Las reglas y fechas varían por departamento y cambian cada año. Es un recordatorio configurable, no una autoridad legal. Verifica en RUNT / Secretaría de Movilidad / Gobernación.</p>`;
   root.querySelector("#back").onclick = () => { activeObligVid = null; renderList(root); };
   root.querySelector("#add-oblig").onclick = () => openObligModal(v, root);
   root.querySelector("#import-oblig").onclick = () => openImportOblig(v, root);
+  const dedupeObBtn = root.querySelector("#dedupe-oblig");
+  if (dedupeObBtn) dedupeObBtn.onclick = () => confirmDialog(`Se encontraron ${obligDupes} registro(s) repetido(s) (mismo pago importado varias veces). Se quitan los repetidos y se deja uno por pago. No se borra ningún gasto de Movimientos.`, async () => {
+    const { delIds, keepByGasto } = planDedupe(allOblig.filter((r) => r.vehicleId === v.id));
+    allOblig = allOblig.filter((r) => !delIds.includes(r.id));
+    for (const id of delIds) await deleteOblig(getState().user.uid, id);
+    persistObligLocal(getState().user.uid, allOblig);
+    const changedTx = getState().txs.filter((t) => keepByGasto[t.id] && t.obligId !== keepByGasto[t.id]).map((t) => ({ ...t, obligId: keepByGasto[t.id] }));
+    if (changedTx.length) { const m = Object.fromEntries(changedTx.map((t) => [t.id, t])); setState({ txs: getState().txs.map((x) => m[x.id] || x) }); await bulkUpdateTx(getState().user.uid, changedTx); forcePersistLocal(getState().user.uid); }
+    drawOblig(root, v); toast(`${delIds.length} duplicado(s) eliminado(s)`);
+  });
   if (items.length) {
     root.querySelector("#oblig-list").innerHTML = items.map((o) => {
       const st = obligStatus(o, today);
@@ -635,7 +659,7 @@ function openObligModal(v, root, existing) {
     ${f("Notas", `<input id="o-notas" class="input" value="${existing ? escapeHtml(existing.notas || "") : ""}" placeholder="Opcional">`)}
     <button id="o-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
-      b.querySelector("#o-save").onclick = async () => {
+      submitOnce(b.querySelector("#o-save"), async () => {
         const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
         const rec = {
           id: existing ? existing.id : uid(), vehicleId: v.id, tipo: b.querySelector("#o-tipo").value,
@@ -647,13 +671,27 @@ function openObligModal(v, root, existing) {
         allOblig = existing ? allOblig.map((x) => (x.id === rec.id ? rec : x)) : [...allOblig, rec];
         await addOblig(getState().user.uid, rec); persistObligLocal(getState().user.uid, allOblig);
         closeModal(); drawOblig(root, v); toast(existing ? "Obligación actualizada" : "Obligación registrada");
-      };
+      });
     },
   });
 }
 
 /* ===================== IMPORTAR GASTOS EXISTENTES ===================== */
 const isVehCat = (n) => /moto|carro|veh[ií]culo|autom[oó]vil|\bauto\b/i.test(n || "");
+// cuántos registros sobran por compartir el mismo gastoId (duplicados de importación)
+function dupeCount(items) {
+  const c = {};
+  items.forEach((r) => { if (r.gastoId) c[r.gastoId] = (c[r.gastoId] || 0) + 1; });
+  return Object.values(c).reduce((s, n) => s + (n > 1 ? n - 1 : 0), 0);
+}
+// devuelve { delIds, keepByGasto } para quitar repetidos dejando uno por gastoId
+function planDedupe(items) {
+  const byG = {};
+  items.forEach((r) => { if (r.gastoId) (byG[r.gastoId] = byG[r.gastoId] || []).push(r); });
+  const delIds = [], keepByGasto = {};
+  Object.entries(byG).forEach(([g, grp]) => { if (grp.length > 1) { keepByGasto[g] = grp[0].id; grp.slice(1).forEach((r) => delIds.push(r.id)); } });
+  return { delIds, keepByGasto };
+}
 // palabras que delatan una obligación legal (no van a mantenimiento)
 const OBLIG_RX = /impuesto|soat|tecnomec|tecno\s?mec|\brtm\b|revisi[oó]n t[eé]cnico|licencia|matr[ií]cula|matricula|p[oó]liza/i;
 // adivina el tipo de mantenimiento por la descripción
@@ -714,7 +752,7 @@ function openImportMaint(v, root) {
     onMount(b) {
       b.querySelector("#imp-all").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = true));
       b.querySelector("#imp-none").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = false));
-      b.querySelector("#imp-save").onclick = async () => {
+      submitOnce(b.querySelector("#imp-save"), async () => {
         const chosen = [...b.querySelectorAll(".imp-chk")].filter((c) => c.checked).map((c) => +c.getAttribute("data-i"));
         if (!chosen.length) return toast("No marcaste ninguno", true);
         const newMaint = [], changedTx = [];
@@ -728,11 +766,10 @@ function openImportMaint(v, root) {
         const tmap = Object.fromEntries(changedTx.map((t) => [t.id, t]));
         setState({ txs: getState().txs.map((x) => tmap[x.id] || x) });
         allMaint = [...allMaint, ...newMaint];
-        for (const rec of newMaint) await addMaint(s.user.uid, rec);
-        persistMaintLocal(s.user.uid, allMaint);
+        await bulkAddMaint(s.user.uid, newMaint); persistMaintLocal(s.user.uid, allMaint);
         await bulkUpdateTx(s.user.uid, changedTx); forcePersistLocal(s.user.uid);
         closeModal(); drawMaint(root, v); toast(`${newMaint.length} importado(s) a Mantenimiento`);
-      };
+      }, "Importando…");
     },
   });
 }
@@ -765,7 +802,7 @@ function openImportOblig(v, root) {
     onMount(b) {
       b.querySelector("#imp-all").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = true));
       b.querySelector("#imp-none").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = false));
-      b.querySelector("#imp-save").onclick = async () => {
+      submitOnce(b.querySelector("#imp-save"), async () => {
         const chosen = [...b.querySelectorAll(".imp-chk")].filter((c) => c.checked).map((c) => +c.getAttribute("data-i"));
         if (!chosen.length) return toast("No marcaste ninguno", true);
         const newOblig = [], changedTx = [];
@@ -779,11 +816,10 @@ function openImportOblig(v, root) {
         const tmap = Object.fromEntries(changedTx.map((t) => [t.id, t]));
         setState({ txs: getState().txs.map((x) => tmap[x.id] || x) });
         allOblig = [...allOblig, ...newOblig];
-        for (const rec of newOblig) await addOblig(s.user.uid, rec);
-        persistObligLocal(s.user.uid, allOblig);
+        await bulkAddOblig(s.user.uid, newOblig); persistObligLocal(s.user.uid, allOblig);
         await bulkUpdateTx(s.user.uid, changedTx); forcePersistLocal(s.user.uid);
         closeModal(); drawOblig(root, v); toast(`${newOblig.length} importado(s) a Obligaciones`);
-      };
+      }, "Importando…");
     },
   });
 }
