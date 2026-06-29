@@ -1,6 +1,6 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal, deleteTx, loadOblig, addOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
+import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, deleteMaint, persistMaintLocal, deleteTx, bulkUpdateTx, loadOblig, addOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
 import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog } from "../components/modals.js";
@@ -489,7 +489,8 @@ function drawMaint(root, v) {
       <button id="back" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
       <div><div class="page-title disp" style="font-size:21px;margin:0">🔧 Mantenimiento</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)} · ${Number(v.odometro || 0).toLocaleString("es-CO")} km</div></div>
     </div>
-    <button id="add-maint" class="btn btn-primary btn-block mb-3">+ Mantenimiento</button>
+    <button id="add-maint" class="btn btn-primary btn-block mb-2">+ Mantenimiento</button>
+    <button id="import-maint" class="btn btn-ghost btn-block mb-3">📥 Importar gastos de mantenimiento</button>
     <div class="grid-kpi mb-4">
       ${kpi("Gasto total", fmt(totalCost))}
       ${kpi("Solo Taller", fmt(tallerCost))}
@@ -504,11 +505,12 @@ function drawMaint(root, v) {
 
   root.querySelector("#back").onclick = () => { activeMaintVid = null; renderList(root); };
   root.querySelector("#add-maint").onclick = () => openMaintModal(v, root);
+  root.querySelector("#import-maint").onclick = () => openImportMaint(v, root);
   if (items.length) {
     root.querySelector("#maint-list").innerHTML = items.slice(0, 300).map((r) => `
       <div class="tx-row" data-rowm="${r.id}" style="cursor:pointer">
         <div class="flex1"><div class="tx-desc">${badge(r.categoria)} ${escapeHtml(r.tipo)}</div>
-          <div class="tx-meta">${escapeHtml(r.fecha)} · ${Number(r.odometro || 0).toLocaleString("es-CO")} km${r.taller ? " · " + escapeHtml(r.taller) : ""}</div></div>
+          <div class="tx-meta">${escapeHtml(r.fecha)} · ${r.odometro != null ? Number(r.odometro).toLocaleString("es-CO") + " km" : "sin odómetro"}${r.taller ? " · " + escapeHtml(r.taller) : ""}</div></div>
         <div class="tx-amt">${r.costo ? fmt(r.costo) : "—"}</div>
         <button class="icon-btn" data-delm="${r.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`).join("");
@@ -591,11 +593,13 @@ function drawOblig(root, v) {
       <button id="back" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
       <div><div class="page-title disp" style="font-size:21px;margin:0">📋 Obligaciones</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)}</div></div>
     </div>
-    <button id="add-oblig" class="btn btn-primary btn-block mb-3">+ Obligación</button>
+    <button id="add-oblig" class="btn btn-primary btn-block mb-2">+ Obligación</button>
+    <button id="import-oblig" class="btn btn-ghost btn-block mb-3">📥 Importar pagos (impuesto/SOAT/RTM)</button>
     ${items.length ? `<div class="card" style="padding:0" id="oblig-list"></div>` : `<div class="empty"><p>Sin obligaciones. Registra SOAT, tecnomecánica, impuesto o licencia con su fecha de vencimiento para recibir alarmas.</p></div>`}
     <p class="tiny muted mt-3">Las reglas y fechas varían por departamento y cambian cada año. Es un recordatorio configurable, no una autoridad legal. Verifica en RUNT / Secretaría de Movilidad / Gobernación.</p>`;
   root.querySelector("#back").onclick = () => { activeObligVid = null; renderList(root); };
   root.querySelector("#add-oblig").onclick = () => openObligModal(v, root);
+  root.querySelector("#import-oblig").onclick = () => openImportOblig(v, root);
   if (items.length) {
     root.querySelector("#oblig-list").innerHTML = items.map((o) => {
       const st = obligStatus(o, today);
@@ -643,6 +647,142 @@ function openObligModal(v, root, existing) {
         allOblig = existing ? allOblig.map((x) => (x.id === rec.id ? rec : x)) : [...allOblig, rec];
         await addOblig(getState().user.uid, rec); persistObligLocal(getState().user.uid, allOblig);
         closeModal(); drawOblig(root, v); toast(existing ? "Obligación actualizada" : "Obligación registrada");
+      };
+    },
+  });
+}
+
+/* ===================== IMPORTAR GASTOS EXISTENTES ===================== */
+const isVehCat = (n) => /moto|carro|veh[ií]culo|autom[oó]vil|\bauto\b/i.test(n || "");
+// palabras que delatan una obligación legal (no van a mantenimiento)
+const OBLIG_RX = /impuesto|soat|tecnomec|tecno\s?mec|\brtm\b|revisi[oó]n t[eé]cnico|licencia|matr[ií]cula|matricula|p[oó]liza/i;
+// adivina el tipo de mantenimiento por la descripción
+function guessMaintTipo(desc) {
+  const d = (desc || "").toLowerCase();
+  if (/llanta|neum/.test(d)) return ["Taller", "Llantas"];
+  if (/aceite/.test(d)) return ["Taller", "Cambio de aceite"];
+  if (/freno|pastilla/.test(d)) return ["Taller", "Frenos (pastillas)"];
+  if (/cadena|arrastre|piñon|sprocket|kit/.test(d)) return ["Taller", "Kit de arrastre"];
+  if (/buj[ií]a/.test(d)) return ["Taller", "Bujía"];
+  if (/bater/.test(d)) return ["Taller", "Batería"];
+  if (/filtro/.test(d)) return ["Taller", "Filtro de aceite"];
+  if (/sincron|v[aá]lvula|valvula/.test(d)) return ["Taller", "Sincronización / válvulas"];
+  return ["Taller", "Reparación"];
+}
+// adivina el tipo de obligación por la descripción
+function guessObligTipo(desc) {
+  const d = (desc || "").toLowerCase();
+  if (/soat/.test(d)) return "SOAT";
+  if (/tecnomec|tecno\s?mec|\brtm\b|revisi[oó]n t[eé]cnico/.test(d)) return "RTM";
+  if (/licencia|pase/.test(d)) return "LICENCIA";
+  return "IMPUESTO";
+}
+function addYear(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y + 1, m - 1, d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+// IMPORTADOR DE MANTENIMIENTO: gastos de mantenimiento de vehículo → bitácora
+function openImportMaint(v, root) {
+  const s = getState();
+  const linkedIds = new Set(allMaint.map((m) => m.gastoId).filter(Boolean));
+  // candidatos: gasto de categoría de vehículo, subcategoría de mantenimiento/reparación,
+  // sin enlace previo, que NO sea combustible ni una obligación legal
+  const cands = (s.txs || []).filter((t) =>
+    isVehCat(t.cat) && /mantenim|reparac/i.test(t.sub || "") &&
+    !t.maintId && !t.fuelId && !linkedIds.has(t.id) && !OBLIG_RX.test(t.desc || "")
+  ).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (!cands.length) return toast("No hay gastos de mantenimiento por importar", true);
+  const tipoOptsFor = (tipo) => MAINT_TIPOS.Taller.map((t) => `<option ${t === tipo ? "selected" : ""}>${escapeHtml(t)}</option>`).join("");
+  const rows = cands.map((t, i) => {
+    const [, tipo] = guessMaintTipo(t.desc);
+    return `<label class="tx-row" style="cursor:pointer;align-items:center;gap:8px">
+      <input type="checkbox" class="imp-chk" data-i="${i}" checked style="width:18px;height:18px;flex:none">
+      <div class="flex1" style="min-width:0">
+        <div class="tx-desc ellipsis">${escapeHtml(t.desc || "(sin descripción)")}</div>
+        <div class="tx-meta">${escapeHtml(t.date)} · ${fmt(t.amount)}</div>
+        <select class="imp-tipo input" data-i="${i}" style="margin-top:4px;height:34px;font-size:13px">${tipoOptsFor(tipo)}</select>
+      </div></label>`;
+  }).join("");
+  openModal("Importar a Mantenimiento", `
+    <p class="tiny muted" style="margin:-4px 0 8px">${cands.length} gasto(s) de mantenimiento de ${escapeHtml(v.alias || v.modelo)}. Revisa el tipo, desmarca los que no quieras y confirma. Cada uno se enlaza a la bitácora sin borrar ni duplicar el gasto.</p>
+    <div class="row gap-2 mb-2"><button id="imp-all" class="btn btn-ghost btn-sm">Marcar todos</button><button id="imp-none" class="btn btn-ghost btn-sm">Ninguno</button></div>
+    <div class="card" style="padding:0;max-height:48vh;overflow:auto">${rows}</div>
+    <button id="imp-save" class="btn btn-primary btn-block mt-3">Importar seleccionados</button>`, {
+    onMount(b) {
+      b.querySelector("#imp-all").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = true));
+      b.querySelector("#imp-none").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = false));
+      b.querySelector("#imp-save").onclick = async () => {
+        const chosen = [...b.querySelectorAll(".imp-chk")].filter((c) => c.checked).map((c) => +c.getAttribute("data-i"));
+        if (!chosen.length) return toast("No marcaste ninguno", true);
+        const newMaint = [], changedTx = [];
+        for (const i of chosen) {
+          const t = cands[i];
+          const tipo = b.querySelector(`.imp-tipo[data-i="${i}"]`).value;
+          const rec = { id: uid(), vehicleId: v.id, categoria: "Taller", tipo, fecha: t.date, odometro: null, descripcion: t.desc || "", repuesto: "", taller: "", costo: +t.amount || 0, proximoKm: null, recurrenteKm: null, proximaFecha: "", recurrenteDias: null, gastoId: t.id };
+          newMaint.push(rec);
+          changedTx.push({ ...t, vehicleId: v.id, maintId: rec.id });
+        }
+        const tmap = Object.fromEntries(changedTx.map((t) => [t.id, t]));
+        setState({ txs: getState().txs.map((x) => tmap[x.id] || x) });
+        allMaint = [...allMaint, ...newMaint];
+        for (const rec of newMaint) await addMaint(s.user.uid, rec);
+        persistMaintLocal(s.user.uid, allMaint);
+        await bulkUpdateTx(s.user.uid, changedTx); forcePersistLocal(s.user.uid);
+        closeModal(); drawMaint(root, v); toast(`${newMaint.length} importado(s) a Mantenimiento`);
+      };
+    },
+  });
+}
+
+// IMPORTADOR DE OBLIGACIONES: pagos de impuesto/SOAT/RTM → módulo de Obligaciones
+function openImportOblig(v, root) {
+  const s = getState();
+  const linkedIds = new Set(allOblig.map((o) => o.gastoId).filter(Boolean));
+  const cands = (s.txs || []).filter((t) =>
+    isVehCat(t.cat) && OBLIG_RX.test(t.desc || "") && !t.obligId && !linkedIds.has(t.id)
+  ).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (!cands.length) return toast("No hay pagos (impuesto/SOAT/RTM) por importar", true);
+  // por defecto marcamos solo el pago MÁS RECIENTE de cada tipo (el que da un aviso útil)
+  const latestByTipo = {};
+  cands.forEach((t) => { const k = guessObligTipo(t.desc); if (!latestByTipo[k] || (t.date || "") > (latestByTipo[k].date || "")) latestByTipo[k] = t; });
+  const isLatest = (t) => latestByTipo[guessObligTipo(t.desc)] === t;
+  const tipoOptsFor = (k) => OBLIG_TIPOS.map((o) => `<option value="${o.key}" ${o.key === k ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
+  const rows = cands.map((t, i) => `<label class="tx-row" style="cursor:pointer;align-items:center;gap:8px">
+      <input type="checkbox" class="imp-chk" data-i="${i}" ${isLatest(t) ? "checked" : ""} style="width:18px;height:18px;flex:none">
+      <div class="flex1" style="min-width:0">
+        <div class="tx-desc ellipsis">${escapeHtml(t.desc || "(sin descripción)")}${isLatest(t) ? ` <span class="tiny" style="color:var(--green)">· más reciente</span>` : ""}</div>
+        <div class="tx-meta">${escapeHtml(t.date)} · ${fmt(t.amount)}</div>
+        <select class="imp-tipo input" data-i="${i}" style="margin-top:4px;height:34px;font-size:13px">${tipoOptsFor(guessObligTipo(t.desc))}</select>
+      </div></label>`).join("");
+  openModal("Importar a Obligaciones", `
+    <p class="tiny muted" style="margin:-4px 0 8px">${cands.length} pago(s) de ${escapeHtml(v.alias || v.modelo)}. El vencimiento se estima en <b>1 año después</b> del pago. Marqué solo el <b>más reciente</b> de cada tipo (da un aviso útil); los viejos los puedes marcar si los quieres como historial (saldrán como "vencido").</p>
+    <div class="row gap-2 mb-2"><button id="imp-all" class="btn btn-ghost btn-sm">Marcar todos</button><button id="imp-none" class="btn btn-ghost btn-sm">Ninguno</button></div>
+    <div class="card" style="padding:0;max-height:48vh;overflow:auto">${rows}</div>
+    <button id="imp-save" class="btn btn-primary btn-block mt-3">Importar seleccionados</button>`, {
+    onMount(b) {
+      b.querySelector("#imp-all").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = true));
+      b.querySelector("#imp-none").onclick = () => b.querySelectorAll(".imp-chk").forEach((c) => (c.checked = false));
+      b.querySelector("#imp-save").onclick = async () => {
+        const chosen = [...b.querySelectorAll(".imp-chk")].filter((c) => c.checked).map((c) => +c.getAttribute("data-i"));
+        if (!chosen.length) return toast("No marcaste ninguno", true);
+        const newOblig = [], changedTx = [];
+        for (const i of chosen) {
+          const t = cands[i];
+          const tipo = b.querySelector(`.imp-tipo[data-i="${i}"]`).value;
+          const rec = { id: uid(), vehicleId: v.id, tipo, fechaVencimiento: addYear(t.date), fechaExpedicion: t.date, costo: +t.amount || 0, entidad: "", numero: "", diasAviso: 30, estado: "", notas: "Importado de Movimientos", gastoId: t.id };
+          newOblig.push(rec);
+          changedTx.push({ ...t, vehicleId: v.id, obligId: rec.id });
+        }
+        const tmap = Object.fromEntries(changedTx.map((t) => [t.id, t]));
+        setState({ txs: getState().txs.map((x) => tmap[x.id] || x) });
+        allOblig = [...allOblig, ...newOblig];
+        for (const rec of newOblig) await addOblig(s.user.uid, rec);
+        persistObligLocal(s.user.uid, allOblig);
+        await bulkUpdateTx(s.user.uid, changedTx); forcePersistLocal(s.user.uid);
+        closeModal(); drawOblig(root, v); toast(`${newOblig.length} importado(s) a Obligaciones`);
       };
     },
   });
