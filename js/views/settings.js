@@ -19,10 +19,14 @@ export function renderSettings(root, onSignOut) {
     </div>
 
     <div class="card mb-3">
-      <div class="card-title">Importar desde Excel</div>
-      <p class="small muted mb-3">Lee la hoja “Gastos” (usa Cat_Nueva/Subcat_Nueva o clasifica solo) y la hoja “IngresosFechas”. Reemplaza gastos e ingresos actuales.</p>
-      <input id="xls" type="file" accept=".xlsx,.xls" hidden>
-      <button id="xls-btn" class="btn btn-primary btn-sm">⬆ Elegir archivo .xlsx</button>
+      <div class="card-title">Importar gastos (Excel o JSON)</div>
+      <p class="small muted mb-3">Excel: lee la hoja “Gastos” (usa Cat_Nueva/Subcat_Nueva o clasifica solo) y la hoja “IngresosFechas”. JSON: acepta un respaldo o un archivo con <code>txs</code>/<code>incomes</code>. Ambos <b>reemplazan</b> gastos e ingresos actuales (no tocan categorías, cuentas ni vehículos).</p>
+      <div class="row gap-2 wrap">
+        <input id="xls" type="file" accept=".xlsx,.xls" hidden>
+        <button id="xls-btn" class="btn btn-primary btn-sm">⬆ Archivo .xlsx</button>
+        <input id="gastos-json" type="file" accept=".json,application/json" hidden>
+        <button id="gastos-json-btn" class="btn btn-primary btn-sm">⬆ Archivo .json</button>
+      </div>
     </div>
 
     <div class="card mb-3">
@@ -126,6 +130,47 @@ export function renderSettings(root, onSignOut) {
       toast(out.length + " gastos · " + incOut.length + " ingresos importados");
     } catch (e) { console.error(e); toast("Error al leer el Excel", true); }
     xls.value = "";
+  };
+
+  // import gastos desde JSON (respaldo o archivo con txs/incomes) — reemplaza gastos e ingresos
+  const gjson = root.querySelector("#gastos-json");
+  root.querySelector("#gastos-json-btn").onclick = () => gjson.click();
+  gjson.onchange = async () => {
+    const file = gjson.files[0]; if (!file) return;
+    try {
+      const d = JSON.parse(await file.text());
+      const rawTx = Array.isArray(d) ? d : (d.txs || d.gastos || []);
+      const rawInc = Array.isArray(d) ? [] : (d.incomes || d.ingresos || []);
+      const out = [];
+      rawTx.forEach((r) => {
+        const amount = +(r.amount ?? r.Monto ?? r.monto ?? r.Monto_Gasto ?? 0);
+        if (!amount) return;
+        const date = normDate(r.date ?? r.fecha ?? r.Fecha ?? r.Fecha_Gasto ?? "");
+        const desc = String(r.desc ?? r.descripcion ?? r["Descripción"] ?? r["Descriciòn_Gastos"] ?? "");
+        let cat = r.cat ?? r.categoria ?? r.Categoria ?? r.Cat_Nueva;
+        let sub = r.sub ?? r.subcategoria ?? r.Subcat_Nueva ?? "";
+        if (!cat) { const [c, sb] = classify(desc, ""); cat = c; sub = sb; }
+        out.push({ id: r.id || uid(), date, desc, amount, cat: String(cat), sub: String(sub || ""), pay: r.pay || "", acct: r.acct || "", vehicleId: r.vehicleId || "", fuelId: r.fuelId || "", maintId: r.maintId || "", obligId: r.obligId || "" });
+      });
+      const incOut = [];
+      rawInc.forEach((r) => {
+        const amount = +(r.amount ?? r.Monto ?? r.monto ?? 0);
+        if (!amount) return;
+        const date = normDate(r.date ?? r.fecha ?? r.Fecha ?? "");
+        const desc = String(r.desc ?? r.descripcion ?? r["Descripción"] ?? "");
+        incOut.push({ id: r.id || uid(), date, desc, amount, type: r.type || classifyIncome(desc) });
+      });
+      if (!out.length && !incOut.length) { toast("No se encontraron gastos en el JSON", true); gjson.value = ""; return; }
+      confirmDialog(`El JSON trae ${out.length} gastos y ${incOut.length} ingresos. Esto <b>reemplaza</b> tus gastos e ingresos actuales (no toca categorías, cuentas ni vehículos). ¿Continuar?`, async () => {
+        setState({ txs: out, incomes: incOut });
+        toast("Guardando " + out.length + " gastos y " + incOut.length + " ingresos...");
+        await bulkSetTx(s.user.uid, out);
+        await bulkSetIncomes(s.user.uid, incOut);
+        forcePersistLocal(s.user.uid);
+        toast(out.length + " gastos · " + incOut.length + " ingresos importados");
+      });
+    } catch (e) { console.error(e); toast("Error al leer el JSON", true); }
+    gjson.value = "";
   };
 
   // backup json
