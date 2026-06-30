@@ -1,9 +1,9 @@
 // js/views/settings.js
 import { getState, setState, dataSnapshot } from "../state.js";
 import { saveConfig, bulkSetTx, bulkSetIncomes, signOutUser, isCloud, forcePersistLocal } from "../firebase-service.js";
-import { classify, classifyIncome } from "../config.js";
-import { uid, normDate, escapeHtml } from "../utils.js";
-import { toast, confirmDialog, openModal } from "../components/modals.js";
+import { classify, classifyIncome, DEFAULT_PAY_METHODS } from "../config.js";
+import { uid, normDate, escapeHtml, fmt } from "../utils.js";
+import { toast, confirmDialog, openModal, closeModal, submitOnce } from "../components/modals.js";
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 
 export function renderSettings(root, onSignOut) {
@@ -39,6 +39,13 @@ export function renderSettings(root, onSignOut) {
         <button id="imp-btn" class="btn btn-ghost btn-sm">⬆ Restaurar respaldo</button>
         <button id="exp-xls" class="btn btn-ghost btn-sm">⬇ Exportar a Excel</button>
       </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-title">Gastos recurrentes 🔁</div>
+      <p class="small muted mb-3">Tus gastos fijos (arriendo, suscripciones, servicios). Cada mes la app te los recuerda en <b>Movimientos</b> y los registras con un toque (puedes ajustar el monto antes de guardar).</p>
+      <div id="rec-list" class="mb-3"></div>
+      <button id="rec-add" class="btn btn-ghost btn-sm">+ Agregar gasto recurrente</button>
     </div>
 
     <div class="card mb-3">
@@ -194,8 +201,8 @@ export function renderSettings(root, onSignOut) {
     const file = impJson.files[0]; if (!file) return;
     try {
       const d = JSON.parse(await file.text());
-      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [] });
-      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [] });
+      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [] });
+      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [] });
       await bulkSetTx(s.user.uid, d.txs || []);
       await bulkSetIncomes(s.user.uid, d.incomes || []);
       forcePersistLocal(s.user.uid);
@@ -281,6 +288,10 @@ export function renderSettings(root, onSignOut) {
 
   root.querySelector("#logout").onclick = () => confirmDialog("¿Cerrar sesión?", async () => { await signOutUser(); onSignOut(); }, { yesLabel: "Cerrar sesión" });
 
+  // gastos recurrentes
+  drawRec(root);
+  root.querySelector("#rec-add").onclick = () => openRecModal(root, null);
+
   // recordatorios (notificaciones)
   const notifBtn = root.querySelector("#notif-toggle");
   const paintNotif = () => {
@@ -323,4 +334,64 @@ export function renderSettings(root, onSignOut) {
     await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: getState().payMethods }); forcePersistLocal(s.user.uid);
     root.querySelector("#pay-new").value = ""; drawPays(); toast("Medio agregado");
   };
+}
+
+/* ===================== GASTOS RECURRENTES ===================== */
+async function saveRec() {
+  const s = getState();
+  await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, recurrentes: getState().recurrentes });
+  forcePersistLocal(s.user.uid);
+}
+
+function drawRec(root) {
+  const list = root.querySelector("#rec-list"); if (!list) return;
+  const recs = getState().recurrentes || [];
+  if (!recs.length) { list.innerHTML = `<div class="muted small">Aún no tienes gastos recurrentes.</div>`; return; }
+  list.innerHTML = recs.map((r) => `<div class="row between" style="align-items:center;padding:7px 0;border-top:1px solid var(--line)">
+      <div class="flex1" style="min-width:0"><div class="small bold ellipsis">${escapeHtml(r.desc)}</div>
+        <div class="tiny muted">${fmt(r.amount)} · día ${r.day} · ${escapeHtml(r.cat)}${r.sub ? " › " + escapeHtml(r.sub) : ""}</div></div>
+      <button class="icon-btn" data-er="${r.id}" title="Editar">✎</button>
+      <button class="icon-btn" data-dr="${r.id}" title="Eliminar">🗑</button></div>`).join("");
+  list.querySelectorAll("[data-er]").forEach((b) => b.onclick = () => openRecModal(root, (getState().recurrentes || []).find((x) => x.id === b.getAttribute("data-er"))));
+  list.querySelectorAll("[data-dr]").forEach((b) => b.onclick = () => confirmDialog("¿Eliminar este gasto recurrente? (no borra los gastos ya registrados)", async () => {
+    setState({ recurrentes: (getState().recurrentes || []).filter((x) => x.id !== b.getAttribute("data-dr")) });
+    await saveRec(); drawRec(root); toast("Eliminado");
+  }));
+}
+
+function openRecModal(root, existing) {
+  const s = getState();
+  const f = (l, h) => `<div class="field"><label class="label">${l}</label>${h}</div>`;
+  const catOpts = s.cats.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
+  const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
+  const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
+  openModal(existing ? "Editar recurrente" : "Nuevo gasto recurrente", `
+    ${f("Descripción", `<input id="r-desc" class="input" value="${existing ? escapeHtml(existing.desc) : ""}" placeholder="Ej: Arriendo">`)}
+    ${f("Monto (COP)", `<input id="r-amt" class="input" type="number" value="${existing ? existing.amount : ""}" placeholder="0">`)}
+    ${f("Categoría", `<select id="r-cat" class="input">${catOpts}</select>`)}
+    ${f("Subcategoría", `<select id="r-sub" class="input"></select>`)}
+    ${f("Medio de pago", `<select id="r-pay" class="input">${payOpts}</select>`)}
+    ${f("Cuenta (opcional)", `<select id="r-acct" class="input">${acctOpts}</select>`)}
+    ${f("Día del mes (1–31)", `<input id="r-day" class="input" type="number" min="1" max="31" value="${existing ? existing.day : 1}">`)}
+    <button id="r-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar" : "Crear"}</button>`, {
+    onMount(b) {
+      const catSel = b.querySelector("#r-cat"), subSel = b.querySelector("#r-sub");
+      const fillSubs = () => { const c = s.cats.find((x) => x.name === catSel.value); subSel.innerHTML = `<option value=""></option>` + (c?.subs || []).map((x) => `<option>${escapeHtml(x)}</option>`).join(""); };
+      if (existing) catSel.value = existing.cat;
+      catSel.onchange = fillSubs; fillSubs();
+      if (existing) { subSel.value = existing.sub || ""; b.querySelector("#r-pay").value = existing.pay || "Efectivo"; b.querySelector("#r-acct").value = existing.acct || ""; }
+      submitOnce(b.querySelector("#r-save"), async () => {
+        const rec = {
+          id: existing ? existing.id : uid(), desc: b.querySelector("#r-desc").value.trim(), amount: +b.querySelector("#r-amt").value || 0,
+          cat: catSel.value, sub: subSel.value, pay: b.querySelector("#r-pay").value, acct: b.querySelector("#r-acct").value || "",
+          day: Math.min(31, Math.max(1, +b.querySelector("#r-day").value || 1)), lastGen: existing ? (existing.lastGen || "") : "",
+        };
+        if (!rec.desc || !rec.amount) return toast("Falta descripción o monto", true);
+        const list = getState().recurrentes || [];
+        setState({ recurrentes: existing ? list.map((x) => (x.id === rec.id ? rec : x)) : [...list, rec] });
+        await saveRec(); closeModal(); drawRec(root); toast(existing ? "Actualizado" : "Gasto recurrente creado");
+      });
+    },
+  });
 }

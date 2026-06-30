@@ -103,12 +103,13 @@ export async function loadData(uid) {
       vehiclesEnabled: base?.vehiclesEnabled || false,
       vehicles: base?.vehicles || [],
       goals: base?.goals || [],
+      recurrentes: base?.recurrentes || [],
       txs, incomes,
       isNew: !snap.exists(),
     };
   }
   const raw = localStorage.getItem("fz_data_" + uid);
-  if (!raw) return { profile: { name: "", income: 6000000 }, cats: structuredClone(DEFAULT_CATS), budgets: {}, accounts: [], payMethods: [], vehiclesEnabled: false, vehicles: [], goals: [], txs: [], incomes: [], isNew: true };
+  if (!raw) return { profile: { name: "", income: 6000000 }, cats: structuredClone(DEFAULT_CATS), budgets: {}, accounts: [], payMethods: [], vehiclesEnabled: false, vehicles: [], goals: [], recurrentes: [], txs: [], incomes: [], isNew: true };
   const d = JSON.parse(raw);
   return { ...d, isNew: false };
 }
@@ -140,6 +141,7 @@ export function subscribeData(uid, onData) {
       vehiclesEnabled: base?.vehiclesEnabled || false,
       vehicles: base?.vehicles || [],
       goals: base?.goals || [],
+      recurrentes: base?.recurrentes || [],
       txs: txs.slice(),
       incomes: incomes.slice(),
       isNew: !baseExists,
@@ -181,7 +183,7 @@ export function subscribeData(uid, onData) {
 }
 
 /* ---------- Guardado de config (profile, cats, budgets) ---------- */
-export async function saveConfig(uid, { profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals }) {
+export async function saveConfig(uid, { profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes }) {
   if (FIREBASE_READY) {
     const { db, fsMod } = await initFirebase();
     const payload = { profile, cats, budgets };
@@ -190,6 +192,7 @@ export async function saveConfig(uid, { profile, cats, budgets, accounts, payMet
     if (vehicles !== undefined) payload.vehicles = vehicles;
     if (vehiclesEnabled !== undefined) payload.vehiclesEnabled = vehiclesEnabled;
     if (goals !== undefined) payload.goals = goals;
+    if (recurrentes !== undefined) payload.recurrentes = recurrentes;
     await fsMod.setDoc(fsMod.doc(db, "users", uid), payload, { merge: true });
   } else {
     persistLocal(uid);
@@ -409,6 +412,6 @@ export function bindLocalState(getter) { _stateGetter = getter; }
 function persistLocal(uid) {
   if (!_stateGetter) return;
   const s = _stateGetter();
-  localStorage.setItem("fz_data_" + uid, JSON.stringify({ profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: s.vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals, txs: s.txs, incomes: s.incomes }));
+  localStorage.setItem("fz_data_" + uid, JSON.stringify({ profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: s.vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals, recurrentes: s.recurrentes, txs: s.txs, incomes: s.incomes }));
 }
 export function forcePersistLocal(uid) { if (!FIREBASE_READY) persistLocal(uid); }

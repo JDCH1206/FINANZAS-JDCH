@@ -1,7 +1,7 @@
 // js/views/home.js
 import { getState, setState } from "../state.js";
 import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel, addMaint, loadMaint, deleteMaint, updateMaint, persistMaintLocal } from "../firebase-service.js";
-import { fmt, uid, todayISO, escapeHtml, ym, monthLabel } from "../utils.js";
+import { fmt, uid, todayISO, escapeHtml, ym, monthLabel, curMonth } from "../utils.js";
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
 
@@ -46,6 +46,7 @@ export function renderHome(root) {
         <button id="f-clear" class="btn btn-ghost btn-sm">Limpiar</button>
       </div>
     </div>
+    <div id="rec-pending"></div>
     <div class="card" style="padding:0" id="list"></div>`;
 
   root.querySelectorAll("[data-kind]").forEach((b) => b.onclick = () => { tabKind = b.getAttribute("data-kind"); renderHome(root); });
@@ -65,7 +66,53 @@ export function renderHome(root) {
     document.body.appendChild(fab);
   }
   fab.onclick = () => tabKind === "gasto" ? openTxModal() : openIncomeModal();
+  drawPending(root);
   drawList();
+}
+
+// tarjeta de gastos recurrentes pendientes de registrar este mes (recomienda + confirmas)
+function drawPending(root) {
+  const host = root.querySelector("#rec-pending"); if (!host) return;
+  const s = getState();
+  const cm = curMonth(), td = +todayISO().slice(8, 10);
+  const pend = tabKind === "gasto" ? (s.recurrentes || []).filter((r) => r.lastGen !== cm && (r.day || 1) <= td) : [];
+  if (!pend.length) { host.innerHTML = ""; return; }
+  host.innerHTML = `<div class="card mb-3" style="border:1px solid var(--gold)">
+    <div class="card-title">🔁 Gastos recurrentes por registrar</div>
+    ${pend.map((r) => `<div class="row gap-2" style="align-items:center;padding:7px 0;border-top:1px solid var(--line)">
+      <div class="flex1" style="min-width:0"><div class="small bold ellipsis">${escapeHtml(r.desc)}</div><div class="tiny muted">día ${r.day} · ${escapeHtml(r.cat)}</div></div>
+      <input class="input rec-amt" data-r="${r.id}" type="number" value="${r.amount}" style="width:104px;padding:6px 8px;font-size:13px">
+      <button class="btn btn-primary btn-sm rec-go" data-r="${r.id}">Registrar</button>
+      <button class="btn btn-ghost btn-sm rec-skip" data-r="${r.id}">Omitir</button>
+    </div>`).join("")}</div>`;
+  host.querySelectorAll(".rec-go").forEach((b) => b.onclick = () => registrarRec(root, b.getAttribute("data-r")));
+  host.querySelectorAll(".rec-skip").forEach((b) => b.onclick = () => skipRec(root, b.getAttribute("data-r")));
+}
+
+async function registrarRec(root, id) {
+  const s = getState();
+  const r = (s.recurrentes || []).find((x) => x.id === id); if (!r) return;
+  const amtInput = root.querySelector(`.rec-amt[data-r="${id}"]`);
+  const amount = amtInput ? (+amtInput.value || 0) : r.amount;
+  if (!amount) return toast("Monto inválido", true);
+  const cm = curMonth(), [y, m] = cm.split("-").map(Number);
+  const dim = new Date(y, m, 0).getDate();
+  const date = `${cm}-${String(Math.min(r.day || 1, dim)).padStart(2, "0")}`;
+  const tx = { id: uid(), date, desc: r.desc, amount, cat: r.cat, sub: r.sub || "", pay: r.pay || "", acct: r.acct || "" };
+  setState({ txs: [tx, ...getState().txs], recurrentes: (getState().recurrentes || []).map((x) => (x.id === id ? { ...x, lastGen: cm } : x)) });
+  await addTx(s.user.uid, tx);
+  await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, recurrentes: getState().recurrentes });
+  forcePersistLocal(s.user.uid);
+  drawPending(root); drawList(); toast("Registrado: " + r.desc);
+}
+
+async function skipRec(root, id) {
+  const s = getState();
+  const cm = curMonth();
+  setState({ recurrentes: (getState().recurrentes || []).map((x) => (x.id === id ? { ...x, lastGen: cm } : x)) });
+  await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, recurrentes: getState().recurrentes });
+  forcePersistLocal(s.user.uid);
+  drawPending(root); toast("Omitido este mes");
 }
 
 function drawList() {

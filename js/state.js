@@ -17,6 +17,7 @@ const state = {
   vehiclesEnabled: false,// módulo opcional de vehículos
   vehicles: [],          // [{ id, tipo, alias, placa, ... }]
   goals: [],             // metas de ahorro [{ id, nombre, objetivo, ahorrado, fecha }]
+  recurrentes: [],       // gastos recurrentes [{ id, desc, amount, cat, sub, pay, acct, day, lastGen }]
 };
 
 const listeners = new Set();
@@ -43,6 +44,6 @@ export function setData({ profile, cats, txs, incomes, accounts, budgets, payMet
 }
 
 export function dataSnapshot() {
-  const { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals } = state;
-  return { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals };
+  const { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals, recurrentes } = state;
+  return { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals, recurrentes };
 }

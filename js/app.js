@@ -125,7 +125,7 @@ function startSession(user) {
     setState({
       profile: data.profile, cats: data.cats, budgets: data.budgets,
       accounts: data.accounts || [], payMethods: data.payMethods || [],
-      vehicles: data.vehicles || [], vehiclesEnabled: data.vehiclesEnabled || false, goals: data.goals || [],
+      vehicles: data.vehicles || [], vehiclesEnabled: data.vehiclesEnabled || false, goals: data.goals || [], recurrentes: data.recurrentes || [],
       txs: data.txs, incomes: data.incomes || [], loading: false,
     });
     if (!booted) {
