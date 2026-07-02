@@ -22,7 +22,9 @@ function deltaBadge(cur, prev) {
 let period = "all";
 let subCat = null; // categoría seleccionada para el desglose por subcategoría
 let dashTab = "resumen";       // "resumen" | "detalle"
-let detMonth = null;           // mes elegido en la vista Detalle
+let detScope = "mes";          // "mes" | "año" en la vista Detalle
+let detMonth = null;           // mes elegido (scope mes)
+let detYear = null;            // año elegido (scope año)
 const detExpanded = new Set(); // categorías desplegadas en Detalle
 
 export function renderDashboard(root) {
@@ -297,9 +299,15 @@ function kpi(label, val, sm) {
 /* ===================== DETALLE POR MES (tabla dinámica) ===================== */
 function renderDetalle(root, tabs, months) {
   const s = getState();
-  if (!detMonth || !months.includes(detMonth)) detMonth = months[0] || curMonth();
-  const txM = s.txs.filter((t) => ym(t.date) === detMonth);
-  const incM = s.incomes.filter((t) => ym(t.date) === detMonth);
+  const years = [...new Set([...s.txs, ...s.incomes].map((t) => (t.date || "").slice(0, 4)).filter(Boolean))].sort().reverse();
+  if (detScope === "año") { if (!detYear || !years.includes(detYear)) detYear = years[0] || String(new Date().getFullYear()); }
+  else { if (!detMonth || !months.includes(detMonth)) detMonth = months[0] || curMonth(); }
+  const inScope = (d) => detScope === "año" ? (d || "").slice(0, 4) === detYear : ym(d) === detMonth;
+  const label = detScope === "año" ? detYear : monthLabel(detMonth);
+  const periods = detScope === "año" ? years : months;
+  const selVal = detScope === "año" ? detYear : detMonth;
+  const txM = s.txs.filter((t) => inScope(t.date));
+  const incM = s.incomes.filter((t) => inScope(t.date));
   const gastos = sum(txM, (t) => t.amount);
   const ingresos = sum(incM, (t) => t.amount);
   const balance = ingresos - gastos;
@@ -333,8 +341,12 @@ function renderDetalle(root, tabs, months) {
 
   root.innerHTML = tabs + `
     <div class="card mb-3">
-      <label class="label">Mes</label>
-      <select id="det-mes" class="input" style="width:auto">${months.map((m) => `<option value="${m}" ${m === detMonth ? "selected" : ""}>${monthLabel(m)}</option>`).join("")}</select>
+      <div class="row gap-2 mb-2">
+        <button class="chip ${detScope === "mes" ? "on" : ""}" data-scope="mes">Por mes</button>
+        <button class="chip ${detScope === "año" ? "on" : ""}" data-scope="año">Por año</button>
+      </div>
+      <label class="label">${detScope === "año" ? "Año" : "Mes"}</label>
+      <select id="det-mes" class="input" style="width:auto">${periods.map((p) => `<option value="${p}" ${p === selVal ? "selected" : ""}>${detScope === "año" ? p : monthLabel(p)}</option>`).join("")}</select>
     </div>
     <div class="grid-kpi mb-3">
       <div class="kpi"><div class="k-label">Ingresos</div><div class="k-val sm" style="color:var(--green)">${fmt(ingresos)}</div></div>
@@ -344,14 +356,15 @@ function renderDetalle(root, tabs, months) {
     </div>
     <div class="card" style="padding:0">
       <div class="row between" style="padding:10px 12px;border-bottom:1px solid var(--line)">
-        <span class="card-title" style="margin:0">Gasto por categoría · ${monthLabel(detMonth)}</span>
+        <span class="card-title" style="margin:0">Gasto por categoría · ${label}</span>
         <span class="tiny muted">toca para ver subcategorías</span></div>
-      ${cats.length ? catRows : `<div class="muted small" style="padding:16px">Sin gastos en ${monthLabel(detMonth)}.</div>`}
+      ${cats.length ? catRows : `<div class="muted small" style="padding:16px">Sin gastos en ${label}.</div>`}
       ${cats.length ? `<div class="row between" style="padding:11px 12px;border-top:2px solid var(--line);font-weight:700"><span>Total gastos</span><span>${fmt(gastos)}</span></div>` : ""}
     </div>`;
 
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
-  root.querySelector("#det-mes").onchange = (e) => { detMonth = e.target.value; renderDashboard(root); };
+  root.querySelectorAll("[data-scope]").forEach((b) => b.onclick = () => { detScope = b.getAttribute("data-scope"); detExpanded.clear(); renderDashboard(root); });
+  root.querySelector("#det-mes").onchange = (e) => { if (detScope === "año") detYear = e.target.value; else detMonth = e.target.value; renderDashboard(root); };
   root.querySelectorAll(".cat-row").forEach((rw) => rw.onclick = () => {
     const c = rw.getAttribute("data-cat");
     if (detExpanded.has(c)) detExpanded.delete(c); else detExpanded.add(c);
