@@ -21,6 +21,9 @@ function deltaBadge(cur, prev) {
 
 let period = "all";
 let subCat = null; // categoría seleccionada para el desglose por subcategoría
+let dashTab = "resumen";       // "resumen" | "detalle"
+let detMonth = null;           // mes elegido en la vista Detalle
+const detExpanded = new Set(); // categorías desplegadas en Detalle
 
 export function renderDashboard(root) {
   const s = getState();
@@ -29,9 +32,17 @@ export function renderDashboard(root) {
     return;
   }
   const months = [...new Set(s.txs.map((t) => ym(t.date)).filter(Boolean))].sort().reverse();
+  const detMonths = [...new Set([...s.txs, ...s.incomes].map((t) => ym(t.date)).filter(Boolean))].sort().reverse();
+  const tabs = `
+    <h2 class="page-title disp">Tablero</h2>
+    <div class="row gap-2 mb-3" id="dash-tabs">
+      <button class="chip ${dashTab === "resumen" ? "on" : ""}" data-tab="resumen">Resumen</button>
+      <button class="chip ${dashTab === "detalle" ? "on" : ""}" data-tab="detalle">Detalle por mes</button>
+    </div>`;
+  if (dashTab === "detalle") { renderDetalle(root, tabs, detMonths); return; }
 
   root.innerHTML = `
-    <h2 class="page-title disp">Tablero</h2>
+    ${tabs}
     <p class="page-sub">Comportamiento del gasto y comparación con referentes</p>
     <div class="row gap-2 wrap mb-4" id="chips">
       <button class="chip ${period === "all" ? "on" : ""}" data-p="all">Todo</button>
@@ -58,6 +69,7 @@ export function renderDashboard(root) {
       <div class="card col-span"><div class="card-title">Tu % vs. canasta DANE</div><div id="dane"></div></div>
     </div>`;
 
+  root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
   root.querySelectorAll("[data-p]").forEach((b) => b.onclick = () => { period = b.getAttribute("data-p"); renderDashboard(root); });
 
   const filtered = period === "all" ? s.txs : s.txs.filter((t) => ym(t.date) === period);
@@ -280,4 +292,69 @@ export function renderDashboard(root) {
 
 function kpi(label, val, sm) {
   return `<div class="kpi"><div class="k-label">${label}</div><div class="k-val ${sm ? "sm" : ""}">${val}</div></div>`;
+}
+
+/* ===================== DETALLE POR MES (tabla dinámica) ===================== */
+function renderDetalle(root, tabs, months) {
+  const s = getState();
+  if (!detMonth || !months.includes(detMonth)) detMonth = months[0] || curMonth();
+  const txM = s.txs.filter((t) => ym(t.date) === detMonth);
+  const incM = s.incomes.filter((t) => ym(t.date) === detMonth);
+  const gastos = sum(txM, (t) => t.amount);
+  const ingresos = sum(incM, (t) => t.amount);
+  const balance = ingresos - gastos;
+  const pct = ingresos ? (balance / ingresos) * 100 : (balance < 0 ? -100 : 0);
+  const balCol = balance >= 0 ? "var(--green)" : "var(--red)";
+
+  const byCat = {};
+  txM.forEach((t) => { byCat[t.cat] = (byCat[t.cat] || 0) + (+t.amount || 0); });
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+
+  const catRows = cats.map(([name, val], i) => {
+    const pc = gastos ? (val / gastos) * 100 : 0;
+    const open = detExpanded.has(name);
+    let subs = "";
+    if (open) {
+      const sm = {};
+      txM.filter((t) => t.cat === name).forEach((t) => { const k = t.sub || "(sin subcategoría)"; sm[k] = (sm[k] || 0) + (+t.amount || 0); });
+      const se = Object.entries(sm).sort((a, b) => b[1] - a[1]);
+      subs = se.map(([sn, sv]) => `<div class="row between" style="padding:5px 12px 5px 40px;border-top:1px solid var(--line);background:var(--panel-2)">
+          <span class="small muted">${escapeHtml(sn)}</span>
+          <span class="small">${fmt(sv)} <span class="muted tiny">${val ? ((sv / val) * 100).toFixed(0) : 0}%</span></span></div>`).join("");
+    }
+    return `<div class="tx-row cat-row" data-cat="${escapeHtml(name)}" style="cursor:pointer;align-items:center">
+        <span style="width:14px;color:var(--sub)">${open ? "▾" : "▸"}</span>
+        <span class="tx-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
+        <div class="flex1" style="min-width:0"><div class="tx-desc">${escapeHtml(name)}</div>
+          <div class="bar" style="height:6px;margin-top:4px"><span style="width:${Math.min(pc, 100)}%;background:${PALETTE[i % PALETTE.length]}"></span></div></div>
+        <div class="tx-amt" style="text-align:right">${fmt(val)}<div class="tiny muted">${pc.toFixed(0)}%</div></div>
+      </div>${subs}`;
+  }).join("");
+
+  root.innerHTML = tabs + `
+    <div class="card mb-3">
+      <label class="label">Mes</label>
+      <select id="det-mes" class="input" style="width:auto">${months.map((m) => `<option value="${m}" ${m === detMonth ? "selected" : ""}>${monthLabel(m)}</option>`).join("")}</select>
+    </div>
+    <div class="grid-kpi mb-3">
+      <div class="kpi"><div class="k-label">Ingresos</div><div class="k-val sm" style="color:var(--green)">${fmt(ingresos)}</div></div>
+      <div class="kpi"><div class="k-label">Gastos</div><div class="k-val sm">${fmt(gastos)}</div></div>
+      <div class="kpi"><div class="k-label">Balance</div><div class="k-val sm" style="color:${balCol}">${fmt(balance)}</div></div>
+      <div class="kpi"><div class="k-label">Balance %</div><div class="k-val sm" style="color:${balCol}">${ingresos ? (balance >= 0 ? "+" : "") + pct.toFixed(0) + "%" : "—"}</div></div>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="row between" style="padding:10px 12px;border-bottom:1px solid var(--line)">
+        <span class="card-title" style="margin:0">Gasto por categoría · ${monthLabel(detMonth)}</span>
+        <span class="tiny muted">toca para ver subcategorías</span></div>
+      ${cats.length ? catRows : `<div class="muted small" style="padding:16px">Sin gastos en ${monthLabel(detMonth)}.</div>`}
+      ${cats.length ? `<div class="row between" style="padding:11px 12px;border-top:2px solid var(--line);font-weight:700"><span>Total gastos</span><span>${fmt(gastos)}</span></div>` : ""}
+    </div>`;
+
+  root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
+  root.querySelector("#det-mes").onchange = (e) => { detMonth = e.target.value; renderDashboard(root); };
+  root.querySelectorAll(".cat-row").forEach((rw) => rw.onclick = () => {
+    const c = rw.getAttribute("data-cat");
+    if (detExpanded.has(c)) detExpanded.delete(c); else detExpanded.add(c);
+    renderDashboard(root);
+  });
 }
