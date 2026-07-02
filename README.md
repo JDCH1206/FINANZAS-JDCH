@@ -4,7 +4,10 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v50**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v51**. Cambios por fecha (más reciente primero):
+
+### 2026-06-29 · caché v51 — Detalle del Tablero: drill-down por niveles
+- 🧭 La pestaña "Detalle" ahora es un filtro en cadena con migas de pan: **Año → Mes → Categoría → Subcategoría**. Eliges el año y ves cada mes (con su balance), tocas un mes y ves las categorías, tocas una categoría y ves sus subcategorías. Puedes volver a cualquier nivel desde las migas.
 
 ### 2026-06-29 · caché v50 — Detalle del Tablero: por mes o por año
 - 📅 La pestaña "Detalle" ahora tiene interruptor **Por mes / Por año**: eliges un año y ves el consolidado anual (gasto por categoría/subcategoría, ingresos, balance y %).
