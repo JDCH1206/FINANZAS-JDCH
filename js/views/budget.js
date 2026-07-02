@@ -62,7 +62,12 @@ export function renderBudget(root) {
         <div class="small muted">Presup. <b style="color:var(--ink)">${fmt(totBud)}</b> · Real <b style="color:${totReal > totBud ? "var(--red)" : "var(--green)"}">${fmt(totReal)}</b></div>
       </div>
       <div id="b-rows"></div>
-      <p class="tiny muted mt-3">💾 Guardado al instante. El % compara real vs. presupuesto.</p>
+      <div style="padding:9px 4px 2px;border-top:2px solid var(--line)">
+        <div class="row between" style="font-weight:700"><span>TOTAL</span>
+          <span class="badge" style="background:${totBud ? ((totReal / totBud) * 100 <= 100 ? "var(--green)" : (totReal / totBud) * 100 <= 110 ? "var(--yel)" : "var(--red)") : "var(--sub)"};color:#10171a">${totBud ? ((totReal / totBud) * 100).toFixed(0) + "%" : "—"}</span></div>
+        <div class="row between tiny" style="margin-top:2px"><span class="muted">Presup ${fmt(totBud)} · Real ${fmt(totReal)}</span><span style="color:${totBud - totReal >= 0 ? "var(--green)" : "var(--red)"}">Dif ${fmt(totBud - totReal)}</span></div>
+      </div>
+      <div class="tiny muted mt-3" style="line-height:1.9">Semáforo % ejecución: <span style="color:var(--green)">■ ≤100% ok</span> · <span style="color:var(--yel)">■ 100–110% leve</span> · <span style="color:var(--red)">■ >110% alto</span><br>💾 Guardado al instante. El % compara real vs. presupuesto.</div>
     </div>
 
     <div class="card"><div class="card-title">Historial: presupuesto vs. real</div><div class="chart-box"><canvas id="ch-bud"></canvas></div></div>`;
@@ -105,13 +110,14 @@ export function renderBudget(root) {
     ? `<div class="bud-pct"><input data-pct="${escapeHtml(key)}" class="input" style="padding:7px 22px 7px 10px;font-size:13px" type="number" value="${b[key + "__pct"] || ""}" placeholder="0"><span class="pct-sign">%</span></div>`
     : `<input data-val="${escapeHtml(key)}" class="input" style="padding:7px 10px;font-size:13px" type="number" value="${b[key] || ""}" placeholder="0">`;
   root.querySelector("#b-rows").innerHTML = s.cats.map((c) => {
-    const ap = applied(c), rl = realMap[c.name] || 0, ej = ap ? rl / ap : 0;
+    const ap = applied(c), rl = realMap[c.name] || 0, ej = ap ? rl / ap : 0, dif = ap - rl;
     const col = ej > 1.1 ? "var(--red)" : ej > 1 ? "var(--yel)" : ej > 0 ? "var(--green)" : "var(--sub)";
     const hasSubs = (c.subs || []).length > 0, open = expanded.has(c.name);
     const caret = hasSubs
       ? `<button data-exp="${escapeHtml(c.name)}" title="Ver subcategorías" style="background:none;border:none;color:var(--gold);cursor:pointer;padding:0 5px 0 0;font-size:12px">${open ? "▾" : "▸"}</button>`
       : `<span style="display:inline-block;width:14px"></span>`;
     let html = `<div class="bud-row"><span class="name">${caret}${escapeHtml(c.name)}</span>${cellInput(c.name)}<span class="ej" style="color:${col}">${ap ? (ej * 100).toFixed(0) + "%" : "—"}</span></div>`;
+    if (ap || rl) html += `<div class="row between tiny" style="padding:0 4px 6px 20px"><span class="muted">Real ${fmt(rl)}</span><span style="color:${dif >= 0 ? "var(--green)" : "var(--red)"}">Dif ${fmt(dif)}</span></div>`;
     if (open && hasSubs) {
       html += c.subs.map((sub) => {
         const sk = c.name + "›" + sub;
