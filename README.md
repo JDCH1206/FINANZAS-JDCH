@@ -4,7 +4,13 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v53**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v54**. Cambios por fecha (más reciente primero):
+
+### 2026-07-02 · caché v54 — Auditoría QA/UX (2ª tanda): deshacer, descarte seguro y fechas amigables
+- ↩️ **Deshacer al eliminar**: borrar un gasto o ingreso ya no pide confirmación; se elimina de una y aparece un aviso con botón **"Deshacer"** (~6 s) que lo restaura. Los gastos vinculados a tanqueo/mantenimiento sí siguen pidiendo confirmación (el borrado es doble).
+- 🛡️ **Descarte seguro de formularios**: si tocas fuera del formulario, la ✕, Esc o "atrás" con **cambios sin guardar**, la app pregunta antes de descartarlos.
+- 📅 **Fechas amigables** en Movimientos: "Hoy", "Ayer", "2 jul" (o "2 jul 2025" si es de otro año) en vez de `2026-07-02`.
+- 🐞 El gráfico "Historial: presupuesto vs. real" ahora incluye los meses presupuestados **por % del ingreso** (antes salían con presupuesto 0).
 
 ### 2026-07-02 · caché v53 — Auditoría QA/UX: correcciones y usabilidad
 - 🔙 El botón **"atrás" de Android** (y la tecla Esc) ahora cierra el formulario/diálogo abierto en vez de salir de la app.

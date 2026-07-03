@@ -143,7 +143,8 @@ export function renderBudget(root) {
   // historial chart
   const hist = allMonths.map((k) => {
     const bb = s.budgets[k] || {};
-    const bud = sum(s.cats, (c) => +bb[c.name] || 0);
+    // meses presupuestados por % del ingreso también cuentan (antes salían en 0)
+    const bud = sum(s.cats, (c) => (+bb[c.name] || 0) || ((+bb[c.name + "__pct"] || 0) / 100) * (s.profile.income || 0));
     const rl = sum(s.txs.filter((t) => ym(t.date) === k), (t) => t.amount);
     return { k, bud, rl };
   }).filter((x) => x.bud > 0 || x.rl > 0).reverse();

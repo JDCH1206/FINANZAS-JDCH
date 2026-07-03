@@ -1,9 +1,9 @@
 // js/views/home.js
 import { getState, setState } from "../state.js";
 import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel, addMaint, loadMaint, deleteMaint, updateMaint, persistMaintLocal } from "../firebase-service.js";
-import { fmt, uid, todayISO, escapeHtml, ym, monthLabel, curMonth } from "../utils.js";
+import { fmt, uid, todayISO, escapeHtml, ym, monthLabel, curMonth, fmtDate } from "../utils.js";
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
-import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
+import { openModal, closeModal, toast, toastUndo, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 
 let query = "";
 let tabKind = "gasto";
@@ -130,7 +130,7 @@ function drawList() {
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:${PALETTE[(ci + 11) % PALETTE.length]}"></span>
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${veh ? (veh.tipo === "Moto" ? " 🏍️" : " 🚗") : ""}</div>
-          <div class="tx-meta">${t.date} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}</div></div>
+          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}</div></div>
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`;
@@ -138,28 +138,36 @@ function drawList() {
     if (more) list.querySelector("#more-btn").onclick = () => { limit += 300; drawList(); };
     list.querySelectorAll("[data-row]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-del]")) return; openTxModal(getState().txs.find((x) => x.id === r.getAttribute("data-row"))); });
     list.querySelectorAll("[data-del]").forEach((b) => b.onclick = (e) => { e.stopPropagation();
-      const idDel = b.getAttribute("data-del");
-      const txDel = getState().txs.find((x) => x.id === idDel);
-      const msg = txDel?.fuelId ? "Este gasto está vinculado a un <b>tanqueo</b> del vehículo: se eliminarán el gasto y el tanqueo. ¿Continuar?"
-        : txDel?.maintId ? "Este gasto está vinculado a un <b>mantenimiento</b> del vehículo: se eliminarán el gasto y el registro de la bitácora. ¿Continuar?"
-        : "¿Eliminar este gasto?";
-      confirmDialog(msg, async () => {
       const id = b.getAttribute("data-del");
       const tx = getState().txs.find((x) => x.id === id);
-      setState({ txs: getState().txs.filter((x) => x.id !== id) });
-      await deleteTx(s.user.uid, id); forcePersistLocal(s.user.uid);
-      // borrar el tanqueo vinculado (si lo hay)
-      if (tx && tx.fuelId) {
-        await deleteFuel(s.user.uid, tx.fuelId);
-        if (!isCloud()) { const ex = await loadFuel(s.user.uid); persistFuelLocal(s.user.uid, ex.filter((x) => x.id !== tx.fuelId)); }
+      const doDelete = async () => {
+        setState({ txs: getState().txs.filter((x) => x.id !== id) });
+        await deleteTx(s.user.uid, id); forcePersistLocal(s.user.uid);
+        // borrar el tanqueo vinculado (si lo hay)
+        if (tx && tx.fuelId) {
+          await deleteFuel(s.user.uid, tx.fuelId);
+          if (!isCloud()) { const ex = await loadFuel(s.user.uid); persistFuelLocal(s.user.uid, ex.filter((x) => x.id !== tx.fuelId)); }
+        }
+        // borrar el mantenimiento vinculado (si lo hay)
+        if (tx && tx.maintId) {
+          await deleteMaint(s.user.uid, tx.maintId);
+          if (!isCloud()) { const ex = await loadMaint(s.user.uid); persistMaintLocal(s.user.uid, ex.filter((x) => x.id !== tx.maintId)); }
+        }
+        drawList();
+      };
+      if (tx && (tx.fuelId || tx.maintId)) {
+        // vinculado a un registro del vehículo → confirmar (el borrado es doble)
+        const msg = tx.fuelId ? "Este gasto está vinculado a un <b>tanqueo</b> del vehículo: se eliminarán el gasto y el tanqueo. ¿Continuar?"
+          : "Este gasto está vinculado a un <b>mantenimiento</b> del vehículo: se eliminarán el gasto y el registro de la bitácora. ¿Continuar?";
+        confirmDialog(msg, async () => { await doDelete(); toast("Eliminado"); });
+      } else {
+        // gasto simple → eliminar de una, con opción de deshacer
+        doDelete().then(() => toastUndo("Gasto eliminado", async () => {
+          setState({ txs: [tx, ...getState().txs] });
+          await addTx(s.user.uid, tx); forcePersistLocal(s.user.uid); drawList();
+        }));
       }
-      // borrar el mantenimiento vinculado (si lo hay)
-      if (tx && tx.maintId) {
-        await deleteMaint(s.user.uid, tx.maintId);
-        if (!isCloud()) { const ex = await loadMaint(s.user.uid); persistMaintLocal(s.user.uid, ex.filter((x) => x.id !== tx.maintId)); }
-      }
-      drawList(); toast("Eliminado");
-    }); });
+    });
   } else {
     const f = applyFilters(s.incomes, false);
     const sorted = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -168,17 +176,22 @@ function drawList() {
     list.innerHTML = rows.map((t) => `<div class="tx-row" data-rowi="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:var(--green)"></span>
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}</div>
-          <div class="tx-meta">${t.date} · ${escapeHtml(t.type || "")}</div></div>
+          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.type || "")}</div></div>
         <div class="tx-amt" style="color:var(--green)">${fmt(t.amount)}</div>
         <button class="icon-btn" data-deli="${t.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btni" style="margin:10px 0">Ver más (${sorted.length - limit} restantes)</button>` : "");
     if (more) list.querySelector("#more-btni").onclick = () => { limit += 300; drawList(); };
     list.querySelectorAll("[data-rowi]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-deli]")) return; openIncomeModal(getState().incomes.find((x) => x.id === r.getAttribute("data-rowi"))); });
-    list.querySelectorAll("[data-deli]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este ingreso?", async () => {
+    list.querySelectorAll("[data-deli]").forEach((b) => b.onclick = async (e) => { e.stopPropagation();
       const id = b.getAttribute("data-deli");
+      const inc = getState().incomes.find((x) => x.id === id);
       setState({ incomes: getState().incomes.filter((x) => x.id !== id) });
-      await deleteIncome(s.user.uid, id); forcePersistLocal(s.user.uid); drawList(); toast("Eliminado");
-    }); });
+      await deleteIncome(s.user.uid, id); forcePersistLocal(s.user.uid); drawList();
+      toastUndo("Ingreso eliminado", async () => {
+        setState({ incomes: [inc, ...getState().incomes] });
+        await addIncome(s.user.uid, inc); forcePersistLocal(s.user.uid); drawList();
+      });
+    });
   }
 }
 

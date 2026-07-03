@@ -4,17 +4,34 @@ import { fmt } from "../utils.js";
 let host;
 let modalOpen = false;   // hay un modal visible
 let popPending = false;  // cierre programático: consumir el popstate sin re-cerrar
+let initialSnap = "";    // estado inicial del formulario (para detectar cambios sin guardar)
 function ensureHost() {
   if (!host) { host = document.createElement("div"); document.body.appendChild(host); }
   return host;
 }
 
+function formSnap() {
+  return host ? [...host.querySelectorAll("input,select,textarea")].map((e) => (e.type === "checkbox" ? e.checked : e.value)).join("\x1f") : "";
+}
+function isDirty() { return modalOpen && formSnap() !== initialSnap; }
+const DISCARD_MSG = "Tienes cambios sin guardar. ¿Descartarlos?";
+// cierre pedido por el usuario (fondo, ✕ o Esc): si hay cambios, pregunta antes
+function requestClose() {
+  if (isDirty() && !window.confirm(DISCARD_MSG)) return;
+  closeModal();
+}
+
 // botón "atrás" (Android) y tecla Esc cierran el modal en vez de salir de la app
 window.addEventListener("popstate", () => {
   if (popPending) { popPending = false; return; }
-  if (modalOpen) { modalOpen = false; if (host) host.innerHTML = ""; }
+  if (!modalOpen) return;
+  if (isDirty() && !window.confirm(DISCARD_MSG)) {
+    history.pushState({ fzModal: 1 }, ""); // canceló el descarte: restaurar la entrada
+    return;
+  }
+  modalOpen = false; if (host) host.innerHTML = "";
 });
-window.addEventListener("keydown", (e) => { if (e.key === "Escape" && modalOpen) closeModal(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && modalOpen) requestClose(); });
 
 export function openModal(title, bodyHtml, { onMount } = {}) {
   ensureHost();
@@ -30,8 +47,9 @@ export function openModal(title, bodyHtml, { onMount } = {}) {
       </div>
     </div>`;
   host.querySelectorAll("[data-close]").forEach((el) =>
-    el.addEventListener("click", (e) => { if (e.target.hasAttribute("data-close")) closeModal(); }));
+    el.addEventListener("click", (e) => { if (e.target === el) requestClose(); }));
   if (onMount) onMount(host.querySelector("#modal-body"));
+  initialSnap = formSnap(); // ya con valores por defecto puestos por onMount
 }
 
 export function closeModal() {
@@ -57,6 +75,21 @@ export function toast(msg, isErr = false) {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 2400);
+}
+
+// toast con botón "Deshacer": si el usuario lo toca antes de ~6 s, ejecuta onUndo
+export function toastUndo(msg, onUndo) {
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.style.cssText += ";display:flex;align-items:center;gap:14px";
+  const span = document.createElement("span"); span.textContent = msg;
+  const btn = document.createElement("button");
+  btn.textContent = "Deshacer";
+  btn.style.cssText = "background:none;border:none;color:var(--gold);font-weight:700;cursor:pointer;font-size:13px;padding:0";
+  btn.onclick = () => { t.remove(); onUndo(); };
+  t.append(span, btn);
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 6000);
 }
 
 // Asigna un onclick que NO se puede disparar dos veces: bloquea el botón al primer

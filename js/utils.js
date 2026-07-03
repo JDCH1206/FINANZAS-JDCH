@@ -25,6 +25,18 @@ export const monthLabel = (k) => {
   return `${MES[+m - 1]}-${y}`;
 };
 
+// fecha corta y amigable: "Hoy", "Ayer", "2 jul" (año actual) o "2 jul 2025"
+export function fmtDate(iso) {
+  if (!iso) return "";
+  const hoy = todayISO();
+  if (iso === hoy) return "Hoy";
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
+  if (iso === isoLocal(ayer)) return "Ayer";
+  return `${d} ${MES[m - 1] || ""}${y === +hoy.slice(0, 4) ? "" : " " + y}`;
+}
+
 export function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
