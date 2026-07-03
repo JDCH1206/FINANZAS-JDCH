@@ -1,12 +1,24 @@
 // js/components/modals.js
+import { fmt } from "../utils.js";
+
 let host;
+let modalOpen = false;   // hay un modal visible
+let popPending = false;  // cierre programático: consumir el popstate sin re-cerrar
 function ensureHost() {
   if (!host) { host = document.createElement("div"); document.body.appendChild(host); }
   return host;
 }
 
+// botón "atrás" (Android) y tecla Esc cierran el modal en vez de salir de la app
+window.addEventListener("popstate", () => {
+  if (popPending) { popPending = false; return; }
+  if (modalOpen) { modalOpen = false; if (host) host.innerHTML = ""; }
+});
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && modalOpen) closeModal(); });
+
 export function openModal(title, bodyHtml, { onMount } = {}) {
   ensureHost();
+  if (!modalOpen) { modalOpen = true; history.pushState({ fzModal: 1 }, ""); }
   host.innerHTML = `
     <div class="modal-bg" data-close>
       <div class="modal">
@@ -22,7 +34,22 @@ export function openModal(title, bodyHtml, { onMount } = {}) {
   if (onMount) onMount(host.querySelector("#modal-body"));
 }
 
-export function closeModal() { if (host) host.innerHTML = ""; }
+export function closeModal() {
+  if (host) host.innerHTML = "";
+  if (modalOpen) { modalOpen = false; popPending = true; history.back(); }
+}
+
+// muestra el valor en COP formateado debajo de un input numérico mientras se escribe
+// (evita errores de "un cero de más/menos" en montos grandes)
+export function moneyPreview(input) {
+  if (!input) return;
+  const hint = document.createElement("div");
+  hint.className = "tiny";
+  hint.style.cssText = "margin-top:4px;color:var(--gold);min-height:15px";
+  input.insertAdjacentElement("afterend", hint);
+  const upd = () => { const v = +input.value; hint.textContent = v ? fmt(v) : ""; };
+  input.addEventListener("input", upd); upd();
+}
 
 export function toast(msg, isErr = false) {
   const t = document.createElement("div");

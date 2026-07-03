@@ -3,7 +3,7 @@ import { getState, setState, dataSnapshot } from "../state.js";
 import { saveConfig, bulkSetTx, bulkSetIncomes, signOutUser, isCloud, forcePersistLocal } from "../firebase-service.js";
 import { classify, classifyIncome, DEFAULT_PAY_METHODS } from "../config.js";
 import { uid, normDate, escapeHtml, fmt } from "../utils.js";
-import { toast, confirmDialog, openModal, closeModal, submitOnce } from "../components/modals.js";
+import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview } from "../components/modals.js";
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 
 export function renderSettings(root, onSignOut) {
@@ -376,6 +376,7 @@ function openRecModal(root, existing) {
     ${f("Día del mes (1–31)", `<input id="r-day" class="input" type="number" min="1" max="31" value="${existing ? existing.day : 1}">`)}
     <button id="r-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar" : "Crear"}</button>`, {
     onMount(b) {
+      moneyPreview(b.querySelector("#r-amt"));
       const catSel = b.querySelector("#r-cat"), subSel = b.querySelector("#r-sub");
       const fillSubs = () => { const c = s.cats.find((x) => x.name === catSel.value); subSel.innerHTML = `<option value=""></option>` + (c?.subs || []).map((x) => `<option>${escapeHtml(x)}</option>`).join(""); };
       if (existing) catSel.value = existing.cat;

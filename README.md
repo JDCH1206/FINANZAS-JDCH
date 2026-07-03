@@ -4,7 +4,14 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v52**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v53**. Cambios por fecha (más reciente primero):
+
+### 2026-07-02 · caché v53 — Auditoría QA/UX: correcciones y usabilidad
+- 🔙 El botón **"atrás" de Android** (y la tecla Esc) ahora cierra el formulario/diálogo abierto en vez de salir de la app.
+- 💵 Al escribir un monto, debajo del campo aparece el **valor formateado en COP** (ej: `1.500.000`) para evitar errores de "un cero de más". Aplica a gastos, ingresos, cuentas, metas, recurrentes, tanqueos, mantenimientos y obligaciones.
+- ⚠️ Al eliminar un gasto **vinculado a un tanqueo o mantenimiento**, el aviso ahora explica que también se eliminará ese registro del vehículo.
+- 🐞 Ya no se puede guardar un gasto o ingreso **sin fecha** (quedaba invisible en filtros, presupuesto y tablero).
+- 🐞 El nombre de la categoría se escapa correctamente en el diálogo de eliminación.
 
 ### 2026-06-29 · caché v52 — Presupuesto: Real, Diferencia, TOTAL y semáforo
 - 📋 Cada categoría del Presupuesto ahora muestra **Real del mes** y **Diferencia** (verde si sobra, rojo si se pasó), además del **% de ejecución con semáforo** (verde ≤100%, amarillo 100–110%, rojo >110%). Fila **TOTAL** y leyenda del semáforo.
@@ -112,7 +119,7 @@ Lee la hoja "Gastos" (usa Cat_Nueva/Subcat_Nueva o clasifica sola) y la hoja "In
 ```
 index.html · firebase-config.js · manifest.json · sw.js
 css/  tokens · base · components · pages
-js/   config · state · utils · firebase-service · app
+js/   config · state · utils · firebase-service · notify · app
 js/views/  login · onboarding · summary · home · dashboard · budget · accounts · categories · vehicles · settings
 js/components/  charts · modals
 icons/  icon-192 · icon-512

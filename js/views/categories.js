@@ -101,7 +101,7 @@ function drawCats(root) {
     const id = b.getAttribute("data-delcat");
     const cat = getState().cats.find((c) => c.id === id);
     const cnt = getState().txs.filter((t) => t.cat === cat.name).length;
-    confirmDialog(`¿Eliminar "${cat.name}"?${cnt ? ` Sus ${cnt} gastos pasarán a Misceláneos.` : ""}`, async () => {
+    confirmDialog(`¿Eliminar "${escapeHtml(cat.name)}"?${cnt ? ` Sus ${cnt} gastos pasarán a Misceláneos.` : ""}`, async () => {
       setState({ cats: getState().cats.filter((c) => c.id !== id) });
       if (cnt) {
         const affected = getState().txs.filter((t) => t.cat === cat.name).map((t) => ({ ...t, cat: "Misceláneos", sub: "Sin clasificar" }));

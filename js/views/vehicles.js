@@ -3,7 +3,7 @@ import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
 import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
-import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
+import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
 
 const icon = (t) => (t === "Moto" ? "🏍️" : "🚗");
@@ -355,6 +355,7 @@ function openFuelModal(v, root, existing, info) {
     ${f("¿Tanque lleno?", `<select id="t-lleno" class="input"><option>Sí</option><option>No</option></select>`)}
     <button id="t-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar tanqueo"}</button>`, {
     onMount(b) {
+      moneyPreview(b.querySelector("#t-costo"));
       b.querySelector("#t-tipo").value = (existing ? existing.tipoCombustible : v.combustible) || "Corriente";
       if (existing) b.querySelector("#t-lleno").value = (existing.tanqueLleno === "No" || existing.tanqueLleno === false) ? "No" : "Sí";
       submitOnce(b.querySelector("#t-save"), async () => {
@@ -603,6 +604,7 @@ function openMaintModal(v, root, existing) {
     ${f("o repetir cada (días)", `<input id="ma-rdias" type="number" class="input" value="${existing ? val(existing.recurrenteDias) : ""}" placeholder="ej: 180">`)}
     <button id="ma-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
+      moneyPreview(b.querySelector("#ma-costo"));
       const catSel = b.querySelector("#ma-cat"), tipoSel = b.querySelector("#ma-tipo");
       const fillTipos = () => { tipoSel.innerHTML = (MAINT_TIPOS[catSel.value] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join(""); };
       catSel.onchange = fillTipos; fillTipos();
@@ -708,6 +710,7 @@ function openObligModal(v, root, existing) {
     ${f("Notas", `<input id="o-notas" class="input" value="${existing ? escapeHtml(existing.notas || "") : ""}" placeholder="Opcional">`)}
     <button id="o-save" class="btn btn-primary btn-block mt-2">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
+      moneyPreview(b.querySelector("#o-costo"));
       submitOnce(b.querySelector("#o-save"), async () => {
         const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
         const rec = {

@@ -3,7 +3,7 @@ import { getState, setState } from "../state.js";
 import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, loadFuel, persistFuelLocal, isCloud, saveConfig, deleteFuel, updateFuel, addMaint, loadMaint, deleteMaint, updateMaint, persistMaintLocal } from "../firebase-service.js";
 import { fmt, uid, todayISO, escapeHtml, ym, monthLabel, curMonth } from "../utils.js";
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
-import { openModal, closeModal, toast, confirmDialog, submitOnce } from "../components/modals.js";
+import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 
 let query = "";
 let tabKind = "gasto";
@@ -137,7 +137,13 @@ function drawList() {
     }).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btn" style="margin:10px 0">Ver más (${sorted.length - limit} restantes)</button>` : "");
     if (more) list.querySelector("#more-btn").onclick = () => { limit += 300; drawList(); };
     list.querySelectorAll("[data-row]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-del]")) return; openTxModal(getState().txs.find((x) => x.id === r.getAttribute("data-row"))); });
-    list.querySelectorAll("[data-del]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); confirmDialog("¿Eliminar este gasto?", async () => {
+    list.querySelectorAll("[data-del]").forEach((b) => b.onclick = (e) => { e.stopPropagation();
+      const idDel = b.getAttribute("data-del");
+      const txDel = getState().txs.find((x) => x.id === idDel);
+      const msg = txDel?.fuelId ? "Este gasto está vinculado a un <b>tanqueo</b> del vehículo: se eliminarán el gasto y el tanqueo. ¿Continuar?"
+        : txDel?.maintId ? "Este gasto está vinculado a un <b>mantenimiento</b> del vehículo: se eliminarán el gasto y el registro de la bitácora. ¿Continuar?"
+        : "¿Eliminar este gasto?";
+      confirmDialog(msg, async () => {
       const id = b.getAttribute("data-del");
       const tx = getState().txs.find((x) => x.id === id);
       setState({ txs: getState().txs.filter((x) => x.id !== id) });
@@ -233,6 +239,7 @@ export function openTxModal(existing) {
         vehWrap.style.display = show ? "block" : "none";
         if (!show && vehSelEl) { vehSelEl.value = ""; const ex = b.querySelector("#m-veh-extra"); if (ex) ex.style.display = "none"; }
       };
+      moneyPreview(b.querySelector("#m-amt"));
       if (existing) catSel.value = existing.cat;
       catSel.onchange = () => { fillSubs(); toggleVehWrap(); }; fillSubs(); toggleVehWrap();
       if (existing) { subSel.value = existing.sub || ""; b.querySelector("#m-pay").value = existing.pay || "Efectivo"; b.querySelector("#m-acct").value = existing.acct || ""; }
@@ -266,6 +273,7 @@ export function openTxModal(existing) {
           pay: b.querySelector("#m-pay").value, acct: b.querySelector("#m-acct").value || "",
         };
         if (existing) { tx.vehicleId = existing.vehicleId || ""; tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; }
+        if (!tx.date) return toast("Falta la fecha", true);
         if (!tx.desc || !tx.amount || tx.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
         if (existing) {
           setState({ txs: getState().txs.map((x) => (x.id === tx.id ? tx : x)) });
@@ -335,9 +343,11 @@ export function openIncomeModal(existing) {
     <div class="field"><label class="label">Tipo</label><select id="i-type" class="input">${typeOpts}</select></div>
     <button id="i-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
+      moneyPreview(b.querySelector("#i-amt"));
       if (existing) b.querySelector("#i-type").value = existing.type || "Otros ingresos";
       submitOnce(b.querySelector("#i-save"), async () => {
         const inc = { id: existing ? existing.id : uid(), date: b.querySelector("#i-date").value, desc: b.querySelector("#i-desc").value.trim(), amount: +b.querySelector("#i-amt").value, type: b.querySelector("#i-type").value };
+        if (!inc.date) return toast("Falta la fecha", true);
         if (!inc.desc || !inc.amount || inc.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
         setState({ incomes: existing ? getState().incomes.map((x) => (x.id === inc.id ? inc : x)) : [inc, ...getState().incomes] });
         await addIncome(s.user.uid, inc); forcePersistLocal(s.user.uid);
