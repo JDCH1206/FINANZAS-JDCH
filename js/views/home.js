@@ -132,7 +132,7 @@ function drawList() {
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${veh ? (veh.tipo === "Moto" ? " 🏍️" : " 🚗") : ""}</div>
           <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}</div></div>
         <div class="tx-amt">${fmt(t.amount)}</div>
-        <button class="icon-btn" data-del="${t.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
+        <button class="icon-btn" data-del="${t.id}" aria-label="Eliminar gasto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`;
     }).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btn" style="margin:10px 0">Ver más (${sorted.length - limit} restantes)</button>` : "");
     if (more) list.querySelector("#more-btn").onclick = () => { limit += 300; drawList(); };
@@ -178,7 +178,7 @@ function drawList() {
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}</div>
           <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.type || "")}</div></div>
         <div class="tx-amt" style="color:var(--green)">${fmt(t.amount)}</div>
-        <button class="icon-btn" data-deli="${t.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
+        <button class="icon-btn" data-deli="${t.id}" aria-label="Eliminar ingreso"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btni" style="margin:10px 0">Ver más (${sorted.length - limit} restantes)</button>` : "");
     if (more) list.querySelector("#more-btni").onclick = () => { limit += 300; drawList(); };
     list.querySelectorAll("[data-rowi]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-deli]")) return; openIncomeModal(getState().incomes.find((x) => x.id === r.getAttribute("data-rowi"))); });
@@ -197,7 +197,10 @@ function drawList() {
 
 export function openTxModal(existing) {
   const s = getState();
-  const catOpts = s.cats.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  // si la categoría original ya no existe, conservarla como opción para no re-clasificar en silencio
+  const missingCat = !!(existing && existing.cat && !s.cats.some((c) => c.name === existing.cat));
+  const catOpts = (missingCat ? `<option value="${escapeHtml(existing.cat)}">⚠ ${escapeHtml(existing.cat)} (ya no existe)</option>` : "")
+    + s.cats.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
   const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
   const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
   const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
@@ -235,6 +238,7 @@ export function openTxModal(existing) {
     <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : ""}"></div>
     <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : ""}"></div>
     <div class="field"><label class="label">Categoría</label><select id="m-cat" class="input">${catOpts}</select></div>
+    ${missingCat ? `<p class="tiny" style="color:var(--yel);margin:-6px 0 10px">⚠ La categoría original de este gasto fue eliminada. Puedes dejarla o elegir una nueva (si la cambias, no podrás volver a la anterior).</p>` : ""}
     <div class="field"><label class="label">Subcategoría</label><select id="m-sub" class="input"></select></div>
     <div class="field"><label class="label">Medio de pago</label><select id="m-pay" class="input">${payOpts}</select></div>
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="m-acct" class="input">${acctOpts}</select></div>
@@ -242,7 +246,12 @@ export function openTxModal(existing) {
     <button id="m-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
       const catSel = b.querySelector("#m-cat"), subSel = b.querySelector("#m-sub");
-      const fillSubs = () => { const c = s.cats.find((x) => x.name === catSel.value); subSel.innerHTML = (c?.subs || []).map((x) => `<option>${escapeHtml(x)}</option>`).join(""); };
+      const fillSubs = () => {
+        const c = s.cats.find((x) => x.name === catSel.value);
+        // si la categoría ya no existe, conservar la subcategoría original como opción
+        const subs = c?.subs || (missingCat && catSel.value === existing.cat && existing.sub ? [existing.sub] : []);
+        subSel.innerHTML = subs.map((x) => `<option>${escapeHtml(x)}</option>`).join("");
+      };
       // el bloque de vehículo solo aparece en categorías de vehículo (Moto, Carro, Vehículo, variantes)
       const isVehCat = (n) => /moto|carro|veh[ií]culo|autom[oó]vil|\bauto\b/i.test(n || "");
       const vehWrap = b.querySelector("#m-veh-wrap"), vehSelEl = b.querySelector("#m-veh");

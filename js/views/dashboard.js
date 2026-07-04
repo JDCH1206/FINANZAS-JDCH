@@ -21,6 +21,7 @@ function deltaBadge(cur, prev) {
 
 let period = "all";
 let subCat = null; // categoría seleccionada para el desglose por subcategoría
+let kpisOpen = false; // mostrar todos los indicadores o solo los principales
 let dashTab = "resumen";       // "resumen" | "detalle"
 let detPath = { year: null, month: null, cat: null }; // ruta del drill-down Año › Mes › Categoría › Subcat
 
@@ -46,7 +47,8 @@ export function renderDashboard(root) {
       <button class="chip ${period === "all" ? "on" : ""}" data-p="all">Todo</button>
       ${months.slice(0, 6).map((m) => `<button class="chip ${period === m ? "on" : ""}" data-p="${m}">${monthLabel(m)}</button>`).join("")}
     </div>
-    <div class="grid-kpi mb-4" id="kpis"></div>
+    <div class="grid-kpi mb-2" id="kpis"></div>
+    <button id="kpi-more" class="btn btn-ghost btn-sm mb-4">${kpisOpen ? "Ver menos indicadores ▴" : "Ver más indicadores ▾"}</button>
     <div class="grid-cards">
       <div class="card col-span"><div class="card-title">Comparativo de gasto</div>
         <div class="grid-kpi mb-3" id="cmp"></div>
@@ -124,21 +126,25 @@ export function renderDashboard(root) {
   const salAvg = salKeys.length ? sum(salKeys.map((k) => salMap[k])) / salKeys.length : 0;
   const recSpend = salAvg * 0.80; // 50% necesidades + 30% deseos
 
-  root.querySelector("#kpis").innerHTML = `
+  // indicadores principales siempre visibles; los demás con "Ver más indicadores"
+  const kpisMain = `
     ${kpi("Ingresos", fmt(totalInc))}
     ${kpi("Gastos", fmt(total))}
-    ${kpi("Ahorro (cuentas)", fmt(disponible))}
     ${kpi("Tasa de ahorro", (totalInc ? tasa.toFixed(0) : "—") + "%")}
+    ${kpi("Ahorro (cuentas)", fmt(disponible))}
+    ${kpi("Proyección fin de mes", fmt(projection), true)}
+    <div class="kpi" id="kpi-hormiga" style="cursor:pointer" title="Ver el detalle de estos gastos">
+      <div class="k-label">Gasto hormiga 🔎</div><div class="k-val">${fmt(hormiga)}</div></div>`;
+  const kpisExtra = `
     ${kpi("Gasto diario prom.", fmt(avgDaily))}
     ${kpi("Indispensable/mes", fmt(essAvg))}
-    <div class="kpi" id="kpi-hormiga" style="cursor:pointer" title="Ver el detalle de estos gastos">
-      <div class="k-label">Gasto hormiga 🔎</div><div class="k-val">${fmt(hormiga)}</div></div>
-    ${kpi("Proyección fin de mes", fmt(projection), true)}
     ${kpi("Mayor gasto", fmt(maxTx ? maxTx.amount : 0), true)}
     ${kpi("Colchón (meses)", (disponible && avg ? runway.toFixed(1) : "—") + " meses", true)}
     ${kpi("Gasto recomendado/mes", salAvg ? fmt(recSpend) : "—", true)}
     ${kpi("Movimientos", filtered.length)}
     ${kpi("Categoría top", byCat[0]?.name || "—", true)}`;
+  root.querySelector("#kpis").innerHTML = kpisMain + (kpisOpen ? kpisExtra : "");
+  root.querySelector("#kpi-more").onclick = () => { kpisOpen = !kpisOpen; renderDashboard(root); };
 
   // recomendación de gasto (50/30/20) según ingreso mensual promedio
   const recoEl = root.querySelector("#reco");

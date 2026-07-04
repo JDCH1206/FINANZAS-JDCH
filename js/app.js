@@ -52,7 +52,7 @@ function updateOnline() {
   if (!navigator.onLine) {
     if (!bar) {
       bar = document.createElement("div"); bar.id = "offline-bar";
-      bar.style.cssText = "position:fixed;top:0;left:0;right:0;background:var(--red);color:#fff;text-align:center;padding:5px;font-size:12.5px;z-index:70";
+      bar.style.cssText = "position:fixed;left:14px;right:14px;bottom:74px;margin:0 auto;max-width:500px;background:var(--red);color:#fff;text-align:center;padding:6px 12px;font-size:12.5px;z-index:70;border-radius:10px;box-shadow:var(--shadow)";
       bar.textContent = "Sin conexión — tus cambios se guardan y se sincronizan al volver";
       document.body.appendChild(bar);
     }
@@ -173,7 +173,10 @@ function mountShell(route) {
 }
 
 function go(route) {
+  const prev = getState().route;
   setState({ route });
+  // al salir de Vehículos, recalcular el badge de alertas (allí se resuelven obligaciones/mantenimientos)
+  if (prev === "vehicles" && route !== "vehicles") checkVehicleAlerts();
   document.querySelectorAll("#nav button").forEach((b) => {
     const r = b.getAttribute("data-route");
     b.classList.toggle("on", r === route || (r === "more" && route === "vehicles"));
@@ -248,12 +251,15 @@ async function checkVehicleAlerts() {
     const [obl, maint] = await Promise.all([fbsvc.loadOblig(s.user.uid), fbsvc.loadMaint(s.user.uid)]);
     const items = computeReminders(obl, maint, s.vehicles, todayISO());
     const moreBtn = document.querySelector('#nav button[data-route="more"]');
-    if (moreBtn && items.length > 0 && !moreBtn.querySelector(".nav-badge")) {
-      const badge = document.createElement("span");
-      badge.className = "nav-badge"; badge.textContent = items.length;
-      badge.style.cssText = "position:absolute;top:3px;right:14px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;line-height:1;padding:2px 5px;font-weight:700";
-      moreBtn.style.position = "relative";
-      moreBtn.appendChild(badge);
+    if (moreBtn) {
+      moreBtn.querySelector(".nav-badge")?.remove(); // recalcular: quitar y volver a poner
+      if (items.length > 0) {
+        const badge = document.createElement("span");
+        badge.className = "nav-badge"; badge.textContent = items.length;
+        badge.style.cssText = "position:absolute;top:3px;right:14px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;line-height:1;padding:2px 5px;font-weight:700";
+        moreBtn.style.position = "relative";
+        moreBtn.appendChild(badge);
+      }
     }
     showReminders(items, todayISO());
   } catch (e) { /* noop */ }

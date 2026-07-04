@@ -38,10 +38,10 @@ export function openModal(title, bodyHtml, { onMount } = {}) {
   if (!modalOpen) { modalOpen = true; history.pushState({ fzModal: 1 }, ""); }
   host.innerHTML = `
     <div class="modal-bg" data-close>
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="${title}" tabindex="-1">
         <div class="row between mb-3">
           <h3 style="font-size:18px">${title}</h3>
-          <button class="icon-btn" data-close>✕</button>
+          <button class="icon-btn" data-close aria-label="Cerrar">✕</button>
         </div>
         <div id="modal-body">${bodyHtml}</div>
       </div>
@@ -50,6 +50,7 @@ export function openModal(title, bodyHtml, { onMount } = {}) {
     el.addEventListener("click", (e) => { if (e.target === el) requestClose(); }));
   if (onMount) onMount(host.querySelector("#modal-body"));
   initialSnap = formSnap(); // ya con valores por defecto puestos por onMount
+  host.querySelector(".modal")?.focus(); // foco al diálogo (lectores de pantalla y teclado)
 }
 
 export function closeModal() {
