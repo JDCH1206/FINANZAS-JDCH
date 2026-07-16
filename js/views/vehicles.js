@@ -451,11 +451,14 @@ async function importFuelJson(v, root, input) {
       if (!gal || !odo) return;
       const fecha = String(r.fecha ?? r.Fecha ?? "").slice(0, 10);
       recs.push({
-        id: uid(), vehicleId: v.id, fecha,
+        // conserva id y vínculo con el gasto si vienen en el archivo (re-importar un
+        // export propio no rompe la relación gasto ↔ tanqueo de Movimientos)
+        id: r.id || uid(), vehicleId: v.id, fecha,
         estacion: String(r.estacion ?? r.Estacion ?? r["Estación"] ?? "").trim(),
         tipoCombustible: String(r.tipoCombustible ?? r.tipo_combustible ?? r.Tipo_combustible ?? "").trim(),
         galones: gal, odometro: odo, costo: +(r.costo ?? r.Costo ?? 0),
         tanqueLleno: String(r.tanqueLleno ?? r.tanque_lleno ?? "Sí").trim() || "Sí",
+        ...(r.gastoId ? { gastoId: r.gastoId } : {}),
       });
     });
     if (!recs.length) { toast("No se encontraron tanqueos en el JSON", true); input.value = ""; return; }

@@ -4,7 +4,10 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v56**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v57**. Cambios por fecha (más reciente primero):
+
+### 2026-07-16 · caché v57 — Importar tanqueos JSON sin romper vínculos
+- 🔗 Al importar tanqueos por JSON, ahora se **conservan el `id` y el vínculo con el gasto** (`gastoId`) cuando vienen en el archivo: re-importar un export propio (⬇ JSON de Combustible) ya no rompe la relación gasto ↔ tanqueo de Movimientos. Los registros sin id siguen recibiendo uno nuevo.
 
 ### 2026-07-02 · caché v56 — Mantenimiento: odómetro opcional + categoría Insumos
 - 🛢️ Nueva categoría de mantenimiento **"Insumos"** (aceite, filtro, repuesto o llantas compradas sin instalar, líquidos, accesorios): para compras que no son un servicio al vehículo. Insignia verde en la bitácora; al elegirla, el campo de odómetro se limpia solo.
