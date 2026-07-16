@@ -484,7 +484,8 @@ async function exportXlsx(v, fuel) {
 
 /* ===================== MANTENIMIENTO ===================== */
 function maintStatus(rec, vehOdo, today) {
-  const nextKm = rec.proximoKm || (rec.recurrenteKm ? (rec.odometro || 0) + rec.recurrenteKm : null);
+  // sin odómetro (ej: compra de insumos) no se puede proyectar por km recurrente
+  const nextKm = rec.proximoKm || (rec.recurrenteKm && rec.odometro != null ? rec.odometro + rec.recurrenteKm : null);
   const nextDate = rec.proximaFecha || (rec.recurrenteDias && rec.fecha ? addDays(rec.fecha, rec.recurrenteDias) : null);
   let st = null; const lbl = [];
   if (nextKm != null) {
@@ -521,7 +522,7 @@ function drawMaint(root, v) {
   const alerts = [];
   Object.values(latest).forEach((r) => { const st = maintStatus(r, v.odometro, today); if (st.st) alerts.push({ r, st }); });
   alerts.sort((a, b) => (a.st.st === "vencido" ? 0 : 1) - (b.st.st === "vencido" ? 0 : 1));
-  const badge = (c) => `<span class="badge" style="background:${c === "Taller" ? "var(--blue)" : "var(--gold)"};color:#10171a">${c}</span>`;
+  const badge = (c) => `<span class="badge" style="background:${c === "Taller" ? "var(--blue)" : c === "Insumos" ? "var(--green)" : "var(--gold)"};color:#10171a">${c}</span>`;
   const maintDupes = dupeCount(items);
 
   root.innerHTML = `
@@ -591,7 +592,8 @@ function openMaintModal(v, root, existing) {
     ${f("Categoría", `<select id="ma-cat" class="input">${catOpts}</select>`)}
     ${f("Tipo", `<select id="ma-tipo" class="input"></select>`)}
     ${f("Fecha", `<input id="ma-fecha" type="date" class="input" value="${existing ? existing.fecha : todayISO()}">`)}
-    ${f("Odómetro (km)", `<input id="ma-odo" type="number" class="input" value="${existing ? val(existing.odometro) : (v.odometro ?? "")}">`)}
+    ${f("Odómetro (km) — opcional", `<input id="ma-odo" type="number" class="input" value="${existing ? val(existing.odometro) : (v.odometro ?? "")}" placeholder="Vacío si no aplica">`)}
+    <p class="tiny muted" style="margin:-6px 0 10px" id="ma-odo-hint">Déjalo vacío si es una <b>compra de insumos</b> (aceite, filtro, repuesto sin instalar): no afecta el kilometraje del vehículo.</p>
     ${f("Descripción", `<input id="ma-desc" class="input" value="${existing ? escapeHtml(existing.descripcion || "") : ""}" placeholder="Detalle (opcional)">`)}
     ${f("Repuesto", `<input id="ma-rep" class="input" value="${existing ? escapeHtml(existing.repuesto || "") : ""}" placeholder="Opcional">`)}
     ${f("Taller", `<input id="ma-taller" class="input" value="${existing ? escapeHtml(existing.taller || "") : ""}" placeholder="Opcional">`)}
@@ -607,7 +609,12 @@ function openMaintModal(v, root, existing) {
       moneyPreview(b.querySelector("#ma-costo"));
       const catSel = b.querySelector("#ma-cat"), tipoSel = b.querySelector("#ma-tipo");
       const fillTipos = () => { tipoSel.innerHTML = (MAINT_TIPOS[catSel.value] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join(""); };
-      catSel.onchange = fillTipos; fillTipos();
+      catSel.onchange = () => {
+        fillTipos();
+        // Insumos = compra sin instalar → el odómetro no aplica: se limpia solo (editable si se quiere)
+        if (catSel.value === "Insumos" && !existing) b.querySelector("#ma-odo").value = "";
+      };
+      fillTipos();
       if (existing && existing.tipo) tipoSel.value = existing.tipo;
       submitOnce(b.querySelector("#ma-save"), async () => {
         const num = (id) => { const x = b.querySelector("#" + id).value; return x === "" ? null : +x; };
@@ -619,7 +626,7 @@ function openMaintModal(v, root, existing) {
           proximoKm: num("ma-pkm"), recurrenteKm: num("ma-rkm"), proximaFecha: b.querySelector("#ma-pfecha").value || "", recurrenteDias: num("ma-rdias"),
         };
         if (existing && existing.gastoId) rec.gastoId = existing.gastoId; // conserva el vínculo con el gasto
-        if (!rec.fecha || rec.odometro == null) return toast("Falta fecha u odómetro", true);
+        if (!rec.fecha) return toast("Falta la fecha", true);
         allMaint = existing ? allMaint.map((x) => (x.id === rec.id ? rec : x)) : [...allMaint, rec];
         await addMaint(getState().user.uid, rec); persistMaintLocal(getState().user.uid, allMaint);
         if ((rec.odometro || 0) > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x)) }); v.odometro = rec.odometro; await persistVehicles(); }

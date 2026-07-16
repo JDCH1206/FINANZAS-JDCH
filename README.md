@@ -4,7 +4,12 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v55**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v56**. Cambios por fecha (más reciente primero):
+
+### 2026-07-02 · caché v56 — Mantenimiento: odómetro opcional + categoría Insumos
+- 🛢️ Nueva categoría de mantenimiento **"Insumos"** (aceite, filtro, repuesto o llantas compradas sin instalar, líquidos, accesorios): para compras que no son un servicio al vehículo. Insignia verde en la bitácora; al elegirla, el campo de odómetro se limpia solo.
+- 📏 El **odómetro ahora es opcional** al registrar un mantenimiento (antes era obligatorio): si el gasto no implica kilometraje (ej. compra de insumos), se deja vacío y la bitácora muestra "sin odómetro".
+- 🐞 Corrección de alarmas: un registro **sin odómetro** con "repetir cada X km" ya no genera una falsa alarma de "vencido" (antes proyectaba la próxima revisión desde 0 km).
 
 ### 2026-07-02 · caché v55 — Auditoría QA/UX (3ª tanda): tablero más limpio y accesibilidad
 - 📊 **Tablero menos cargado**: ahora muestra 6 indicadores principales (Ingresos, Gastos, Tasa de ahorro, Ahorro en cuentas, Proyección y Gasto hormiga) y un botón **"Ver más indicadores"** despliega los otros 7.
@@ -172,7 +177,7 @@ Cada módulo es una vista en `js/views/`. Formato: **para qué · cómo se usa �
 - **Categorías** (`categories.js`) — *Para qué:* gestionar categorías y subcategorías (y su tipo 50/30/20). *Cómo se usa:* crear/renombrar/eliminar; al renombrar o borrar, migra los gastos afectados (las categorías se guardan por nombre en cada gasto). *Estado:* `openId`; `migrateCatName` con `bulkUpdateTx`.
 - **Vehículos** (`vehicles.js`) — *Para qué:* módulo opcional multi-vehículo. *Cómo se usa:* se activa en Ajustes y se abre desde el menú "Más". Contiene tres sub-módulos por vehículo:
   - **Combustible** — bitácora de tanqueos; calcula rendimiento (km/gal, método B: tanque lleno a tanque lleno). El odómetro del vehículo refleja el último tanqueo reportado; la herramienta "⚙ Odómetro real" alinea kilometrajes reconstruidos sin cambiar la eficiencia. Importa historial por **Excel o JSON**. Si el tanqueo está vinculado a un gasto, su costo/fecha se editan desde el gasto.
-  - **Mantenimiento** — bitácora Taller/Rutina con alarmas por km/fecha; **📥 Importar gastos de mantenimiento** trae gastos ya registrados y hay herramienta de **de-duplicación** si una importación se repitió.
+  - **Mantenimiento** — bitácora **Taller/Rutina/Insumos** con alarmas por km/fecha (Insumos = compras de aceite/filtros/repuestos sin instalar; el **odómetro es opcional** y no genera alarmas por km si falta); **📥 Importar gastos de mantenimiento** trae gastos ya registrados y hay herramienta de **de-duplicación** si una importación se repitió.
   - **Obligaciones** — SOAT/RTM/impuesto/licencia con semáforo de vencimiento y días de aviso; **📥 Importar pagos** crea obligaciones desde pagos históricos (también con de-duplicación).
   - **Borrado seguro**: eliminar un registro del módulo **nunca borra el gasto** de Movimientos — solo quita la asociación (y el aviso lo explica).
   - *Estado:* `activeFuelVid`/`activeMaintVid`/`activeObligVid` (qué bitácora se ve) y cachés `allFuel`/`allMaint`/`allOblig` (se cargan bajo demanda, no en tiempo real).

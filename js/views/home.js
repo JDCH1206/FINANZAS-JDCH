@@ -222,7 +222,8 @@ export function openTxModal(existing) {
       <div id="m-maint-fields" style="display:none">
         <div class="field"><label class="label">Categoría</label><select id="m-mcat" class="input">${MAINT_CATEGORIES.map((c) => `<option>${c}</option>`).join("")}</select></div>
         <div class="field"><label class="label">Tipo (servicio)</label><select id="m-mtipo" class="input"></select></div>
-        <div class="field"><label class="label">Odómetro (km)</label><input id="m-modo" class="input" type="number"></div>
+        <div class="field"><label class="label">Odómetro (km) — opcional</label><input id="m-modo" class="input" type="number" placeholder="Vacío si no aplica"></div>
+        <p class="tiny muted" style="margin:-6px 0 10px">Déjalo vacío si es una <b>compra de insumos</b> (aceite, filtro, repuesto sin instalar): no afecta el kilometraje.</p>
         <div class="field"><label class="label">Taller</label><input id="m-mtaller" class="input" placeholder="Opcional"></div>
         <div class="card-title" style="margin-top:8px;font-size:13px">Próximo aviso (opcional)</div>
         <div class="field"><label class="label">Avisar a los (km)</label><input id="m-mpkm" class="input" type="number" placeholder="km absoluto, ej: 12000"></div>
@@ -270,7 +271,12 @@ export function openTxModal(existing) {
         const vtypeSel = b.querySelector("#m-vtype");
         const mcatSel = b.querySelector("#m-mcat"), mtipoSel = b.querySelector("#m-mtipo");
         const fillMtipos = () => { mtipoSel.innerHTML = (MAINT_TIPOS[mcatSel.value] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join(""); };
-        mcatSel.onchange = fillMtipos; fillMtipos();
+        mcatSel.onchange = () => {
+          fillMtipos();
+          // Insumos = compra sin instalar → el odómetro no aplica: se limpia solo
+          if (mcatSel.value === "Insumos") b.querySelector("#m-modo").value = "";
+        };
+        fillMtipos();
         const toggleVtype = () => {
           b.querySelector("#m-fuel-fields").style.display = vtypeSel.value === "comb" ? "block" : "none";
           b.querySelector("#m-maint-fields").style.display = vtypeSel.value === "maint" ? "block" : "none";

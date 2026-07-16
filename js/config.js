@@ -58,10 +58,12 @@ export const OBLIG_TIPOS = [
   { key: "LICENCIA", label: "Licencia de conducción" },
 ];
 export const AVISO_DIAS = [15, 30, 60];
-export const MAINT_CATEGORIES = ["Taller", "Rutina"];
+export const MAINT_CATEGORIES = ["Taller", "Rutina", "Insumos"];
 export const MAINT_TIPOS = {
   Taller: ["Cambio de aceite", "Filtro de aceite", "Llantas", "Frenos (pastillas)", "Kit de arrastre", "Bujía", "Sincronización / válvulas", "Batería", "Reparación", "Otro"],
   Rutina: ["Lubricación de cadena", "Tensión de cadena", "Presión de llantas", "Nivel de aceite", "Luces", "Limpieza", "Otro"],
+  // compras de repuestos/insumos que aún no se instalan: el odómetro no aplica
+  Insumos: ["Aceite (compra)", "Filtro (compra)", "Repuesto (compra)", "Llantas (compra)", "Líquidos (frenos/refrigerante)", "Accesorios", "Otro"],
 };
 export const DEPARTAMENTOS = [
   "Amazonas", "Antioquia", "Arauca", "Atlántico", "Bogotá D.C.", "Bolívar", "Boyacá",

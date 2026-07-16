@@ -235,7 +235,8 @@ function computeReminders(oblig, maint, vehicles, today) {
   for (const r of maint) { const k = r.vehicleId + "|" + r.categoria + "|" + r.tipo; if (!latest[k] || (r.fecha || "") > (latest[k].fecha || "")) latest[k] = r; }
   for (const r of Object.values(latest)) {
     const v = vmap[r.vehicleId]; if (!v) continue; const veh = ` (${v.alias || v.modelo})`;
-    const nextKm = r.proximoKm || (r.recurrenteKm ? (r.odometro || 0) + r.recurrenteKm : null);
+    // sin odómetro (ej: compra de insumos) no se puede proyectar por km recurrente
+    const nextKm = r.proximoKm || (r.recurrenteKm && r.odometro != null ? r.odometro + r.recurrenteKm : null);
     const nextDate = r.proximaFecha || (r.recurrenteDias && r.fecha ? addDaysISO(r.fecha, r.recurrenteDias) : null);
     if (nextKm != null && (v.odometro || 0) >= nextKm) out.push(`${r.tipo}${veh}: toca (${Number(nextKm).toLocaleString("es-CO")} km)`);
     else if (nextDate) { const dias = daysTo(nextDate); if (dias <= 7) out.push(`${r.tipo}${veh}: ${dias < 0 ? "atrasado" : dias === 0 ? "hoy" : `en ${dias} d`}`); }
