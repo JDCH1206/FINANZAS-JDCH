@@ -366,7 +366,8 @@ function openFuelModal(v, root, existing, info) {
           costo: +b.querySelector("#t-costo").value || 0, tanqueLleno: b.querySelector("#t-lleno").value,
         };
         if (existing && existing.gastoId) rec.gastoId = existing.gastoId;
-        if (!rec.galones || !rec.odometro) return toast("Faltan galones u odómetro", true);
+        // odómetro 0 es válido (primer tanqueo de un vehículo nuevo)
+        if (!rec.galones || isNaN(rec.odometro) || b.querySelector("#t-odo").value === "") return toast("Faltan galones u odómetro", true);
         allFuel = existing ? allFuel.map((x) => (x.id === rec.id ? rec : x)) : [...allFuel, rec];
         await addFuel(getState().user.uid, rec); persistFuelLocal(getState().user.uid, allFuel);
         await syncVehicleOdo(v);
@@ -447,8 +448,10 @@ async function importFuelJson(v, root, input) {
     const recs = [];
     arr.forEach((r) => {
       const gal = +(r.galones ?? r.Galones ?? 0);
-      const odo = +(r.odometro ?? r.Odometro ?? r["Odómetro"] ?? 0);
-      if (!gal || !odo) return;
+      const odoRaw = r.odometro ?? r.Odometro ?? r["Odómetro"];
+      const odo = +odoRaw;
+      // odómetro 0 es válido (vehículo nuevo en su primer tanqueo); solo se rechaza si falta
+      if (!gal || odoRaw == null || odoRaw === "" || isNaN(odo)) return;
       const fecha = String(r.fecha ?? r.Fecha ?? "").slice(0, 10);
       recs.push({
         // conserva id y vínculo con el gasto si vienen en el archivo (re-importar un
