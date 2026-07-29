@@ -4,7 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v59**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v60**. Cambios por fecha (más reciente primero):
+
+### 2026-07-25 · caché v60 — Respaldo completo (incluye vehículos)
+- 💾 El **respaldo JSON** y la **exportación a Excel** ahora incluyen **todo**: además de gastos, ingresos, cuentas, categorías, metas y recurrentes, guardan **combustible, mantenimiento y obligaciones** de los vehículos. Antes esas tres subcolecciones quedaban fuera del respaldo.
+- ♻️ Al **restaurar** un respaldo se recuperan también esas subcolecciones (en la nube se reemplazan por completo; en local igual). El Excel las exporta en hojas separadas (Combustible, Mantenimiento, Obligaciones) con el nombre del vehículo.
 
 ### 2026-07-25 · caché v59 — Combustible: distancia del tramo en la lista
 - 📏 Cada tanqueo de la bitácora ahora muestra la **distancia recorrida en el tramo** (km desde el último tanque lleno) en vez del costo por km. Ej.: `2.57 gal · 43.247 km · 133.1 km/gal · tramo 342 km`. El costo por km sigue disponible al abrir el tanqueo.

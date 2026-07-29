@@ -1,6 +1,8 @@
 // js/views/settings.js
 import { getState, setState, dataSnapshot } from "../state.js";
-import { saveConfig, bulkSetTx, bulkSetIncomes, signOutUser, isCloud, forcePersistLocal } from "../firebase-service.js";
+import { saveConfig, bulkSetTx, bulkSetIncomes, signOutUser, isCloud, forcePersistLocal,
+  loadFuel, loadMaint, loadOblig, bulkSetAllFuel, bulkSetAllMaint, bulkSetAllOblig,
+  persistFuelLocal, persistMaintLocal, persistObligLocal } from "../firebase-service.js";
 import { classify, classifyIncome, DEFAULT_PAY_METHODS } from "../config.js";
 import { uid, normDate, escapeHtml, fmt } from "../utils.js";
 import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview } from "../components/modals.js";
@@ -32,7 +34,7 @@ export function renderSettings(root, onSignOut) {
 
     <div class="card mb-3">
       <div class="card-title">Respaldo</div>
-      <p class="small muted mb-3">Descarga un respaldo (JSON) para tu Drive y restáuralo en otro equipo. Útil mientras no actives la nube, o como copia de seguridad.</p>
+      <p class="small muted mb-3">Descarga un respaldo (JSON) con <b>todos tus datos</b>: gastos, ingresos, cuentas, categorías, metas, recurrentes y también <b>combustible, mantenimiento y obligaciones</b> de tus vehículos. Restáuralo en otro equipo o guárdalo como copia de seguridad. El Excel exporta lo mismo en hojas separadas.</p>
       <div class="row gap-2 wrap">
         <button id="exp-json" class="btn btn-ghost btn-sm">⬇ Descargar respaldo</button>
         <input id="imp-json" type="file" accept=".json" hidden>
@@ -187,13 +189,22 @@ export function renderSettings(root, onSignOut) {
     gjson.value = "";
   };
 
-  // backup json
-  root.querySelector("#exp-json").onclick = () => {
-    const blob = new Blob([JSON.stringify(dataSnapshot(), null, 2)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = "finanzas_respaldo_" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
-    localStorage.setItem("fz_last_backup", new Date().toISOString().slice(0, 10));
-    toast("Respaldo descargado");
+  // backup json — incluye TODO: config, gastos, ingresos, combustible, mantenimiento y obligaciones
+  root.querySelector("#exp-json").onclick = async () => {
+    const btn = root.querySelector("#exp-json"); const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "Preparando…";
+    try {
+      const [fuel, maintenance, obligations] = await Promise.all([
+        loadFuel(s.user.uid), loadMaint(s.user.uid), loadOblig(s.user.uid),
+      ]);
+      const data = { ...dataSnapshot(), fuel, maintenance, obligations };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = "finanzas_respaldo_" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
+      localStorage.setItem("fz_last_backup", new Date().toISOString().slice(0, 10));
+      toast(`Respaldo descargado (${(data.txs || []).length} gastos · ${fuel.length} tanqueos · ${maintenance.length} mant. · ${obligations.length} oblig.)`);
+    } catch (e) { console.error(e); toast("No se pudo preparar el respaldo", true); }
+    btn.disabled = false; btn.textContent = orig;
   };
   const impJson = root.querySelector("#imp-json");
   root.querySelector("#imp-btn").onclick = () => impJson.click();
@@ -205,26 +216,54 @@ export function renderSettings(root, onSignOut) {
       await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [] });
       await bulkSetTx(s.user.uid, d.txs || []);
       await bulkSetIncomes(s.user.uid, d.incomes || []);
+      // subcolecciones (cada helper actúa solo en su modo: bulkSetAll* en nube, persist* en local)
+      await bulkSetAllFuel(s.user.uid, d.fuel || []);
+      await bulkSetAllMaint(s.user.uid, d.maintenance || []);
+      await bulkSetAllOblig(s.user.uid, d.obligations || []);
+      persistFuelLocal(s.user.uid, d.fuel || []);
+      persistMaintLocal(s.user.uid, d.maintenance || []);
+      persistObligLocal(s.user.uid, d.obligations || []);
       forcePersistLocal(s.user.uid);
-      toast("Respaldo restaurado");
-    } catch (e) { toast("Archivo inválido", true); }
+      toast(`Respaldo restaurado (${(d.txs || []).length} gastos · ${(d.fuel || []).length} tanqueos · ${(d.maintenance || []).length} mant. · ${(d.obligations || []).length} oblig.)`);
+    } catch (e) { console.error(e); toast("Archivo inválido", true); }
     impJson.value = "";
   };
   root.querySelector("#exp-xls").onclick = async () => {
-    const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
-    const wb = XLSX.utils.book_new();
-    const wsG = XLSX.utils.json_to_sheet(s.txs.map((t) => ({ Fecha: t.date, Descripción: t.desc, Monto: t.amount, Categoría: t.cat, Subcategoría: t.sub, "Medio de pago": t.pay || "", Cuenta: (s.accounts.find((a) => a.id === t.acct) || {}).name || "" })));
-    XLSX.utils.book_append_sheet(wb, wsG, "Gastos");
-    if (s.incomes.length) {
-      const wsI = XLSX.utils.json_to_sheet(s.incomes.map((t) => ({ Fecha: t.date, Descripción: t.desc, Monto: t.amount, Tipo: t.type })));
-      XLSX.utils.book_append_sheet(wb, wsI, "Ingresos");
-    }
-    if (s.accounts.length) {
-      const wsA = XLSX.utils.json_to_sheet(s.accounts.map((a) => ({ Cuenta: a.name, Tipo: a.type, Saldo: a.balance })));
-      XLSX.utils.book_append_sheet(wb, wsA, "Cuentas");
-    }
-    XLSX.writeFile(wb, "finanzas_export_" + new Date().toISOString().slice(0, 10) + ".xlsx");
-    toast("Excel exportado");
+    const btn = root.querySelector("#exp-xls"); const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "Preparando…";
+    try {
+      const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+      const [fuel, maintenance, obligations] = await Promise.all([
+        loadFuel(s.user.uid), loadMaint(s.user.uid), loadOblig(s.user.uid),
+      ]);
+      const vName = (id) => (s.vehicles.find((v) => v.id === id) || {}).alias || (s.vehicles.find((v) => v.id === id) || {}).modelo || "";
+      const wb = XLSX.utils.book_new();
+      const wsG = XLSX.utils.json_to_sheet(s.txs.map((t) => ({ Fecha: t.date, Descripción: t.desc, Monto: t.amount, Categoría: t.cat, Subcategoría: t.sub, "Medio de pago": t.pay || "", Cuenta: (s.accounts.find((a) => a.id === t.acct) || {}).name || "" })));
+      XLSX.utils.book_append_sheet(wb, wsG, "Gastos");
+      if (s.incomes.length) {
+        const wsI = XLSX.utils.json_to_sheet(s.incomes.map((t) => ({ Fecha: t.date, Descripción: t.desc, Monto: t.amount, Tipo: t.type })));
+        XLSX.utils.book_append_sheet(wb, wsI, "Ingresos");
+      }
+      if (s.accounts.length) {
+        const wsA = XLSX.utils.json_to_sheet(s.accounts.map((a) => ({ Cuenta: a.name, Tipo: a.type, Saldo: a.balance })));
+        XLSX.utils.book_append_sheet(wb, wsA, "Cuentas");
+      }
+      if (fuel.length) {
+        const wsF = XLSX.utils.json_to_sheet(fuel.map((r) => ({ Vehículo: vName(r.vehicleId), Fecha: r.fecha, Estación: r.estacion || "", "Tipo combustible": r.tipoCombustible || "", Galones: r.galones, "Odómetro": r.odometro, Costo: r.costo, "Tanque lleno": r.tanqueLleno })));
+        XLSX.utils.book_append_sheet(wb, wsF, "Combustible");
+      }
+      if (maintenance.length) {
+        const wsM = XLSX.utils.json_to_sheet(maintenance.map((r) => ({ Vehículo: vName(r.vehicleId), Fecha: r.fecha, Categoría: r.categoria || "", Tipo: r.tipo || "", "Odómetro": r.odometro, Descripción: r.descripcion || "", Repuesto: r.repuesto || "", Taller: r.taller || "", Costo: r.costo })));
+        XLSX.utils.book_append_sheet(wb, wsM, "Mantenimiento");
+      }
+      if (obligations.length) {
+        const wsO = XLSX.utils.json_to_sheet(obligations.map((r) => ({ Vehículo: vName(r.vehicleId), Tipo: r.tipo || "", "Fecha expedición": r.fechaExpedicion || "", "Fecha vencimiento": r.fechaVencimiento || "", Costo: r.costo, Entidad: r.entidad || "", "N°/referencia": r.numero || "", Estado: r.estado || "" })));
+        XLSX.utils.book_append_sheet(wb, wsO, "Obligaciones");
+      }
+      XLSX.writeFile(wb, "finanzas_export_" + new Date().toISOString().slice(0, 10) + ".xlsx");
+      toast("Excel exportado");
+    } catch (e) { console.error(e); toast("No se pudo exportar", true); }
+    btn.disabled = false; btn.textContent = orig;
   };
 
   root.querySelector("#wipe").onclick = () => confirmDialog("¿Borrar TODOS los gastos e ingresos? Esto no se puede deshacer.", async () => {

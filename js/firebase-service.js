@@ -406,6 +406,28 @@ export function persistObligLocal(uid, arr) {
   if (!FIREBASE_READY) localStorage.setItem("fz_oblig_" + uid, JSON.stringify(arr));
 }
 
+/* ---------- Reemplazar TODA una subcolección (para restaurar respaldo en la nube) ---------- */
+// borra todos los docs actuales de la subcolección y escribe los del respaldo. No-op en local.
+async function replaceSubcol(uid, coll, recs) {
+  if (!FIREBASE_READY) return;
+  const { db, fsMod } = await initFirebase();
+  const col = fsMod.collection(db, "users", uid, coll);
+  const snap = await fsMod.getDocs(col);
+  let batch = fsMod.writeBatch(db), n = 0;
+  for (const d of snap.docs) { batch.delete(d.ref); if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; } }
+  if (n) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
+  for (const r of (recs || [])) {
+    const id = r.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+    const { id: _drop, ...rest } = r;
+    batch.set(fsMod.doc(db, "users", uid, coll, id), rest);
+    if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
+  }
+  if (n) await batch.commit();
+}
+export const bulkSetAllFuel = (uid, recs) => replaceSubcol(uid, "fuel", recs);
+export const bulkSetAllMaint = (uid, recs) => replaceSubcol(uid, "maintenance", recs);
+export const bulkSetAllOblig = (uid, recs) => replaceSubcol(uid, "obligations", recs);
+
 /* ---------- persistencia local (modo sin Firebase) ---------- */
 let _stateGetter = null;
 export function bindLocalState(getter) { _stateGetter = getter; }
