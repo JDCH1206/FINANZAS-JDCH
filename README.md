@@ -4,7 +4,10 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v58**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v59**. Cambios por fecha (más reciente primero):
+
+### 2026-07-25 · caché v59 — Combustible: distancia del tramo en la lista
+- 📏 Cada tanqueo de la bitácora ahora muestra la **distancia recorrida en el tramo** (km desde el último tanque lleno) en vez del costo por km. Ej.: `2.57 gal · 43.247 km · 133.1 km/gal · tramo 342 km`. El costo por km sigue disponible al abrir el tanqueo.
 
 ### 2026-07-16 · caché v58 — Odómetro 0 válido en tanqueos
 - 🐞 El importador JSON y el formulario de tanqueo ahora aceptan **odómetro 0** (el primer tanqueo de un vehículo nuevo). Antes se descartaba en silencio: por eso al histórico de la Gixxer le faltaba su primer tanqueo (19-jun-2021).

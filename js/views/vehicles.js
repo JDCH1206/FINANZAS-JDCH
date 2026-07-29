@@ -305,7 +305,8 @@ function drawFuelList(root, v, m) {
   const rows = [...m.sorted].reverse().slice(0, 300);
   root.querySelector("#fuel-list").innerHTML = rows.map((r) => {
     const info = m.byId[r.id];
-    const extra = info ? ` · ${info.rend.toFixed(1)} km/gal${info.costoKm ? " · " + fmt(info.costoKm) + "/km" : ""}` : "";
+    // muestra la distancia recorrida en el tramo (desde el último tanque lleno) en vez del $/km
+    const extra = info ? ` · ${info.rend.toFixed(1)} km/gal · tramo ${Number(info.dist).toLocaleString("es-CO")} km` : "";
     return `<div class="tx-row" data-rowf="${r.id}" style="cursor:pointer">
       <div class="flex1"><div class="tx-desc">${escapeHtml(r.fecha)} · ${escapeHtml(r.estacion || "—")}${r.tanqueLleno === "No" || r.tanqueLleno === false ? ' <span class="tiny" style="color:var(--yel)">parcial</span>' : ""}</div>
         <div class="tx-meta">${(+r.galones).toFixed(2)} gal · ${Number(r.odometro).toLocaleString("es-CO")} km${extra}</div></div>
