@@ -223,9 +223,9 @@ export function renderDashboard(root) {
   // Trend
   lineTrend("ch-trend", trendKeys.map((k) => monthLabel(k)), trendKeys.map((k) => Math.round(trendMap[k])));
 
-  // ---- Comparativo de gasto (anclado al mes/calendario actual) ----
+  // ---- Comparativo de gasto (sigue el mes elegido en los chips; si es "Todo", usa el mes actual) ----
   const sumMonth = (k) => sum(s.txs.filter((t) => ym(t.date) === k), (t) => t.amount);
-  const refMonth = curMonth();
+  const refMonth = period === "all" ? curMonth() : period;
   const curM = sumMonth(refMonth), prevM = sumMonth(ymAdd(refMonth, -1)), yoyM = sumMonth(ymAdd(refMonth, -12));
   const Y = +refMonth.slice(0, 4);
   const mmdd = todayISO().slice(5); // MM-DD (hasta la misma fecha)

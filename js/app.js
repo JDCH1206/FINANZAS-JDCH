@@ -7,7 +7,7 @@ import { showReminders } from "./notify.js";
 import * as fbsvc from "./firebase-service.js";
 import { renderLogin } from "./views/login.js";
 import { renderOnboarding } from "./views/onboarding.js";
-import { renderHome } from "./views/home.js";
+import { renderHome, openTxModal } from "./views/home.js";
 import { renderSummary } from "./views/summary.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderBudget } from "./views/budget.js";
@@ -18,6 +18,33 @@ import { renderVehicles } from "./views/vehicles.js";
 import { openModal, closeModal, toast } from "./components/modals.js";
 
 const app = document.getElementById("app");
+
+// --- Compartir a la app (Web Share Target): otra app comparte un texto tipo
+// "Pagaste $23.500 en D1" → abrimos "Nuevo gasto" con monto y descripción prellenados ---
+function parseSharedExpense(text) {
+  if (!text) return null;
+  const t = String(text).trim();
+  // monto: preferir lo que va tras "$"; si no, el número más largo del texto
+  let amount = 0;
+  const m = t.match(/\$\s*([\d][\d.,]*)/) || t.match(/([\d][\d.,]{2,})/);
+  if (m) amount = parseInt(m[1].replace(/[.,]/g, ""), 10) || 0; // COP: sin decimales
+  // descripción: el comercio tras "en ", si aparece; si no, el texto completo (recortado)
+  let desc = t;
+  const em = t.match(/\ben\s+(.+?)(?:[.\n]|$)/i);
+  if (em) desc = em[1].trim();
+  return { amount, desc: desc.slice(0, 80) };
+}
+// se lee al cargar; se consume una vez montada la sesión
+let pendingShare = null;
+try {
+  const q = new URLSearchParams(location.search);
+  const shared = q.get("text") || q.get("title");
+  if (shared) {
+    pendingShare = parseSharedExpense(shared);
+    // limpiar la URL para que un refresco no reabra el modal
+    history.replaceState({}, "", location.pathname);
+  }
+} catch (e) { /* noop */ }
 
 // tema (claro/oscuro) — se aplica antes de renderizar
 const savedTheme = localStorage.getItem("fz_theme");
@@ -131,7 +158,12 @@ function startSession(user) {
     if (!booted) {
       booted = true;
       if (data.isNew) { renderOnboarding(app, () => mountShell("summary")); }
-      else { mountShell("summary"); checkBackupReminder(); checkVehicleAlerts(); }
+      else {
+        // si venimos de "Compartir", abrir directo Movimientos con el gasto prellenado
+        if (pendingShare) { mountShell("home"); const ps = pendingShare; pendingShare = null; setTimeout(() => openTxModal(null, ps), 150); }
+        else mountShell("summary");
+        checkBackupReminder(); checkVehicleAlerts();
+      }
     } else if (data.fromRemote) {
       liveRefresh();
     }

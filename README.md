@@ -4,7 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v60**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v61**. Cambios por fecha (más reciente primero):
+
+### 2026-07-25 · caché v61 — Compartir a la app + fix comparativo por mes
+- 📲 **Compartir a Finanzas JDCH**: la app (instalada como PWA) aparece en el menú "Compartir" de Android. Al compartir un texto de pago (ej. "Pagaste $23.500 en D1"), abre **Nuevo gasto** con el **monto y la descripción prellenados** (extrae el número tras "$" y el comercio tras "en"). Tú confirmas categoría y guardas. No necesita permisos especiales ni servidor.
+- 🐞 **Tablero – Comparativo de gasto**: ahora **sigue el mes seleccionado** en los chips (antes quedaba fijo en el mes actual). Al elegir un mes, el comparativo, el gráfico año-vs-año y "Categorías: mes vs promedio 12m" se recalculan para ese mes.
 
 ### 2026-07-25 · caché v60 — Respaldo completo (incluye vehículos)
 - 💾 El **respaldo JSON** y la **exportación a Excel** ahora incluyen **todo**: además de gastos, ingresos, cuentas, categorías, metas y recurrentes, guardan **combustible, mantenimiento y obligaciones** de los vehículos. Antes esas tres subcolecciones quedaban fuera del respaldo.
