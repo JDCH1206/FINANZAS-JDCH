@@ -2,6 +2,21 @@
 
 App de finanzas personales: clasificación COICOP, presupuesto editable por mes (valor o %), tableros con comparativo 50/30/20 y canasta DANE, edición de categorías/subcategorías, importación de Excel y nube con usuarios (Firebase). Incluye un **módulo opcional de Vehículos** (combustible, mantenimiento y obligaciones legales como SOAT/tecnomecánica).
 
+## Estado actual y cómo continuar (flujo de trabajo)
+
+**Versión actual: caché v61.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo):
+
+- **Antes de empezar:** `git pull` desde `FinanzasJDCH_paquete/app/`. **Al terminar:** `git commit` + `git push`.
+- **En cada cambio de código:** sube el caché del service worker → edita `const CACHE = "finanzas-jdch-vNN"` en `sw.js` (incrementa NN). Es la causa #1 de "mi cambio no se ve".
+- **Actualiza el changelog** de abajo (fecha + caché vNN) en cada despliegue.
+- **Nunca** subas `datos/` ni `documentacion/` (datos personales reales, privados; ya están en `.gitignore`).
+- El repo vive en `FinanzasJDCH_paquete/app/`; corre `git` desde ahí. No hay Node/npm; para probar local: `python -m http.server 8000`.
+- Convenciones: UI en español · dinero en enteros COP · fechas en hora local (nunca `toISOString` para "hoy") · `escapeHtml()` en todo valor del usuario dentro de `innerHTML`.
+
+Qué hace cada pantalla: ver **Módulos (pantallas)** y **Arquitectura** más abajo. Historial completo: en el changelog.
+
+> **Seguridad:** las claves de `firebase-config.js` son **públicas por diseño** (config de cliente); lo que protege los datos son las **reglas de Firestore** (solo el dueño autenticado lee/escribe lo suyo). Nunca se suben claves privadas (`serviceAccount*.json`, `.env`) — bloqueadas en `.gitignore`.
+
 ## Novedades (changelog)
 
 La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v61**. Cambios por fecha (más reciente primero):
