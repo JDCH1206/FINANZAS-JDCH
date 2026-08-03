@@ -4,22 +4,82 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v61.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo):
+**Versión actual: caché v62.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
-- **Antes de empezar:** `git pull` desde `FinanzasJDCH_paquete/app/`. **Al terminar:** `git commit` + `git push`.
-- **En cada cambio de código:** sube el caché del service worker → edita `const CACHE = "finanzas-jdch-vNN"` en `sw.js` (incrementa NN). Es la causa #1 de "mi cambio no se ve".
-- **Actualiza el changelog** de abajo (fecha + caché vNN) en cada despliegue.
-- **Nunca** subas `datos/` ni `documentacion/` (datos personales reales, privados; ya están en `.gitignore`).
-- El repo vive en `FinanzasJDCH_paquete/app/`; corre `git` desde ahí. No hay Node/npm; para probar local: `python -m http.server 8000`.
+**Arranque rápido en otra sesión (celular u otro PC):**
+1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
+2. `git pull` desde `FinanzasJDCH_paquete/app/` (trae lo último — vamos en v62).
+3. Trabaja. Para probar local: `python -m http.server 8000` desde `app/` (no hay Node/npm).
+4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
+5. `git commit` + `git push` al terminar.
+
+**Reglas fijas:**
+- **Nunca** subas `datos/` ni `documentacion/` (datos personales reales; ya en `.gitignore`). Solo `app/` está en GitHub.
 - Convenciones: UI en español · dinero en enteros COP · fechas en hora local (nunca `toISOString` para "hoy") · `escapeHtml()` en todo valor del usuario dentro de `innerHTML`.
+- Probar en una copia aislada con `FIREBASE_READY = false` antes de desplegar; nunca contra los datos reales de la nube.
 
 Qué hace cada pantalla: ver **Módulos (pantallas)** y **Arquitectura** más abajo. Historial completo: en el changelog.
 
 > **Seguridad:** las claves de `firebase-config.js` son **públicas por diseño** (config de cliente); lo que protege los datos son las **reglas de Firestore** (solo el dueño autenticado lee/escribe lo suyo). Nunca se suben claves privadas (`serviceAccount*.json`, `.env`) — bloqueadas en `.gitignore`.
 
+## Mapa de arquitectura
+
+Cómo se conectan las piezas. Todo corre en el navegador (archivos estáticos); `firebase-service.js` es la única costura que decide, en tiempo de ejecución, si los datos van a la nube (Firebase) o al almacenamiento local.
+
+```mermaid
+flowchart TD
+  IDX["index.html"] --> APP["app.js<br/>shell · router · sesión · recordatorios"]
+  APP --> VIEWS["js/views/*<br/>login · onboarding · summary · home<br/>dashboard · budget · accounts<br/>categories · vehicles · settings"]
+  APP --> STATE["state.js<br/>store global<br/>getState / setState / subscribe"]
+  VIEWS --> STATE
+  VIEWS --> COMP["components/<br/>charts.js · modals.js"]
+  VIEWS --> UTILS["utils.js<br/>fmt · fechas locales · escapeHtml"]
+  VIEWS --> CFG["config.js<br/>categorías · listas · regla 50/30/20"]
+  APP --> NOTIFY["notify.js<br/>recordatorios (notificaciones)"]
+  VIEWS --> SVC["firebase-service.js<br/>ÚNICA costura nube ↔ local"]
+  APP --> SW["sw.js<br/>service worker · caché del shell (PWA)"]
+  SVC -->|"FIREBASE_READY = true"| CLOUD["Firebase<br/>Auth + Firestore<br/>+ caché local IndexedDB"]
+  SVC -->|"FIREBASE_READY = false"| LOCAL["localStorage"]
+  CLOUD --> RULES["Reglas de Firestore<br/>solo el dueño autenticado"]
+```
+
+## Mapa de procesos
+
+Flujos principales: arranque y carga de datos, registro de un movimiento (con la opción de enlazarlo a un vehículo) y respaldo/restauración.
+
+```mermaid
+flowchart TD
+  START(["Usuario abre la app"]) --> AUTH{"¿Sesión activa?"}
+  AUTH -->|no| LOGIN["Login / Registro"]
+  LOGIN --> AUTH
+  AUTH -->|sí| LOAD["subscribeData<br/>onSnapshot: user doc + transactions + incomes"]
+  LOAD --> STATE[("state.js<br/>datos en memoria")]
+  STATE --> SHELL["Shell + vista actual (draw route)"]
+
+  SHELL --> ADD["Registrar gasto/ingreso (FAB +)"]
+  ADD --> VEH{"¿Asociar a vehículo?"}
+  VEH -->|no| SAVE["addTx / addIncome"]
+  VEH -->|"sí (combustible / mantenimiento)"| LINK["crea tx + registro en fuel/maintenance<br/>enlazados: gastoId ↔ fuelId/maintId"]
+  LINK --> SAVE
+  SAVE --> SEAM{"FIREBASE_READY?"}
+  SEAM -->|sí| FS[("Firestore<br/>+ caché IndexedDB")]
+  SEAM -->|no| LS[("localStorage")]
+  FS --> LOAD
+
+  SHELL --> BK["Ajustes → Respaldo"]
+  BK --> EXP["Exportar JSON / Excel<br/>incluye combustible · mantenimiento · obligaciones"]
+  BK --> IMP["Restaurar JSON<br/>reemplaza todo"]
+  IMP --> SEAM
+```
+
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v61**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v62**. Cambios por fecha (más reciente primero):
+
+### 2026-07-25 · caché v62 — Caché local de Firestore (menos lecturas, más rápido)
+- ⚡ Se activó la **persistencia local (IndexedDB)** en la conexión con Firestore: tras la primera carga, la app solo descarga lo que cambió → **menos lecturas**, **abre más rápido** y **funciona sin conexión**. La búsqueda sigue cubriendo todo el historial (los datos quedan en el dispositivo). Si el navegador no soporta la caché, cae a la Firestore normal sin romperse.
+- 🔒 **Privacidad:** al **cerrar sesión** se borra la caché local (`terminate` + `clearIndexedDbPersistence`), útil en equipos compartidos.
+- 📄 README ampliado: sección "Estado actual y cómo continuar" (arranque en otra sesión), **mapa de arquitectura** y **mapa de procesos** (diagramas Mermaid).
 
 ### 2026-07-25 · caché v61 — Compartir a la app + fix comparativo por mes
 - 📲 **Compartir a Finanzas JDCH**: la app (instalada como PWA) aparece en el menú "Compartir" de Android. Al compartir un texto de pago (ej. "Pagaste $23.500 en D1"), abre **Nuevo gasto** con el **monto y la descripción prellenados** (extrae el número tras "$" y el comercio tras "en"). Tú confirmas categoría y guardas. No necesita permisos especiales ni servidor.

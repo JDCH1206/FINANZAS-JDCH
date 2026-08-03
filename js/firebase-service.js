@@ -5,7 +5,8 @@
 import { firebaseConfig, FIREBASE_READY } from "../firebase-config.js";
 import { DEFAULT_CATS } from "./config.js";
 
-let fb = null; // { app, auth, db, fns... }
+let fb = null;     // { auth, db, authMod, fsMod }
+let fbApp = null;  // instancia de la app (se reutiliza; initializeApp no se puede llamar dos veces)
 
 /* ---------- Inicialización dinámica de Firebase ---------- */
 async function initFirebase() {
@@ -13,9 +14,20 @@ async function initFirebase() {
   const appMod = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
   const authMod = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
   const fsMod = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
-  const app = appMod.initializeApp(firebaseConfig);
-  const auth = authMod.getAuth(app);
-  const db = fsMod.getFirestore(app);
+  fbApp = fbApp || appMod.initializeApp(firebaseConfig);
+  const auth = authMod.getAuth(fbApp);
+  // Firestore con CACHÉ LOCAL persistente (IndexedDB): tras la 1ª carga solo baja lo
+  // que cambió → menos lecturas, apertura más rápida y funciona sin conexión. La
+  // búsqueda sigue viendo todo el historial (los datos quedan en el dispositivo).
+  // Si el navegador no soporta IndexedDB (o ya se inicializó), cae a la Firestore normal.
+  let db;
+  try {
+    db = fsMod.initializeFirestore(fbApp, {
+      localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }),
+    });
+  } catch (e) {
+    db = fsMod.getFirestore(fbApp);
+  }
   fb = { auth, db, authMod, fsMod };
   return fb;
 }
@@ -71,8 +83,15 @@ export async function signInWithGoogle() {
 
 export async function signOutUser() {
   if (FIREBASE_READY) {
-    const { auth, authMod } = await initFirebase();
+    const { auth, authMod, db, fsMod } = await initFirebase();
     await authMod.signOut(auth);
+    // Privacidad: al cerrar sesión se borra la caché local (útil en equipos compartidos).
+    // Termina la instancia y limpia IndexedDB; si falla, se ignora (no afecta la nube).
+    try {
+      await fsMod.terminate(db);
+      await fsMod.clearIndexedDbPersistence(db);
+    } catch (e) { /* operaciones activas o sin caché: ignorar */ }
+    fb = null; // el próximo inicio de sesión recrea Firestore
   } else {
     localStorage.removeItem("fz_local_user");
   }
