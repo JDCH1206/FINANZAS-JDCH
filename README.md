@@ -74,7 +74,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v63**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v64**. Cambios por fecha (más reciente primero):
+
+### 2026-07-25 · caché v64 — Compartir: soporta formato de monto colombiano y comercio de Nu
+- 🐞 Corregido el extractor de "Compartir": el monto en formato Colombia (`$37.449,00` = punto miles, coma decimales) se interpretaba 100× más grande. Ahora descarta los decimales `,00` y quita los puntos de miles → **$37.449** correcto.
+- 🏪 El comercio se toma de lo que va entre `en` y `por $` (ej. "COMCEL PAGOS DE FACTUR" en notificaciones de Nu). Con respaldos para otros formatos.
 
 ### 2026-07-25 · caché v63 — Versión visible en Ajustes
 - 🔢 Ajustes ahora muestra al final la **versión activa** (ej. "Finanzas JDCH · versión v63"). Se lee del caché real del service worker, así siempre refleja la versión que de verdad está corriendo — útil para confirmar que una actualización se aplicó.

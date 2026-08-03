@@ -19,19 +19,30 @@ import { openModal, closeModal, toast } from "./components/modals.js";
 
 const app = document.getElementById("app");
 
-// --- Compartir a la app (Web Share Target): otra app comparte un texto tipo
-// "Pagaste $23.500 en D1" → abrimos "Nuevo gasto" con monto y descripción prellenados ---
+// --- Compartir a la app (Web Share Target): otra app comparte el texto de un pago
+// (ej. notificación de Nu: "Tu compra en COMCEL PAGOS DE FACTUR por $37.449,00 con tu
+// tarjeta terminada en 8621 ha sido APROBADA.") → abrimos "Nuevo gasto" prellenado ---
 function parseSharedExpense(text) {
   if (!text) return null;
   const t = String(text).trim();
-  // monto: preferir lo que va tras "$"; si no, el número más largo del texto
+  // MONTO en formato Colombia: "." = miles, "," = decimales → "$37.449,00" = 37449
   let amount = 0;
   const m = t.match(/\$\s*([\d][\d.,]*)/) || t.match(/([\d][\d.,]{2,})/);
-  if (m) amount = parseInt(m[1].replace(/[.,]/g, ""), 10) || 0; // COP: sin decimales
-  // descripción: el comercio tras "en ", si aparece; si no, el texto completo (recortado)
-  let desc = t;
-  const em = t.match(/\ben\s+(.+?)(?:[.\n]|$)/i);
+  if (m) {
+    let raw = m[1];
+    if (raw.includes(",")) raw = raw.split(",")[0];      // descartar los decimales ",00"
+    amount = parseInt(raw.replace(/\./g, ""), 10) || 0;  // quitar separador de miles
+  }
+  // COMERCIO: lo que va entre "en " y " por $" (ej. "COMCEL PAGOS DE FACTUR")
+  let desc = "";
+  const em = t.match(/\ben\s+(.+?)\s+por\s+\$/i);
   if (em) desc = em[1].trim();
+  if (!desc) {
+    // respaldo: texto antes de " por $", limpiando muletillas del banco
+    const before = t.split(/\s+por\s+\$/i)[0] || t;
+    desc = before.replace(/^tu\s+compra\s+en\s+/i, "").replace(/^compra\s+aprobada.*/i, "Compra").trim();
+  }
+  if (!desc) desc = t.replace(/\$\s*[\d.,]+/g, "").replace(/\s+/g, " ").trim();
   return { amount, desc: desc.slice(0, 80) };
 }
 // se lee al cargar; se consume una vez montada la sesión
