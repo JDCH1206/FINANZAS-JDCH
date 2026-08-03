@@ -93,7 +93,19 @@ export function renderSettings(root, onSignOut) {
       <button id="logout" class="btn btn-danger btn-sm btn-block">Cerrar sesión</button>
     </div>
 
-    <p class="tiny muted center">${isCloud() ? "Tus datos se sincronizan en Firebase. Ábrelos en cualquier equipo con tu correo." : "Sin Firebase: datos solo en este navegador. Configura firebase-config.js para nube + multi-dispositivo."}</p>`;
+    <p class="tiny muted center">${isCloud() ? "Tus datos se sincronizan en Firebase. Ábrelos en cualquier equipo con tu correo." : "Sin Firebase: datos solo en este navegador. Configura firebase-config.js para nube + multi-dispositivo."}</p>
+    <p class="tiny muted center" id="app-version" style="margin-top:6px">Finanzas JDCH · comprobando versión…</p>`;
+
+  // versión activa (se lee del caché real del service worker, así siempre es exacta)
+  const verEl = root.querySelector("#app-version");
+  if (verEl) {
+    if (window.caches && caches.keys) {
+      caches.keys().then((keys) => {
+        const v = (keys.find((k) => k.startsWith("finanzas-jdch-")) || "").replace("finanzas-jdch-", "");
+        verEl.textContent = "Finanzas JDCH · versión " + (v || "—");
+      }).catch(() => { verEl.textContent = "Finanzas JDCH"; });
+    } else { verEl.textContent = "Finanzas JDCH"; }
+  }
 
   // perfil
   root.querySelector("#p-save").onclick = async () => {
