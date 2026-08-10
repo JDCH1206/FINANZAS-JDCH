@@ -344,10 +344,13 @@ function drawFuelList(root, v, m) {
 function openFuelModal(v, root, existing, info) {
   const f = (label, html) => `<div class="field"><label class="label">${label}</label>${html}</div>`;
   const fuelOpts = FUEL_TYPES.map((t) => `<option>${t}</option>`).join("");
-  const summary = info ? `<div class="card mb-3" style="background:var(--panel-2)">
-      <div class="row between" style="padding:3px 0"><span class="small muted">Rendimiento de esta línea</span><span class="small bold" style="color:var(--green)">${info.rend.toFixed(1)} km/gal</span></div>
+  // valor por galón de este tanqueo (costo ÷ galones) — se puede calcular siempre que haya datos
+  const vpg = existing && +existing.galones ? (+existing.costo) / (+existing.galones) : 0;
+  const summary = (vpg || info) ? `<div class="card mb-3" style="background:var(--panel-2)">
+      ${vpg ? `<div class="row between" style="padding:3px 0"><span class="small muted">Valor por galón</span><span class="small bold" style="color:var(--gold)">${fmt(vpg)}/gal</span></div>` : ""}
+      ${info ? `<div class="row between" style="padding:3px 0"><span class="small muted">Rendimiento de esta línea</span><span class="small bold" style="color:var(--green)">${info.rend.toFixed(1)} km/gal</span></div>
       <div class="row between" style="padding:3px 0"><span class="small muted">Pesos por km</span><span class="small bold">${info.costoKm ? fmt(info.costoKm) + "/km" : "—"}</span></div>
-      <div class="row between" style="padding:3px 0"><span class="small muted">Distancia del tramo</span><span class="small bold">${Number(info.dist).toLocaleString("es-CO")} km</span></div>
+      <div class="row between" style="padding:3px 0"><span class="small muted">Distancia del tramo</span><span class="small bold">${Number(info.dist).toLocaleString("es-CO")} km</span></div>` : ""}
     </div>` : "";
   openModal(existing ? "Tanqueo" : "Nuevo tanqueo", `
     ${summary}
