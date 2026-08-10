@@ -231,6 +231,7 @@ function drawFuel(root, v) {
   const costoTot = sum(fuel, (r) => +r.costo || 0);
   const galTot = sum(fuel, (r) => +r.galones || 0);
   const costoKm = m.distTot ? costoTot / m.distTot : 0;
+  const valorGal = galTot ? costoTot / galTot : 0; // valor promedio por galón
   const months = {}; fuel.forEach((r) => { const k = ym(r.fecha); if (k) months[k] = (months[k] || 0) + (+r.costo || 0); });
   const mKeys = Object.keys(months).sort();
   const gastoMes = mKeys.length ? costoTot / mKeys.length : 0;
@@ -263,6 +264,7 @@ function drawFuel(root, v) {
       ${kpi("Gasto total", fmt(costoTot))}
       ${kpi("Gasto/mes prom.", mKeys.length ? fmt(gastoMes) : "—", true)}
       ${kpi("Galones total", galTot.toFixed(1))}
+      ${kpi("Valor prom./galón", galTot ? fmt(valorGal) : "—")}
       ${kpi("Tanqueos", fuel.length, true)}
     </div>
 

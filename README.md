@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v65**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v66**. Cambios por fecha (más reciente primero):
+
+### 2026-07-25 · caché v66 — Combustible: valor promedio por galón
+- ⛽ Nuevo indicador en el módulo Combustible: **Valor prom./galón** (gasto total ÷ galones totales), junto a "Gasto total" y "Galones total".
 
 ### 2026-07-25 · caché v65 — Se retira "Compartir a la app"
 - 🗑️ Se removió la función **Compartir (Web Share Target)** (manifest `share_target` + parser de texto): no funcionaba de forma confiable al compartir desde las apps de banco. El registro de gastos sigue siendo manual desde **Movimientos → +**. La captura automática desde notificaciones queda como idea futura (requiere backend).
