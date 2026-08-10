@@ -309,9 +309,12 @@ function drawFuelList(root, v, m) {
     const info = m.byId[r.id];
     // muestra la distancia recorrida en el tramo (desde el último tanque lleno) en vez del $/km
     const extra = info ? ` · ${info.rend.toFixed(1)} km/gal · tramo ${Number(info.dist).toLocaleString("es-CO")} km` : "";
+    // valor por galón de este tanqueo (costo ÷ galones)
+    const vpg = (+r.galones) ? (+r.costo) / (+r.galones) : 0;
+    const vpgTxt = vpg ? ` · ${fmt(vpg)}/gal` : "";
     return `<div class="tx-row" data-rowf="${r.id}" style="cursor:pointer">
       <div class="flex1"><div class="tx-desc">${escapeHtml(r.fecha)} · ${escapeHtml(r.estacion || "—")}${r.tanqueLleno === "No" || r.tanqueLleno === false ? ' <span class="tiny" style="color:var(--yel)">parcial</span>' : ""}</div>
-        <div class="tx-meta">${(+r.galones).toFixed(2)} gal · ${Number(r.odometro).toLocaleString("es-CO")} km${extra}</div></div>
+        <div class="tx-meta">${(+r.galones).toFixed(2)} gal${vpgTxt} · ${Number(r.odometro).toLocaleString("es-CO")} km${extra}</div></div>
       <div class="tx-amt">${fmt(r.costo)}</div>
       <button class="icon-btn" data-delf="${r.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
     </div>`;

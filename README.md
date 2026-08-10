@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v66**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v67**. Cambios por fecha (más reciente primero):
+
+### 2026-07-25 · caché v67 — Combustible: valor por galón en cada tanqueo
+- ⛽ Cada renglón de la bitácora de Combustible ahora muestra el **valor por galón** de ese tanqueo (costo ÷ galones), ej.: `2.57 gal · $18.483/gal · 43.247 km · …`. Complementa el "Valor prom./galón" del resumen.
 
 ### 2026-07-25 · caché v66 — Combustible: valor promedio por galón
 - ⛽ Nuevo indicador en el módulo Combustible: **Valor prom./galón** (gasto total ÷ galones totales), junto a "Gasto total" y "Galones total".
