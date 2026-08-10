@@ -195,7 +195,7 @@ function drawList() {
   }
 }
 
-export function openTxModal(existing, prefill = {}) {
+export function openTxModal(existing) {
   const s = getState();
   // si la categoría original ya no existe, conservarla como opción para no re-clasificar en silencio
   const missingCat = !!(existing && existing.cat && !s.cats.some((c) => c.name === existing.cat));
@@ -236,8 +236,8 @@ export function openTxModal(existing, prefill = {}) {
     </div>` : "";
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
-    <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : escapeHtml(prefill.desc || "")}"></div>
-    <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : (prefill.amount || "")}"></div>
+    <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : ""}"></div>
+    <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : ""}"></div>
     <div class="field"><label class="label">Categoría</label><select id="m-cat" class="input">${catOpts}</select></div>
     ${missingCat ? `<p class="tiny" style="color:var(--yel);margin:-6px 0 10px">⚠ La categoría original de este gasto fue eliminada. Puedes dejarla o elegir una nueva (si la cambias, no podrás volver a la anterior).</p>` : ""}
     <div class="field"><label class="label">Subcategoría</label><select id="m-sub" class="input"></select></div>

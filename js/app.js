@@ -7,7 +7,7 @@ import { showReminders } from "./notify.js";
 import * as fbsvc from "./firebase-service.js";
 import { renderLogin } from "./views/login.js";
 import { renderOnboarding } from "./views/onboarding.js";
-import { renderHome, openTxModal } from "./views/home.js";
+import { renderHome } from "./views/home.js";
 import { renderSummary } from "./views/summary.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderBudget } from "./views/budget.js";
@@ -18,44 +18,6 @@ import { renderVehicles } from "./views/vehicles.js";
 import { openModal, closeModal, toast } from "./components/modals.js";
 
 const app = document.getElementById("app");
-
-// --- Compartir a la app (Web Share Target): otra app comparte el texto de un pago
-// (ej. notificación de Nu: "Tu compra en COMCEL PAGOS DE FACTUR por $37.449,00 con tu
-// tarjeta terminada en 8621 ha sido APROBADA.") → abrimos "Nuevo gasto" prellenado ---
-function parseSharedExpense(text) {
-  if (!text) return null;
-  const t = String(text).trim();
-  // MONTO en formato Colombia: "." = miles, "," = decimales → "$37.449,00" = 37449
-  let amount = 0;
-  const m = t.match(/\$\s*([\d][\d.,]*)/) || t.match(/([\d][\d.,]{2,})/);
-  if (m) {
-    let raw = m[1];
-    if (raw.includes(",")) raw = raw.split(",")[0];      // descartar los decimales ",00"
-    amount = parseInt(raw.replace(/\./g, ""), 10) || 0;  // quitar separador de miles
-  }
-  // COMERCIO: lo que va entre "en " y " por $" (ej. "COMCEL PAGOS DE FACTUR")
-  let desc = "";
-  const em = t.match(/\ben\s+(.+?)\s+por\s+\$/i);
-  if (em) desc = em[1].trim();
-  if (!desc) {
-    // respaldo: texto antes de " por $", limpiando muletillas del banco
-    const before = t.split(/\s+por\s+\$/i)[0] || t;
-    desc = before.replace(/^tu\s+compra\s+en\s+/i, "").replace(/^compra\s+aprobada.*/i, "Compra").trim();
-  }
-  if (!desc) desc = t.replace(/\$\s*[\d.,]+/g, "").replace(/\s+/g, " ").trim();
-  return { amount, desc: desc.slice(0, 80) };
-}
-// se lee al cargar; se consume una vez montada la sesión
-let pendingShare = null;
-try {
-  const q = new URLSearchParams(location.search);
-  const shared = q.get("text") || q.get("title");
-  if (shared) {
-    pendingShare = parseSharedExpense(shared);
-    // limpiar la URL para que un refresco no reabra el modal
-    history.replaceState({}, "", location.pathname);
-  }
-} catch (e) { /* noop */ }
 
 // tema (claro/oscuro) — se aplica antes de renderizar
 const savedTheme = localStorage.getItem("fz_theme");
@@ -169,12 +131,7 @@ function startSession(user) {
     if (!booted) {
       booted = true;
       if (data.isNew) { renderOnboarding(app, () => mountShell("summary")); }
-      else {
-        // si venimos de "Compartir", abrir directo Movimientos con el gasto prellenado
-        if (pendingShare) { mountShell("home"); const ps = pendingShare; pendingShare = null; setTimeout(() => openTxModal(null, ps), 150); }
-        else mountShell("summary");
-        checkBackupReminder(); checkVehicleAlerts();
-      }
+      else { mountShell("summary"); checkBackupReminder(); checkVehicleAlerts(); }
     } else if (data.fromRemote) {
       liveRefresh();
     }
