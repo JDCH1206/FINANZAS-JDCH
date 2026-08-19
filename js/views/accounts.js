@@ -1,7 +1,7 @@
 // js/views/accounts.js
 import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal } from "../firebase-service.js";
-import { fmt, uid, escapeHtml, debounce, sum } from "../utils.js";
+import { fmt, uid, escapeHtml, debounce, sum, fmtDate, todayISO } from "../utils.js";
 import { ACCOUNT_TYPES, PALETTE } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut } from "../components/charts.js";
@@ -60,14 +60,19 @@ function drawList(root) {
   const host = root.querySelector("#acct-list");
   const accts = s.accounts || [];
   if (!accts.length) { host.innerHTML = `<div class="muted small">Aún no tienes cuentas. Agrega tu cuenta de ahorros, efectivo, etc.</div>`; return; }
-  host.innerHTML = accts.map((a, i) => `
+  host.innerHTML = accts.map((a, i) => {
+    const nMovs = (a.movs || []).length;
+    return `
     <div class="tx-row">
       <span class="tx-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
-      <div class="flex1"><div class="tx-desc">${escapeHtml(a.name)}</div><div class="tx-meta">${escapeHtml(a.type)}</div></div>
+      <div class="flex1"><div class="tx-desc">${escapeHtml(a.name)}</div><div class="tx-meta">${escapeHtml(a.type)}${nMovs ? ` · ${nMovs} movim.` : ""}</div></div>
       <div class="tx-amt">${fmt(a.balance)}</div>
+      <button class="icon-btn" data-mov="${a.id}" aria-label="Movimientos de la cuenta" title="Sumar o restar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
       <button class="icon-btn" data-edit="${a.id}" aria-label="Editar cuenta"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
       <button class="icon-btn" data-del="${a.id}" aria-label="Eliminar cuenta"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+  host.querySelectorAll("[data-mov]").forEach((b) => b.onclick = () => openMovsModal(root, b.getAttribute("data-mov")));
   host.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openAcctModal(root, accts.find((a) => a.id === b.getAttribute("data-edit"))));
   host.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => confirmDialog("¿Eliminar esta cuenta?", () => {
     setState({ accounts: s.accounts.filter((a) => a.id !== b.getAttribute("data-del")) }); persist(); renderAccounts(root);
@@ -92,6 +97,78 @@ function openAcctModal(root, acct) {
         if (editing) setState({ accounts: s.accounts.map((a) => a.id === acct.id ? { ...a, ...data } : a) });
         else setState({ accounts: [...s.accounts, { id: uid(), ...data }] });
         persist(); closeModal(); renderAccounts(root); toast(editing ? "Cuenta actualizada" : "Cuenta creada");
+      });
+    },
+  });
+}
+
+// Movimientos propios de la cuenta: sumas/restas manuales con una breve nota.
+// Ajustan SOLO el saldo de esta cuenta; NO son gastos ni ingresos (no tocan txs/incomes).
+function openMovsModal(root, acctId) {
+  const s = getState();
+  const acct = (s.accounts || []).find((a) => a.id === acctId);
+  if (!acct) return;
+  const movs = (acct.movs || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.id > a.id ? 1 : -1));
+
+  const listHtml = movs.length
+    ? movs.map((m) => {
+        const pos = (+m.amount || 0) >= 0;
+        return `<div class="tx-row">
+          <div class="flex1"><div class="tx-desc">${escapeHtml(m.note || (pos ? "Suma" : "Resta"))}</div><div class="tx-meta">${fmtDate(m.date)}</div></div>
+          <div class="tx-amt" style="color:${pos ? "var(--green)" : "var(--red)"}">${pos ? "+" : "−"}${fmt(Math.abs(m.amount))}</div>
+          <button class="icon-btn" data-delmov="${m.id}" aria-label="Eliminar movimiento"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
+        </div>`;
+      }).join("")
+    : `<div class="muted small">Sin movimientos aún. Registra una suma o resta arriba.</div>`;
+
+  openModal(`Movimientos · ${escapeHtml(acct.name)}`, `
+    <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)">
+      <div class="k-label">Saldo actual</div><div class="k-val">${fmt(acct.balance)}</div>
+    </div>
+    <p class="tiny muted mb-3">Estos movimientos ajustan solo el saldo de esta cuenta. No afectan tus gastos ni ingresos.</p>
+
+    <div class="field"><label class="label">Tipo</label>
+      <div class="row gap-2"><button type="button" class="chip on flex1" data-tipo="suma">Sumar (+)</button>
+        <button type="button" class="chip flex1" data-tipo="resta">Restar (−)</button></div></div>
+    <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" inputmode="numeric" placeholder="0"></div>
+    <div class="field"><label class="label">Descripción (breve)</label><input id="m-note" class="input" placeholder="Ej: ajuste de saldo, traslado, intereses"></div>
+    <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${todayISO()}"></div>
+    <button id="m-save" class="btn btn-primary btn-block mb-3">Registrar movimiento</button>
+
+    <div class="card-title" style="margin:0 0 8px">Historial</div>
+    <div id="m-list">${listHtml}</div>`, {
+    onMount(b) {
+      let tipo = "suma";
+      moneyPreview(b.querySelector("#m-amt"));
+      b.querySelectorAll("[data-tipo]").forEach((c) => c.onclick = () => {
+        tipo = c.getAttribute("data-tipo");
+        b.querySelectorAll("[data-tipo]").forEach((x) => x.classList.toggle("on", x === c));
+      });
+
+      submitOnce(b.querySelector("#m-save"), async () => {
+        const amt = Math.abs(+b.querySelector("#m-amt").value || 0);
+        if (!amt) return toast("Ingresa un monto", true);
+        const note = b.querySelector("#m-note").value.trim();
+        const date = b.querySelector("#m-date").value || todayISO();
+        const signed = tipo === "resta" ? -amt : amt;
+        const mov = { id: uid(), date, amount: signed, note };
+        const st = getState();
+        setState({ accounts: st.accounts.map((a) => a.id === acctId
+          ? { ...a, balance: (+a.balance || 0) + signed, movs: [mov, ...(a.movs || [])] } : a) });
+        persist(); renderAccounts(root);
+        toast(tipo === "resta" ? "Resta registrada" : "Suma registrada");
+        openMovsModal(root, acctId); // refresca saldo e historial
+      }, "Registrando…");
+
+      b.querySelectorAll("[data-delmov]").forEach((btn) => btn.onclick = () => {
+        const st = getState();
+        const a = st.accounts.find((x) => x.id === acctId);
+        const m = (a?.movs || []).find((x) => x.id === btn.getAttribute("data-delmov"));
+        if (!m) return;
+        setState({ accounts: st.accounts.map((x) => x.id === acctId
+          ? { ...x, balance: (+x.balance || 0) - (+m.amount || 0), movs: (x.movs || []).filter((y) => y.id !== m.id) } : x) });
+        persist(); renderAccounts(root);
+        toast("Movimiento eliminado"); openMovsModal(root, acctId);
       });
     },
   });
