@@ -160,7 +160,8 @@ function openVehicleBreakdown(v) {
     if (t.fuelId) k = "Combustible";
     else if (t.maintId) k = "Mantenimiento";
     else if (t.obligId) k = "Obligaciones";
-    else if (/lavad|lavo|lavada/i.test((t.sub || "") + " " + (t.desc || ""))) k = "Lavado";
+    // criterio principal: subcategoría exacta "Lavado"; respaldo: la palabra en subcategoría/descripción
+    else if (t.sub === "Lavado" || /lavad/i.test((t.sub || "") + " " + (t.desc || ""))) k = "Lavado";
     else k = "Otros";
     buck[k] += (+t.amount || 0); cnt[k]++;
   });
