@@ -4,7 +4,7 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v71.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v72.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
@@ -74,7 +74,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v71**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v72**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v72 — Vehículos: desglose de gasto + asociar vehículo al editar
+- 🚗 En **Vehículos**, la línea "Gasto asociado a este vehículo" ahora es tocable y abre un **desglose** (dona + barras) que separa el gasto en **Combustible · Mantenimiento · Lavado · Obligaciones · Otros**, con conteo por rubro. Responde "¿cuánto llevo en lavadas de la moto?". Combustible/Mantenimiento salen de sus bitácoras (vínculo `fuelId`/`maintId`), Lavado se detecta por la descripción, y el resto va en Otros.
+- ✏️ Al **editar un gasto** ya existente ahora aparece el selector **"Asociar a vehículo"** (antes solo salía al crear). Permite etiquetar/cambiar/quitar el vehículo de un gasto. Si el gasto está vinculado a un tanqueo/mantenimiento/obligación, se indica que su vehículo se administra desde ese módulo (para no dejar registros huérfanos).
 
 ### 2026-08-24 · caché v71 — Cuentas: gráfica "Así ha crecido tu dinero"
 - 📈 Nueva tarjeta en **Cuentas** con la **evolución del saldo** en el tiempo (reconstruida de los movimientos de "Actualizar saldo"), con selector por cuenta o Todas. Debajo muestra **Rendimientos** y **Aportes** acumulados. Aparece cuando hay al menos 2 fechas con movimientos registrados.

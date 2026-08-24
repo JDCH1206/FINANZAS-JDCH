@@ -126,8 +126,8 @@ function drawList(root) {
       <div class="row between mt-2" style="border-top:1px solid var(--line);padding-top:8px">
         <span class="small muted">Odómetro</span><span class="small bold">${v.odometro != null ? Number(v.odometro).toLocaleString("es-CO") + " km" : "—"}</span>
       </div>
-      <div class="row between mt-1">
-        <span class="small muted">Gasto asociado a este vehículo</span><span class="small bold" style="color:var(--gold)">${fmt(sum(getState().txs.filter((t) => t.vehicleId === v.id), (t) => t.amount))}</span>
+      <div class="row between mt-1" data-bd="${v.id}" style="cursor:pointer">
+        <span class="small muted">Gasto asociado a este vehículo ›</span><span class="small bold" style="color:var(--gold)">${fmt(sum(getState().txs.filter((t) => t.vehicleId === v.id), (t) => t.amount))}</span>
       </div>
       <div class="row gap-2 mt-3 wrap">
         <button class="btn btn-ghost btn-sm flex1" data-fuel="${v.id}">⛽ Combustible</button>
@@ -144,6 +144,42 @@ function drawList(root) {
     await persistVehicles(); drawList(root); toast("Vehículo eliminado");
   }));
   list.querySelectorAll("[data-fuel]").forEach((b) => b.onclick = () => { activeMaintVid = null; activeObligVid = null; activeFuelVid = b.getAttribute("data-fuel"); renderFuel(root, activeFuelVid); });
+  list.querySelectorAll("[data-bd]").forEach((b) => b.onclick = () => openVehicleBreakdown(getState().vehicles.find((x) => x.id === b.getAttribute("data-bd"))));
+}
+
+// Desglose del "gasto asociado" de un vehículo: Combustible · Mantenimiento · Lavado · Obligaciones · Otros.
+// Clasifica cada gasto etiquetado a este vehículo por su vínculo (fuel/maint/oblig) o por su descripción.
+function openVehicleBreakdown(v) {
+  if (!v) return;
+  const txs = getState().txs.filter((t) => t.vehicleId === v.id);
+  const order = ["Combustible", "Mantenimiento", "Lavado", "Obligaciones", "Otros"];
+  const buck = Object.fromEntries(order.map((k) => [k, 0]));
+  const cnt = Object.fromEntries(order.map((k) => [k, 0]));
+  txs.forEach((t) => {
+    let k;
+    if (t.fuelId) k = "Combustible";
+    else if (t.maintId) k = "Mantenimiento";
+    else if (t.obligId) k = "Obligaciones";
+    else if (/lavad|lavo|lavada/i.test((t.sub || "") + " " + (t.desc || ""))) k = "Lavado";
+    else k = "Otros";
+    buck[k] += (+t.amount || 0); cnt[k]++;
+  });
+  const total = sum(order.map((k) => buck[k]));
+  const rows = order.filter((k) => buck[k] > 0);
+  const body = total ? `
+    <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)">
+      <div class="k-label">Total asociado a ${escapeHtml(v.alias || v.modelo || v.tipo)}</div><div class="k-val">${fmt(total)}</div>
+      <div class="tiny muted" style="margin-top:3px">${txs.length} movimiento${txs.length === 1 ? "" : "s"}</div></div>
+    <div class="chart-box" style="height:190px"><canvas id="ch-vbd"></canvas></div>
+    <div class="mt-2">${rows.map((k, i) => `
+      <div class="dane-row"><span class="muted"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${PALETTE[i % PALETTE.length]};margin-right:5px"></span>${k} <span class="tiny muted">(${cnt[k]})</span></span>
+        <div class="bar" style="height:7px"><span style="width:${(buck[k] / total) * 100}%;background:${PALETTE[i % PALETTE.length]}"></span></div>
+        <span style="text-align:right">${fmt(buck[k])} <span class="muted">${((buck[k] / total) * 100).toFixed(0)}%</span></span></div>`).join("")}</div>
+    <p class="tiny muted mt-3">Combustible y Mantenimiento salen de sus bitácoras; Lavado se detecta por la descripción; el resto (peajes, accesorios…) va en Otros.</p>`
+    : `<div class="muted small">Aún no hay gastos asociados a este vehículo. Al registrar un gasto, asócialo al vehículo para verlo aquí.</div>`;
+  openModal(`Desglose · ${escapeHtml(v.alias || v.modelo || v.tipo)}`, body, {
+    onMount() { if (total) donut("ch-vbd", rows, rows.map((k) => buck[k])); },
+  });
 }
 
 function openVehicleModal(v, root) {

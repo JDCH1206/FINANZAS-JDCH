@@ -234,6 +234,15 @@ export function openTxModal(existing) {
       <p class="tiny muted">El gasto queda asociado a este vehículo (para separar costos por moto/carro). Si es combustible, crea un tanqueo vinculado; si es mantenimiento, crea un registro en la bitácora de Mantenimiento.</p>
     </div>
     </div>` : "";
+  // Al EDITAR: permitir asociar/cambiar el vehículo (solo la etiqueta) si el gasto no está
+  // vinculado a un tanqueo/mantenimiento/obligación (esos se administran desde su módulo).
+  const canEditVeh = existing && s.vehiclesEnabled && (s.vehicles || []).length && !existing.fuelId && !existing.maintId && !existing.obligId;
+  const linkedVeh = existing && (existing.fuelId || existing.maintId || existing.obligId);
+  const vehEditBlock = canEditVeh ? `
+    <div class="field"><label class="label">Asociar a vehículo</label>
+      <select id="m-veh-edit" class="input"><option value="">— no asociar —</option>${s.vehicles.map((v) => `<option value="${escapeHtml(v.id)}" ${existing.vehicleId === v.id ? "selected" : ""}>${v.tipo === "Moto" ? "🏍️" : "🚗"} ${escapeHtml(v.alias || v.modelo)}</option>`).join("")}</select>
+      <p class="tiny muted" style="margin-top:4px">Etiqueta este gasto a un vehículo para separar sus costos. No crea tanqueo ni mantenimiento.</p></div>`
+    : (linkedVeh ? `<div class="field"><p class="tiny muted">🔗 Este gasto está vinculado a un registro del vehículo (combustible/mantenimiento/obligación). Su vehículo se administra desde ese módulo.</p></div>` : "");
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
     <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : ""}"></div>
@@ -243,7 +252,7 @@ export function openTxModal(existing) {
     <div class="field"><label class="label">Subcategoría</label><select id="m-sub" class="input"></select></div>
     <div class="field"><label class="label">Medio de pago</label><select id="m-pay" class="input">${payOpts}</select></div>
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="m-acct" class="input">${acctOpts}</select></div>
-    ${vehBlock}
+    ${vehBlock}${vehEditBlock}
     <button id="m-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
       const catSel = b.querySelector("#m-cat"), subSel = b.querySelector("#m-sub");
@@ -300,7 +309,11 @@ export function openTxModal(existing) {
           amount: +b.querySelector("#m-amt").value, cat: catSel.value, sub: subSel.value,
           pay: b.querySelector("#m-pay").value, acct: b.querySelector("#m-acct").value || "",
         };
-        if (existing) { tx.vehicleId = existing.vehicleId || ""; tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; }
+        if (existing) {
+          const veSel = b.querySelector("#m-veh-edit");
+          tx.vehicleId = veSel ? veSel.value : (existing.vehicleId || "");
+          tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; tx.obligId = existing.obligId || "";
+        }
         if (!tx.date) return toast("Falta la fecha", true);
         if (!tx.desc || !tx.amount || tx.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
         if (existing) {
