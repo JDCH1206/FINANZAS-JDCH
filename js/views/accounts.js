@@ -4,7 +4,9 @@ import { saveConfig, forcePersistLocal } from "../firebase-service.js";
 import { fmt, uid, escapeHtml, debounce, sum, fmtDate, todayISO } from "../utils.js";
 import { ACCOUNT_TYPES, PALETTE } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
-import { donut } from "../components/charts.js";
+import { donut, lineTrend } from "../components/charts.js";
+
+let savScope = "all"; // ámbito de la gráfica de evolución: "all" o id de cuenta
 
 const persist = debounce(async () => {
   const s = getState();
@@ -29,6 +31,29 @@ export function acctNeedsUpdate(a, today) {
 }
 // total que ha "crecido tu dinero" en una cuenta (suma de rendimientos registrados)
 const rendTotal = (a) => sum((a.movs || []).filter((m) => m.kind === "rendimiento"), (m) => m.amount);
+
+// Reconstruye la evolución del saldo a partir de los movimientos registrados.
+// Ancla al saldo actual real y va restando hacia atrás; agrupa por fecha (un punto por día con movimiento).
+function savingsSeries(accts, scope) {
+  const list = scope === "all" ? accts : accts.filter((a) => a.id === scope);
+  const anchor = sum(list, (a) => +a.balance || 0);
+  const movs = [];
+  list.forEach((a) => (a.movs || []).forEach((m) => movs.push(m)));
+  if (movs.length < 2) return null;
+  movs.sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.id > b.id ? 1 : -1));
+  const totalMov = sum(movs, (m) => +m.amount || 0);
+  let running = anchor - totalMov;           // saldo antes del primer movimiento
+  const byDate = new Map();
+  movs.forEach((m) => { running += (+m.amount || 0); byDate.set(m.date, running); });
+  const dates = [...byDate.keys()];
+  if (dates.length < 2) return null;          // necesita al menos 2 fechas distintas
+  return {
+    labels: dates.map((d) => fmtDate(d)),
+    values: dates.map((d) => Math.round(byDate.get(d))),
+    rend: sum(movs.filter((m) => m.kind === "rendimiento"), (m) => m.amount),
+    aportes: sum(movs.filter((m) => m.kind === "aporte"), (m) => m.amount),
+  };
+}
 
 export function renderAccounts(root) {
   const s = getState();
@@ -63,6 +88,11 @@ export function renderAccounts(root) {
 
       <div class="card mb-3"><div class="card-title">Por tipo de cuenta</div><div id="by-type"></div></div>` : ""}
 
+    ${accts.some((a) => (a.movs || []).length) ? `<div class="card mb-3">
+      <div class="row between mb-2" style="align-items:center"><div class="card-title" style="margin:0">Así ha crecido tu dinero</div>
+        <select id="sav-scope" class="input" style="width:auto"></select></div>
+      <div id="sav-wrap"></div></div>` : ""}
+
     <div class="card mb-3">
       <div class="row between mb-3"><div class="card-title" style="margin:0">Tus cuentas</div>
         <button id="add-acct" class="btn btn-primary btn-sm">+ Cuenta</button></div>
@@ -85,6 +115,34 @@ export function renderAccounts(root) {
         <div class="bar" style="height:7px"><span style="width:${total ? (v / total) * 100 : 0}%;background:var(--gold)"></span></div>
         <span style="text-align:right">${fmt(v)}</span></div>`).join("");
   }
+
+  drawSavings(root);
+}
+
+// gráfica "Así ha crecido tu dinero": evolución del saldo + rendimiento/aportes acumulados
+function drawSavings(root) {
+  const sel = root.querySelector("#sav-scope");
+  if (!sel) return;
+  const accts = getState().accounts || [];
+  const withMovs = accts.filter((a) => (a.movs || []).length);
+  if (savScope !== "all" && !withMovs.some((a) => a.id === savScope)) savScope = "all";
+  sel.innerHTML = `<option value="all" ${savScope === "all" ? "selected" : ""}>Todas</option>` +
+    withMovs.map((a) => `<option value="${a.id}" ${savScope === a.id ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("");
+  sel.onchange = (e) => { savScope = e.target.value; drawSavings(root); };
+
+  const wrap = root.querySelector("#sav-wrap");
+  const ser = savingsSeries(accts, savScope);
+  if (!ser) {
+    wrap.innerHTML = `<div class="muted small">Registra el saldo unas semanas (con "Actualizar saldo") para ver aquí cómo crece tu dinero.</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <div class="chart-box" style="height:200px"><canvas id="ch-sav"></canvas></div>
+    <div class="row gap-2 mt-2">
+      <div class="kpi flex1"><div class="k-label">Rendimientos</div><div class="k-val sm" style="color:var(--green)">↑ ${fmt(ser.rend)}</div></div>
+      <div class="kpi flex1"><div class="k-label">Aportes</div><div class="k-val sm">${fmt(ser.aportes)}</div></div>
+    </div>`;
+  lineTrend("ch-sav", ser.labels, ser.values);
 }
 
 function drawList(root) {

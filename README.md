@@ -4,7 +4,7 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v70.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v71.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v70**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v71**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v71 — Cuentas: gráfica "Así ha crecido tu dinero"
+- 📈 Nueva tarjeta en **Cuentas** con la **evolución del saldo** en el tiempo (reconstruida de los movimientos de "Actualizar saldo"), con selector por cuenta o Todas. Debajo muestra **Rendimientos** y **Aportes** acumulados. Aparece cuando hay al menos 2 fechas con movimientos registrados.
 
 ### 2026-08-24 · caché v70 — Cuentas: actualizar saldo (rendimiento) + recordatorio semanal
 - 📈 Nuevo botón **Actualizar saldo** en cada cuenta: escribes el nuevo total que ves en el banco y la app calcula sola el **rendimiento** (cuánto creció) y separa cualquier **aporte extra** con su nota. Ambos quedan como movimientos de la cuenta (tipo `rendimiento`/`aporte`), sin afectar gastos ni ingresos. Estilo "Así ha crecido tu dinero" de Nu.
