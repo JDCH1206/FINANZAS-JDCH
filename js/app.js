@@ -3,6 +3,7 @@ import { getState, setState } from "./state.js";
 import { onAuth, subscribeData, isCloud, loadOblig } from "./firebase-service.js";
 import { todayISO } from "./utils.js";
 import { OBLIG_TIPOS } from "./config.js";
+import { acctNeedsUpdate } from "./views/accounts.js";
 import { showReminders } from "./notify.js";
 import * as fbsvc from "./firebase-service.js";
 import { renderLogin } from "./views/login.js";
@@ -244,25 +245,37 @@ function computeReminders(oblig, maint, vehicles, today) {
   return out;
 }
 
-// badge en "Más" + notificación de recordatorios (una vez al día)
+// recordatorios de cuentas por actualizar (rendimiento semanal · sugerido viernes)
+function accountReminderItems() {
+  const s = getState();
+  const today = todayISO();
+  return (s.accounts || []).filter((a) => acctNeedsUpdate(a, today))
+    .map((a) => `Actualiza el saldo de ${a.name}${a.lastSaldoUpdate ? "" : " (sin registrar aún)"}`);
+}
+
+// badge en "Más" (solo vehículos) + notificación de recordatorios (una vez al día)
+// Combina avisos de vehículos y de cuentas en una sola notificación diaria.
 async function checkVehicleAlerts() {
   const s = getState();
-  if (!s.vehiclesEnabled) return;
+  const acctItems = accountReminderItems();
+  let vehItems = [];
   try {
-    const [obl, maint] = await Promise.all([fbsvc.loadOblig(s.user.uid), fbsvc.loadMaint(s.user.uid)]);
-    const items = computeReminders(obl, maint, s.vehicles, todayISO());
-    const moreBtn = document.querySelector('#nav button[data-route="more"]');
-    if (moreBtn) {
-      moreBtn.querySelector(".nav-badge")?.remove(); // recalcular: quitar y volver a poner
-      if (items.length > 0) {
-        const badge = document.createElement("span");
-        badge.className = "nav-badge"; badge.textContent = items.length;
-        badge.style.cssText = "position:absolute;top:3px;right:14px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;line-height:1;padding:2px 5px;font-weight:700";
-        moreBtn.style.position = "relative";
-        moreBtn.appendChild(badge);
+    if (s.vehiclesEnabled) {
+      const [obl, maint] = await Promise.all([fbsvc.loadOblig(s.user.uid), fbsvc.loadMaint(s.user.uid)]);
+      vehItems = computeReminders(obl, maint, s.vehicles, todayISO());
+      const moreBtn = document.querySelector('#nav button[data-route="more"]');
+      if (moreBtn) {
+        moreBtn.querySelector(".nav-badge")?.remove(); // recalcular: quitar y volver a poner
+        if (vehItems.length > 0) {
+          const badge = document.createElement("span");
+          badge.className = "nav-badge"; badge.textContent = vehItems.length;
+          badge.style.cssText = "position:absolute;top:3px;right:14px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;line-height:1;padding:2px 5px;font-weight:700";
+          moreBtn.style.position = "relative";
+          moreBtn.appendChild(badge);
+        }
       }
     }
-    showReminders(items, todayISO());
+    showReminders([...acctItems, ...vehItems], todayISO());
   } catch (e) { /* noop */ }
 }
 

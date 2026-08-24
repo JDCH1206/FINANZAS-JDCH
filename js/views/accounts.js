@@ -12,10 +12,31 @@ const persist = debounce(async () => {
   forcePersistLocal(s.user.uid);
 }, 500);
 
+// cuentas que ganan rendimiento y conviene actualizar cada semana
+const YIELD_TYPES = ["Ahorro", "Inversión", "Corriente"];
+// días entre dos fechas ISO (b - a)
+export function daysBetweenISO(a, b) {
+  if (!a || !b) return 999;
+  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+}
+// ¿esta cuenta necesita que registres su saldo esta semana?
+export function acctNeedsUpdate(a, today) {
+  if (!YIELD_TYPES.includes(a.type)) return false;
+  if (!a.lastSaldoUpdate) return true;
+  const d = daysBetweenISO(a.lastSaldoUpdate, today);
+  const isFriday = new Date(today + "T00:00:00").getDay() === 5;
+  return d >= 7 || (isFriday && d >= 5);
+}
+// total que ha "crecido tu dinero" en una cuenta (suma de rendimientos registrados)
+const rendTotal = (a) => sum((a.movs || []).filter((m) => m.kind === "rendimiento"), (m) => m.amount);
+
 export function renderAccounts(root) {
   const s = getState();
   const accts = s.accounts || [];
   const total = sum(accts, (a) => a.balance);
+  const today = todayISO();
+  const pend = accts.filter((a) => acctNeedsUpdate(a, today));
+  const rendGlobal = sum(accts, (a) => rendTotal(a));
 
   root.innerHTML = `
     <h2 class="page-title disp">Cuentas y ahorro</h2>
@@ -24,7 +45,17 @@ export function renderAccounts(root) {
     <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)">
       <div class="k-label">Total disponible</div>
       <div class="k-val">${fmt(total)}</div>
+      ${rendGlobal ? `<div class="tiny" style="color:var(--green);margin-top:4px">↑ ${fmt(rendGlobal)} registrado en rendimientos</div>` : ""}
     </div>
+
+    ${pend.length ? `<div class="card mb-3" style="border:1px solid var(--gold)">
+      <div class="card-title">📈 Actualiza el saldo de esta semana</div>
+      <p class="tiny muted" style="margin:-4px 0 10px">Registra cuánto crecieron tus cuentas (rendimientos) y cualquier aporte extra. Se sugiere cada viernes.</p>
+      ${pend.map((a) => `<div class="row between" style="align-items:center;padding:7px 0;border-top:1px solid var(--line)">
+        <div class="flex1" style="min-width:0"><div class="small bold ellipsis">${escapeHtml(a.name)}</div>
+          <div class="tiny muted">${a.lastSaldoUpdate ? "hace " + daysBetweenISO(a.lastSaldoUpdate, today) + " días" : "sin registrar aún"}</div></div>
+        <button class="btn btn-primary btn-sm" data-upd="${a.id}">Actualizar</button></div>`).join("")}
+    </div>` : ""}
 
     ${accts.length ? `<div class="card mb-3"><div class="card-title">Distribución por cuenta</div>
       <div class="chart-box" style="height:210px"><canvas id="ch-acct"></canvas></div>
@@ -39,6 +70,7 @@ export function renderAccounts(root) {
     </div>`;
 
   root.querySelector("#add-acct").onclick = () => openAcctModal(root);
+  root.querySelectorAll("[data-upd]").forEach((b) => b.onclick = () => openUpdateModal(root, b.getAttribute("data-upd")));
   drawList(root);
 
   if (accts.length) {
@@ -59,19 +91,25 @@ function drawList(root) {
   const s = getState();
   const host = root.querySelector("#acct-list");
   const accts = s.accounts || [];
+  const today = todayISO();
   if (!accts.length) { host.innerHTML = `<div class="muted small">Aún no tienes cuentas. Agrega tu cuenta de ahorros, efectivo, etc.</div>`; return; }
   host.innerHTML = accts.map((a, i) => {
     const nMovs = (a.movs || []).length;
+    const meta = [escapeHtml(a.type)];
+    if (a.lastSaldoUpdate) meta.push("act. hace " + daysBetweenISO(a.lastSaldoUpdate, today) + "d");
+    if (nMovs) meta.push(nMovs + " movim.");
     return `
     <div class="tx-row">
       <span class="tx-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
-      <div class="flex1"><div class="tx-desc">${escapeHtml(a.name)}</div><div class="tx-meta">${escapeHtml(a.type)}${nMovs ? ` · ${nMovs} movim.` : ""}</div></div>
+      <div class="flex1"><div class="tx-desc">${escapeHtml(a.name)}</div><div class="tx-meta">${meta.join(" · ")}</div></div>
       <div class="tx-amt">${fmt(a.balance)}</div>
+      <button class="icon-btn" data-upd="${a.id}" aria-label="Actualizar saldo" title="Actualizar saldo / rendimiento"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5"/></svg></button>
       <button class="icon-btn" data-mov="${a.id}" aria-label="Movimientos de la cuenta" title="Sumar o restar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
       <button class="icon-btn" data-edit="${a.id}" aria-label="Editar cuenta"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
       <button class="icon-btn" data-del="${a.id}" aria-label="Eliminar cuenta"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
     </div>`;
   }).join("");
+  host.querySelectorAll("[data-upd]").forEach((b) => b.onclick = () => openUpdateModal(root, b.getAttribute("data-upd")));
   host.querySelectorAll("[data-mov]").forEach((b) => b.onclick = () => openMovsModal(root, b.getAttribute("data-mov")));
   host.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openAcctModal(root, accts.find((a) => a.id === b.getAttribute("data-edit"))));
   host.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => confirmDialog("¿Eliminar esta cuenta?", () => {
@@ -102,44 +140,111 @@ function openAcctModal(root, acct) {
   });
 }
 
-// Movimientos propios de la cuenta: sumas/restas manuales con una breve nota.
+// ===================== ACTUALIZAR SALDO (rendimiento semanal + aporte) =====================
+// Escribes el nuevo total que ves en el banco; la app calcula el rendimiento y separa
+// cualquier aporte extra. Todo queda como movimientos de la cuenta (no toca gastos/ingresos).
+function openUpdateModal(root, acctId) {
+  const s = getState();
+  const acct = (s.accounts || []).find((a) => a.id === acctId);
+  if (!acct) return;
+  const anterior = +acct.balance || 0;
+
+  openModal(`Actualizar saldo · ${escapeHtml(acct.name)}`, `
+    <div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)">
+      <span class="small muted">Saldo anterior</span><span class="small bold">${fmt(anterior)}</span></div>
+    <div class="field mt-3"><label class="label">Nuevo saldo total (lo que ves en el banco)</label>
+      <input id="u-new" class="input" type="number" inputmode="numeric" placeholder="0"></div>
+    <div class="field"><label class="label">¿Agregaste dinero extra? (aporte, opcional)</label>
+      <input id="u-aporte" class="input" type="number" inputmode="numeric" placeholder="0"></div>
+    <div class="field"><label class="label">Nota del aporte (opcional)</label>
+      <input id="u-nota" class="input" placeholder="Ej: aporte quincena, traslado"></div>
+    <div class="field"><label class="label">Fecha</label><input id="u-date" class="input" type="date" value="${todayISO()}"></div>
+
+    <div class="card mb-3" id="u-preview" style="background:var(--panel-2)">
+      <div class="row between small"><span class="muted">Aporte extra</span><span id="pv-aporte" class="bold">$0</span></div>
+      <div class="row between small mt-1"><span class="muted">Rendimiento (crecimiento)</span><span id="pv-rend" class="bold">$0</span></div>
+    </div>
+    <button id="u-save" class="btn btn-primary btn-block">Registrar</button>`, {
+    onMount(b) {
+      const newIn = b.querySelector("#u-new"), apIn = b.querySelector("#u-aporte");
+      const pvA = b.querySelector("#pv-aporte"), pvR = b.querySelector("#pv-rend");
+      const calc = () => {
+        const nuevo = +newIn.value || 0, aporte = Math.max(0, +apIn.value || 0);
+        const rend = nuevo - anterior - aporte;
+        pvA.textContent = fmt(aporte);
+        pvR.textContent = (rend >= 0 ? "+" : "−") + fmt(Math.abs(rend));
+        pvR.style.color = rend >= 0 ? "var(--green)" : "var(--red)";
+      };
+      newIn.addEventListener("input", calc); apIn.addEventListener("input", calc); calc();
+
+      submitOnce(b.querySelector("#u-save"), async () => {
+        const nuevo = +newIn.value;
+        if (!newIn.value || nuevo < 0) return toast("Escribe el nuevo saldo total", true);
+        const aporte = Math.max(0, +apIn.value || 0);
+        const date = b.querySelector("#u-date").value || todayISO();
+        const nota = b.querySelector("#u-nota").value.trim();
+        const rend = nuevo - anterior - aporte;
+        const nuevosMovs = [];
+        if (rend !== 0) nuevosMovs.push({ id: uid(), date, amount: rend, note: "Rendimiento", kind: "rendimiento" });
+        if (aporte > 0) nuevosMovs.push({ id: uid(), date, amount: aporte, note: nota || "Aporte", kind: "aporte" });
+        const st = getState();
+        setState({ accounts: st.accounts.map((a) => a.id === acctId
+          ? { ...a, balance: nuevo, lastSaldoUpdate: date, movs: [...nuevosMovs, ...(a.movs || [])] } : a) });
+        persist(); closeModal(); renderAccounts(root);
+        toast(`Saldo actualizado · rendimiento ${rend >= 0 ? "+" : "−"}${fmt(Math.abs(rend))}`);
+      });
+    },
+  });
+}
+
+// ===================== MOVIMIENTOS MANUALES (sumar / restar con nota) =====================
 // Ajustan SOLO el saldo de esta cuenta; NO son gastos ni ingresos (no tocan txs/incomes).
+function movLabel(m) {
+  if (m.kind === "rendimiento") return "Rendimiento";
+  if (m.kind === "aporte") return m.note || "Aporte";
+  return m.note || ((+m.amount || 0) >= 0 ? "Suma" : "Resta");
+}
 function openMovsModal(root, acctId) {
   const s = getState();
   const acct = (s.accounts || []).find((a) => a.id === acctId);
   if (!acct) return;
   const movs = (acct.movs || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.id > a.id ? 1 : -1));
+  const rend = rendTotal(acct);
 
   const listHtml = movs.length
     ? movs.map((m) => {
         const pos = (+m.amount || 0) >= 0;
+        const tag = m.kind === "rendimiento" ? " · rend." : m.kind === "aporte" ? " · aporte" : "";
         return `<div class="tx-row">
-          <div class="flex1"><div class="tx-desc">${escapeHtml(m.note || (pos ? "Suma" : "Resta"))}</div><div class="tx-meta">${fmtDate(m.date)}</div></div>
+          <div class="flex1"><div class="tx-desc">${escapeHtml(movLabel(m))}</div><div class="tx-meta">${fmtDate(m.date)}${tag}</div></div>
           <div class="tx-amt" style="color:${pos ? "var(--green)" : "var(--red)"}">${pos ? "+" : "−"}${fmt(Math.abs(m.amount))}</div>
           <button class="icon-btn" data-delmov="${m.id}" aria-label="Eliminar movimiento"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
         </div>`;
       }).join("")
-    : `<div class="muted small">Sin movimientos aún. Registra una suma o resta arriba.</div>`;
+    : `<div class="muted small">Sin movimientos aún. Registra una suma o resta arriba, o usa "Actualizar saldo".</div>`;
 
   openModal(`Movimientos · ${escapeHtml(acct.name)}`, `
     <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)">
       <div class="k-label">Saldo actual</div><div class="k-val">${fmt(acct.balance)}</div>
+      ${rend ? `<div class="tiny" style="color:var(--green);margin-top:4px">↑ ${fmt(rend)} en rendimientos</div>` : ""}
     </div>
-    <p class="tiny muted mb-3">Estos movimientos ajustan solo el saldo de esta cuenta. No afectan tus gastos ni ingresos.</p>
+    <button id="m-updbtn" class="btn btn-primary btn-block mb-3">📈 Actualizar saldo (rendimiento / aporte)</button>
+    <p class="tiny muted mb-3">O registra un ajuste manual. Nada de esto afecta tus gastos ni ingresos.</p>
 
     <div class="field"><label class="label">Tipo</label>
       <div class="row gap-2"><button type="button" class="chip on flex1" data-tipo="suma">Sumar (+)</button>
         <button type="button" class="chip flex1" data-tipo="resta">Restar (−)</button></div></div>
     <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" inputmode="numeric" placeholder="0"></div>
-    <div class="field"><label class="label">Descripción (breve)</label><input id="m-note" class="input" placeholder="Ej: ajuste de saldo, traslado, intereses"></div>
+    <div class="field"><label class="label">Descripción (breve)</label><input id="m-note" class="input" placeholder="Ej: ajuste de saldo, traslado"></div>
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${todayISO()}"></div>
-    <button id="m-save" class="btn btn-primary btn-block mb-3">Registrar movimiento</button>
+    <button id="m-save" class="btn btn-ghost btn-block mb-3">Registrar movimiento manual</button>
 
     <div class="card-title" style="margin:0 0 8px">Historial</div>
     <div id="m-list">${listHtml}</div>`, {
     onMount(b) {
       let tipo = "suma";
       moneyPreview(b.querySelector("#m-amt"));
+      b.querySelector("#m-updbtn").onclick = () => { closeModal(); openUpdateModal(root, acctId); };
       b.querySelectorAll("[data-tipo]").forEach((c) => c.onclick = () => {
         tipo = c.getAttribute("data-tipo");
         b.querySelectorAll("[data-tipo]").forEach((x) => x.classList.toggle("on", x === c));
@@ -151,7 +256,7 @@ function openMovsModal(root, acctId) {
         const note = b.querySelector("#m-note").value.trim();
         const date = b.querySelector("#m-date").value || todayISO();
         const signed = tipo === "resta" ? -amt : amt;
-        const mov = { id: uid(), date, amount: signed, note };
+        const mov = { id: uid(), date, amount: signed, note, kind: tipo };
         const st = getState();
         setState({ accounts: st.accounts.map((a) => a.id === acctId
           ? { ...a, balance: (+a.balance || 0) + signed, movs: [mov, ...(a.movs || [])] } : a) });

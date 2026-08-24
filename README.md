@@ -74,7 +74,12 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v69**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v70**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v70 — Cuentas: actualizar saldo (rendimiento) + recordatorio semanal
+- 📈 Nuevo botón **Actualizar saldo** en cada cuenta: escribes el nuevo total que ves en el banco y la app calcula sola el **rendimiento** (cuánto creció) y separa cualquier **aporte extra** con su nota. Ambos quedan como movimientos de la cuenta (tipo `rendimiento`/`aporte`), sin afectar gastos ni ingresos. Estilo "Así ha crecido tu dinero" de Nu.
+- 🔔 **Recordatorio semanal** (sugerido cada viernes): la vista de Cuentas muestra una tarjeta con las cuentas de Ahorro/Inversión/Corriente pendientes de actualizar (≥7 días, o el viernes desde 5 días), con botón directo. Si tienes las notificaciones activadas, también llega el aviso una vez al día, junto con los de vehículos.
+- 💹 El total disponible y el detalle por cuenta muestran cuánto llevas registrado en **rendimientos**. Cada fila indica hace cuántos días se actualizó.
 
 ### 2026-08-19 · caché v69 — Cuentas: movimientos propios (sumar/restar) con nota
 - 💳 Cada cuenta en **Cuentas** tiene ahora un botón **+** para registrar **movimientos propios**: sumar o restar dinero al saldo con una **breve descripción** y fecha. Ajustan solo el saldo de esa cuenta y **no** afectan tus **gastos ni ingresos** (son aparte). Incluye historial por cuenta con opción de eliminar cada movimiento (revierte el saldo), y el conteo de movimientos se muestra bajo el nombre de la cuenta.
