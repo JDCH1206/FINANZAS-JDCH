@@ -3,8 +3,8 @@ import { getState, setState, dataSnapshot } from "../state.js";
 import { saveConfig, bulkSetTx, bulkSetIncomes, signOutUser, isCloud, forcePersistLocal,
   loadFuel, loadMaint, loadOblig, bulkSetAllFuel, bulkSetAllMaint, bulkSetAllOblig,
   persistFuelLocal, persistMaintLocal, persistObligLocal } from "../firebase-service.js";
-import { classify, classifyIncome, DEFAULT_PAY_METHODS } from "../config.js";
-import { uid, normDate, escapeHtml, fmt } from "../utils.js";
+import { classify, classifyIncome, DEFAULT_PAY_METHODS, RULE_503020 } from "../config.js";
+import { uid, normDate, escapeHtml, fmt, ym, monthLabel, curMonth, sum, todayISO } from "../utils.js";
 import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview } from "../components/modals.js";
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 
@@ -41,6 +41,12 @@ export function renderSettings(root, onSignOut) {
         <button id="imp-btn" class="btn btn-ghost btn-sm">⬆ Restaurar respaldo</button>
         <button id="exp-xls" class="btn btn-ghost btn-sm">⬇ Exportar a Excel</button>
       </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-title">Reporte mensual (PDF)</div>
+      <p class="small muted mb-3">Genera el reporte de un mes (resumen, regla 50/30/20 y top categorías) listo para <b>imprimir o guardar como PDF</b> desde el diálogo de impresión del navegador.</p>
+      <button id="rep-btn" class="btn btn-ghost btn-sm">🖨️ Generar reporte</button>
     </div>
 
     <div class="card mb-3">
@@ -114,6 +120,9 @@ export function renderSettings(root, onSignOut) {
     await saveConfig(s.user.uid, { profile, cats: s.cats, budgets: s.budgets }); forcePersistLocal(s.user.uid);
     toast("Perfil guardado");
   };
+
+  // reporte mensual (PDF vía impresión del navegador)
+  root.querySelector("#rep-btn").onclick = () => openReportModal();
 
   // import excel
   const xls = root.querySelector("#xls");
@@ -385,6 +394,97 @@ export function renderSettings(root, onSignOut) {
     await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: getState().payMethods }); forcePersistLocal(s.user.uid);
     root.querySelector("#pay-new").value = ""; drawPays(); toast("Medio agregado");
   };
+}
+
+/* ===================== REPORTE MENSUAL (PDF) ===================== */
+// Usa la impresión del navegador (Guardar como PDF). Cero dependencias.
+function ensurePrintStyle() {
+  if (document.getElementById("print-style")) return;
+  const st = document.createElement("style"); st.id = "print-style";
+  st.textContent = `#print-area{display:none}
+    @media print{ html,body{background:#fff!important} body>#app,#fab,.toast,.modal-bg,#install-bar,#offline-bar{display:none!important}
+    #print-area{display:block!important} }`;
+  document.head.appendChild(st);
+}
+
+function openReportModal() {
+  const s = getState();
+  const months = [...new Set(s.txs.map((t) => ym(t.date)).filter(Boolean)), curMonth()];
+  const allMonths = [...new Set(months)].sort().reverse();
+  openModal("Reporte mensual", `
+    <div class="field"><label class="label">Mes</label>
+      <select id="rep-mes" class="input">${allMonths.map((m) => `<option value="${m}">${monthLabel(m)}</option>`).join("")}</select></div>
+    <p class="tiny muted mb-3">Se abrirá el diálogo de impresión: elige <b>"Guardar como PDF"</b> como destino para archivarlo o compartirlo.</p>
+    <button id="rep-go" class="btn btn-primary btn-block">Generar</button>`, {
+    onMount(b) {
+      b.querySelector("#rep-go").onclick = () => {
+        const mes = b.querySelector("#rep-mes").value;
+        closeModal();
+        printReport(mes);
+      };
+    },
+  });
+}
+
+function printReport(mes) {
+  ensurePrintStyle();
+  let pa = document.getElementById("print-area");
+  if (!pa) { pa = document.createElement("div"); pa.id = "print-area"; document.body.appendChild(pa); }
+  pa.innerHTML = buildReportHTML(getState(), mes);
+  window.print();
+}
+
+function buildReportHTML(s, mes) {
+  const inMes = s.incomes.filter((t) => ym(t.date) === mes);
+  const exMes = s.txs.filter((t) => ym(t.date) === mes);
+  const ing = sum(inMes, (t) => t.amount), gas = sum(exMes, (t) => t.amount), bal = ing - gas;
+  const tasa = ing ? (bal / ing) * 100 : 0;
+
+  const typeMap = Object.fromEntries(s.cats.map((c) => [c.name, c.type]));
+  const buck = { Necesidad: 0, Deseo: 0, Deuda: 0 };
+  exMes.forEach((t) => { const ty = typeMap[t.cat]; if (ty) buck[ty] += (+t.amount || 0); });
+
+  const byCat = {};
+  exMes.forEach((t) => { byCat[t.cat] = (byCat[t.cat] || 0) + (+t.amount || 0); });
+  const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  const accts = s.accounts || [];
+  const disp = sum(accts, (a) => a.balance);
+
+  const c = { ink: "#1a1a1a", sub: "#666", line: "#ddd", gold: "#9a6a1a", green: "#2f7d46", red: "#b34a30" };
+  const row = (k, v, col) => `<tr><td style="padding:6px 0;border-top:1px solid ${c.line};color:${c.sub}">${escapeHtml(k)}</td><td style="padding:6px 0;border-top:1px solid ${c.line};text-align:right;font-weight:600;color:${col || c.ink}">${v}</td></tr>`;
+  const lbl503 = { Necesidad: "Necesidades", Deseo: "Deseos", Deuda: "Deuda/Inversión" };
+
+  return `<div style="max-width:720px;margin:0 auto;padding:28px 30px;font-family:Georgia,'Times New Roman',serif;color:${c.ink};background:#fff">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid ${c.gold};padding-bottom:10px;margin-bottom:18px">
+      <div><div style="font-size:22px;font-weight:700">Finanzas JDCH</div>
+        <div style="color:${c.sub};font-size:13px">Reporte de ${escapeHtml(monthLabel(mes))}</div></div>
+      <div style="text-align:right;color:${c.sub};font-size:12px">Generado ${escapeHtml(todayISO())}<br>${escapeHtml(s.profile.name || "")}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+      ${[["Ingresos", fmt(ing), c.green], ["Gastos", fmt(gas), c.red], ["Balance", fmt(bal), bal >= 0 ? c.green : c.red], ["Tasa ahorro", (ing ? tasa.toFixed(0) : "—") + "%", c.ink]]
+        .map(([k, v, col]) => `<div style="border:1px solid ${c.line};border-radius:8px;padding:10px"><div style="font-size:11px;color:${c.sub};text-transform:uppercase;letter-spacing:.04em">${k}</div><div style="font-size:17px;font-weight:700;color:${col}">${v}</div></div>`).join("")}
+    </div>
+
+    <h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">Regla 50/30/20</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
+      ${["Necesidad", "Deseo", "Deuda"].map((bk) => { const pct = gas ? (buck[bk] / gas) * 100 : 0; return row(`${lbl503[bk]} (ref ${RULE_503020[bk]}%)`, `${fmt(buck[bk])} · ${pct.toFixed(0)}%`); }).join("")}
+    </table>
+
+    <h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">Top categorías del mes</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
+      ${topCats.length ? topCats.map(([n, v]) => row(n, `${fmt(v)} · ${gas ? ((v / gas) * 100).toFixed(0) : 0}%`)).join("") : `<tr><td style="padding:6px 0;color:${c.sub}">Sin gastos este mes</td></tr>`}
+    </table>
+
+    ${accts.length ? `<h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">Cuentas (saldo actual)</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      ${accts.map((a) => row(`${a.name} · ${a.type}`, fmt(a.balance))).join("")}
+      ${row("Total disponible", fmt(disp), c.gold)}
+    </table>` : ""}
+
+    <div style="margin-top:24px;color:${c.sub};font-size:11px;border-top:1px solid ${c.line};padding-top:8px">Generado por Finanzas JDCH · guía general, no asesoría financiera.</div>
+  </div>`;
 }
 
 /* ===================== GASTOS RECURRENTES ===================== */

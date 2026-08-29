@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v78.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v79.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v78). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v79). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v78**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v79**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v79 — Ajustes: reporte mensual (PDF)
+- 🖨️ Nuevo **Reporte mensual** en Ajustes: eliges un mes y se genera una hoja (resumen ingresos/gastos/balance/tasa, regla 50/30/20, top categorías y saldos de cuentas) lista para **imprimir o "Guardar como PDF"** desde el diálogo del navegador. Sin dependencias: usa `window.print()` con un `@media print` que oculta la app y muestra solo el reporte. Funciones `openReportModal`/`printReport`/`buildReportHTML`.
 
 ### 2026-08-24 · caché v78 — Tablero: calendario / mapa de calor
 - 🗓️ Nueva pestaña **Calendario** en el Tablero: una grilla del mes donde cada día se colorea según cuánto gastaste (más intenso = más gasto), con selector de mes, total y días con gasto. Tocar un día abre la lista de sus movimientos. El día de hoy va resaltado en dorado. Funciones `renderCalendar`/`openDayModal`.
@@ -334,7 +337,7 @@ Cada módulo es una vista en `js/views/`. Formato: **para qué · cómo se usa �
   - **Borrado seguro**: eliminar un registro del módulo **nunca borra el gasto** de Movimientos — solo quita la asociación (y el aviso lo explica).
   - **Desglose de gasto por vehículo** *(v72)*: en la tarjeta del vehículo, la línea **"Gasto asociado a este vehículo ›"** es tocable y abre un modal (dona + barras + conteo) que reparte el total en **Combustible · Mantenimiento · Lavado · Obligaciones · Otros**. Clasifica cada gasto etiquetado por su vínculo (`fuelId`→Combustible, `maintId`→Mantenimiento, `obligId`→Obligaciones), luego por la **subcategoría exacta "Lavado"** *(v73)* y, como respaldo, por la palabra `lavad…` en subcategoría/descripción; si nada aplica, en Otros. Función `openVehicleBreakdown`.
   - *Estado:* `activeFuelVid`/`activeMaintVid`/`activeObligVid` (qué bitácora se ve) y cachés `allFuel`/`allMaint`/`allOblig` (se cargan bajo demanda, no en tiempo real).
-- **Ajustes** (`settings.js`) — *Para qué:* configuración y datos. *Cómo se usa:* editar perfil, importar Excel o **JSON** de gastos/ingresos (reemplaza, con confirmación), respaldar/restaurar (JSON, incluye recurrentes), exportar, medios de pago, **gastos recurrentes** (CRUD: descripción, monto, categoría, día del mes → alimentan la tarjeta de Movimientos), **Recordatorios** (activar/desactivar notificaciones), tema claro/oscuro, activar/desactivar Vehículos, guía de ayuda y cerrar sesión.
+- **Ajustes** (`settings.js`) — *Para qué:* configuración y datos. *Cómo se usa:* editar perfil, importar Excel o **JSON** de gastos/ingresos (reemplaza, con confirmación), respaldar/restaurar (JSON, incluye recurrentes), exportar, **reporte mensual en PDF** *(v79, vía impresión del navegador)*, medios de pago, **gastos recurrentes** (CRUD: descripción, monto, categoría, día del mes → alimentan la tarjeta de Movimientos), **Recordatorios** (activar/desactivar notificaciones), tema claro/oscuro, activar/desactivar Vehículos, guía de ayuda y cerrar sesión.
 
 ### Modelo de datos en Firestore (`users/{uid}`)
 - **Doc del usuario** (config en campos): `profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes`.
