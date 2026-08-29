@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v74.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v75.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v74). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v75). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v74**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v75**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v75 — Cuentas: transferencias entre cuentas
+- ⇄ Nuevo botón **Transferir** en Cuentas (con ≥2 cuentas): mueve dinero de una cuenta a otra en un paso (resta en origen, suma en destino), con nota y fecha. Crea dos movimientos enlazados (`kind:"transfer"`, mismo `transferId`) que muestran "→ destino" / "← origen". Al **eliminar** una de las dos patas se borran ambas y se revierten los dos saldos. No afecta gastos ni ingresos.
 
 ### 2026-08-24 · caché v74 — Movimientos: filtros por cuenta y medio de pago + fix asociación
 - 🔎 En **Movimientos** (pestaña Gastos) hay dos filtros nuevos: **por cuenta** y **por medio de pago**, junto a los de mes, categoría y monto. "Limpiar" también los reinicia.
@@ -309,6 +312,7 @@ Cada módulo es una vista en `js/views/`. Formato: **para qué · cómo se usa �
 - **Cuentas** (`accounts.js`) — *Para qué:* saldos de tus cuentas (ahorro, efectivo, inversión, por cobrar…) y cómo crecen. *Cómo se usa:* CRUD de cuentas con su saldo; alimenta el "disponible" del Resumen. Cada cuenta tiene tres acciones propias (además de editar/eliminar):
   - **↻ Actualizar saldo** *(v70)* — para cuentas que rinden (Nu, Banco Caja Social…). Escribes el **nuevo total que ves en el banco** y, si agregaste plata, el **aporte extra** con su nota. La app calcula solo: `rendimiento = nuevo − anterior − aporte`, y guarda hasta dos movimientos (`kind:"rendimiento"` y `kind:"aporte"`), fija el `balance` al nuevo total y anota `lastSaldoUpdate`. Es el equivalente a "Así ha crecido tu dinero" de Nu. **No toca gastos ni ingresos.**
   - **± Movimiento manual** *(v69)* — sumar o restar al saldo con una **breve descripción** y fecha (`kind:"suma"`/`"resta"`). Historial por cuenta con opción de eliminar cada movimiento (revierte el saldo). Tampoco afecta gastos ni ingresos.
+  - **⇄ Transferir** *(v75)* — botón en la cabecera (con ≥2 cuentas): mueve dinero de una cuenta a otra (resta en origen, suma en destino) con nota y fecha. Crea dos movimientos enlazados (`kind:"transfer"`, mismo `transferId`); borrar una pata borra ambas y revierte los dos saldos. `openTransferModal`.
   - **Recordatorio semanal (sugerido viernes)** *(v70)* — la vista muestra arriba una tarjeta **📈 Actualiza el saldo de esta semana** con las cuentas de tipo Ahorro/Inversión/Corriente pendientes (`acctNeedsUpdate`: ≥7 días desde `lastSaldoUpdate`, o el viernes desde 5 días, o sin registrar), cada una con botón directo. Si las notificaciones están activadas, también llega el aviso diario junto con los de vehículos (ver `app.js`).
   - **Gráfica "Así ha crecido tu dinero"** *(v71)* — tarjeta con la **evolución del saldo** en el tiempo (reconstruida de los movimientos: se ancla al saldo actual y se resta hacia atrás, un punto por fecha con movimiento), con selector por cuenta o **Todas**; debajo, **Rendimientos** y **Aportes** acumulados. Aparece con ≥2 fechas registradas.
   - *Estado y funciones:* `savScope` (ámbito de la gráfica); exporta `daysBetweenISO` y `acctNeedsUpdate` (las usa `app.js`); helpers internos `rendTotal`, `savingsSeries`, `openUpdateModal`, `openMovsModal`. Guarda con `debounce` (los movimientos viven dentro de cada cuenta en el doc de config, no en una subcolección).
@@ -325,7 +329,7 @@ Cada módulo es una vista en `js/views/`. Formato: **para qué · cómo se usa �
 ### Modelo de datos en Firestore (`users/{uid}`)
 - **Doc del usuario** (config en campos): `profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes`.
 - **Subcolecciones** (crecen): `transactions`, `incomes`, `fuel`, `maintenance`, `obligations`. Los registros de fuel/maint/oblig llevan `vehicleId`; los gastos enlazados llevan `vehicleId` + `fuelId`/`maintId`/`obligId`.
-- **Cuenta** (`accounts[]`): `{ id, name, type, balance, movs?: [...], lastSaldoUpdate?: "YYYY-MM-DD" }`. Los **movimientos propios** viven dentro de la cuenta (no en subcolección), cada uno `{ id, date, amount, note, kind }` con `kind ∈ { "rendimiento", "aporte", "suma", "resta" }`; `amount` es con signo (positivo suma, negativo resta). El `balance` es el saldo actual y se mantiene consistente con esos movimientos; los `kind:"suma"/"resta"` provienen del **movimiento manual** *(v69)* y los `kind:"rendimiento"/"aporte"` de **Actualizar saldo** *(v70)*. **Ninguno** de estos movimientos entra en `transactions`/`incomes` (son ajustes de saldo, no gastos ni ingresos).
+- **Cuenta** (`accounts[]`): `{ id, name, type, balance, movs?: [...], lastSaldoUpdate?: "YYYY-MM-DD" }`. Los **movimientos propios** viven dentro de la cuenta (no en subcolección), cada uno `{ id, date, amount, note, kind }` con `kind ∈ { "rendimiento", "aporte", "suma", "resta", "transfer" }`; `amount` es con signo (positivo suma, negativo resta). Los de `kind:"transfer"` llevan además `transferId` que enlaza las dos patas (origen/destino) de una transferencia *(v75)*. El `balance` es el saldo actual y se mantiene consistente con esos movimientos; los `kind:"suma"/"resta"` provienen del **movimiento manual** *(v69)* y los `kind:"rendimiento"/"aporte"` de **Actualizar saldo** *(v70)*. **Ninguno** de estos movimientos entra en `transactions`/`incomes` (son ajustes de saldo, no gastos ni ingresos).
 
 ## Control de versiones y despliegue (GitHub + Firebase)
 El proyecto incluye `firebase.json`, `.firebaserc` y `.github/workflows/deploy.yml` para:

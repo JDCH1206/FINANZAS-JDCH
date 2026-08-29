@@ -95,11 +95,14 @@ export function renderAccounts(root) {
 
     <div class="card mb-3">
       <div class="row between mb-3"><div class="card-title" style="margin:0">Tus cuentas</div>
-        <button id="add-acct" class="btn btn-primary btn-sm">+ Cuenta</button></div>
+        <div class="row gap-2">
+          ${accts.length >= 2 ? `<button id="transfer-acct" class="btn btn-ghost btn-sm">⇄ Transferir</button>` : ""}
+          <button id="add-acct" class="btn btn-primary btn-sm">+ Cuenta</button></div></div>
       <div id="acct-list"></div>
     </div>`;
 
   root.querySelector("#add-acct").onclick = () => openAcctModal(root);
+  const trBtn = root.querySelector("#transfer-acct"); if (trBtn) trBtn.onclick = () => openTransferModal(root);
   root.querySelectorAll("[data-upd]").forEach((b) => b.onclick = () => openUpdateModal(root, b.getAttribute("data-upd")));
   drawList(root);
 
@@ -260,7 +263,47 @@ function openUpdateModal(root, acctId) {
 function movLabel(m) {
   if (m.kind === "rendimiento") return "Rendimiento";
   if (m.kind === "aporte") return m.note || "Aporte";
+  if (m.kind === "transfer") return m.note || "Transferencia";
   return m.note || ((+m.amount || 0) >= 0 ? "Suma" : "Resta");
+}
+
+// Transferencia entre dos cuentas: resta en origen, suma en destino, enlazadas por transferId.
+// No toca gastos ni ingresos; solo mueve saldo entre tus cuentas.
+function openTransferModal(root) {
+  const s = getState();
+  const accts = s.accounts || [];
+  if (accts.length < 2) return;
+  const opts = (sel) => accts.map((a) => `<option value="${escapeHtml(a.id)}" ${sel === a.id ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("");
+  openModal("Transferir entre cuentas", `
+    <div class="field"><label class="label">Desde</label><select id="t-from" class="input">${opts(accts[0].id)}</select></div>
+    <div class="field"><label class="label">Hacia</label><select id="t-to" class="input">${opts(accts[1].id)}</select></div>
+    <div class="field"><label class="label">Monto (COP)</label><input id="t-amt" class="input" type="number" inputmode="numeric" placeholder="0"></div>
+    <div class="field"><label class="label">Nota (opcional)</label><input id="t-note" class="input" placeholder="Ej: traslado a ahorro"></div>
+    <div class="field"><label class="label">Fecha</label><input id="t-date" class="input" type="date" value="${todayISO()}"></div>
+    <button id="t-save" class="btn btn-primary btn-block">Transferir</button>`, {
+    onMount(b) {
+      moneyPreview(b.querySelector("#t-amt"));
+      submitOnce(b.querySelector("#t-save"), async () => {
+        const from = b.querySelector("#t-from").value, to = b.querySelector("#t-to").value;
+        const amt = Math.abs(+b.querySelector("#t-amt").value || 0);
+        if (!amt) return toast("Ingresa un monto", true);
+        if (from === to) return toast("Elige dos cuentas distintas", true);
+        const date = b.querySelector("#t-date").value || todayISO();
+        const note = b.querySelector("#t-note").value.trim();
+        const st = getState();
+        const fromA = st.accounts.find((a) => a.id === from), toA = st.accounts.find((a) => a.id === to);
+        const tid = uid(), extra = note ? " · " + note : "";
+        const movOut = { id: uid(), date, amount: -amt, note: `→ ${toA.name}${extra}`, kind: "transfer", transferId: tid };
+        const movIn = { id: uid(), date, amount: amt, note: `← ${fromA.name}${extra}`, kind: "transfer", transferId: tid };
+        setState({ accounts: st.accounts.map((a) => {
+          if (a.id === from) return { ...a, balance: (+a.balance || 0) - amt, movs: [movOut, ...(a.movs || [])] };
+          if (a.id === to) return { ...a, balance: (+a.balance || 0) + amt, movs: [movIn, ...(a.movs || [])] };
+          return a;
+        }) });
+        persist(); closeModal(); renderAccounts(root); toast(`Transferido ${fmt(amt)}`);
+      });
+    },
+  });
 }
 function openMovsModal(root, acctId) {
   const s = getState();
@@ -272,7 +315,7 @@ function openMovsModal(root, acctId) {
   const listHtml = movs.length
     ? movs.map((m) => {
         const pos = (+m.amount || 0) >= 0;
-        const tag = m.kind === "rendimiento" ? " · rend." : m.kind === "aporte" ? " · aporte" : "";
+        const tag = m.kind === "rendimiento" ? " · rend." : m.kind === "aporte" ? " · aporte" : m.kind === "transfer" ? " · transf." : "";
         return `<div class="tx-row">
           <div class="flex1"><div class="tx-desc">${escapeHtml(movLabel(m))}</div><div class="tx-meta">${fmtDate(m.date)}${tag}</div></div>
           <div class="tx-amt" style="color:${pos ? "var(--green)" : "var(--red)"}">${pos ? "+" : "−"}${fmt(Math.abs(m.amount))}</div>
@@ -328,6 +371,16 @@ function openMovsModal(root, acctId) {
         const a = st.accounts.find((x) => x.id === acctId);
         const m = (a?.movs || []).find((x) => x.id === btn.getAttribute("data-delmov"));
         if (!m) return;
+        if (m.kind === "transfer" && m.transferId) {
+          // borra ambas patas de la transferencia (en las dos cuentas), revirtiendo sus saldos
+          setState({ accounts: st.accounts.map((x) => {
+            const legs = (x.movs || []).filter((y) => y.transferId === m.transferId);
+            if (!legs.length) return x;
+            const delta = legs.reduce((sm, y) => sm + (+y.amount || 0), 0);
+            return { ...x, balance: (+x.balance || 0) - delta, movs: (x.movs || []).filter((y) => y.transferId !== m.transferId) };
+          }) });
+          persist(); renderAccounts(root); toast("Transferencia eliminada"); openMovsModal(root, acctId); return;
+        }
         setState({ accounts: st.accounts.map((x) => x.id === acctId
           ? { ...x, balance: (+x.balance || 0) - (+m.amount || 0), movs: (x.movs || []).filter((y) => y.id !== m.id) } : x) });
         persist(); renderAccounts(root);
