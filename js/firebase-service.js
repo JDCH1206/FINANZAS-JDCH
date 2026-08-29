@@ -123,6 +123,8 @@ export async function loadData(uid) {
       vehicles: base?.vehicles || [],
       goals: base?.goals || [],
       recurrentes: base?.recurrentes || [],
+      debts: base?.debts || [],
+      debtsEnabled: base?.debtsEnabled || false,
       txs, incomes,
       isNew: !snap.exists(),
     };
@@ -161,6 +163,8 @@ export function subscribeData(uid, onData) {
       vehicles: base?.vehicles || [],
       goals: base?.goals || [],
       recurrentes: base?.recurrentes || [],
+      debts: base?.debts || [],
+      debtsEnabled: base?.debtsEnabled || false,
       txs: txs.slice(),
       incomes: incomes.slice(),
       isNew: !baseExists,
@@ -202,7 +206,7 @@ export function subscribeData(uid, onData) {
 }
 
 /* ---------- Guardado de config (profile, cats, budgets) ---------- */
-export async function saveConfig(uid, { profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes }) {
+export async function saveConfig(uid, { profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes, debts, debtsEnabled }) {
   if (FIREBASE_READY) {
     const { db, fsMod } = await initFirebase();
     const payload = { profile, cats, budgets };
@@ -212,6 +216,8 @@ export async function saveConfig(uid, { profile, cats, budgets, accounts, payMet
     if (vehiclesEnabled !== undefined) payload.vehiclesEnabled = vehiclesEnabled;
     if (goals !== undefined) payload.goals = goals;
     if (recurrentes !== undefined) payload.recurrentes = recurrentes;
+    if (debts !== undefined) payload.debts = debts;
+    if (debtsEnabled !== undefined) payload.debtsEnabled = debtsEnabled;
     await fsMod.setDoc(fsMod.doc(db, "users", uid), payload, { merge: true });
   } else {
     persistLocal(uid);

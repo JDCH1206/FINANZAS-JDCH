@@ -18,6 +18,8 @@ const state = {
   vehicles: [],          // [{ id, tipo, alias, placa, ... }]
   goals: [],             // metas de ahorro [{ id, nombre, objetivo, ahorrado, fecha }]
   recurrentes: [],       // gastos recurrentes [{ id, desc, amount, cat, sub, pay, acct, day, lastGen }]
+  debtsEnabled: false,   // módulo opcional de deudas/préstamos/tarjetas
+  debts: [],             // [{ id, tipo, nombre, monto, saldo, corte, pago, tasa, nota, abonos:[] }]
 };
 
 const listeners = new Set();
@@ -44,6 +46,6 @@ export function setData({ profile, cats, txs, incomes, accounts, budgets, payMet
 }
 
 export function dataSnapshot() {
-  const { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals, recurrentes } = state;
-  return { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals, recurrentes };
+  const { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals, recurrentes, debts, debtsEnabled } = state;
+  return { profile, cats, txs, incomes, accounts, budgets, payMethods, vehicles, vehiclesEnabled, goals, recurrentes, debts, debtsEnabled };
 }

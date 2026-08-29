@@ -86,6 +86,8 @@ export function renderSettings(root, onSignOut) {
       <div class="card-title">Módulos opcionales</div>
       <p class="small muted mb-3">🚗 <b>Vehículos</b>: combustible, mantenimiento y obligaciones (SOAT, tecnomecánica, impuesto) con alarmas. Al activarlo aparece en el menú <b>"Más"</b> de la barra inferior.</p>
       <button id="veh-toggle" class="btn btn-sm"></button>
+      <p class="small muted mb-3 mt-3">💳 <b>Deudas y préstamos</b>: a quién le debes, quién te debe y tarjetas de crédito (cupo, corte, pago) con abonos. También aparece en <b>"Más"</b>.</p>
+      <button id="debt-toggle" class="btn btn-sm"></button>
     </div>
 
     <div class="card mb-3">
@@ -233,8 +235,8 @@ export function renderSettings(root, onSignOut) {
     const file = impJson.files[0]; if (!file) return;
     try {
       const d = JSON.parse(await file.text());
-      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [] });
-      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [] });
+      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false });
+      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false });
       await bulkSetTx(s.user.uid, d.txs || []);
       await bulkSetIncomes(s.user.uid, d.incomes || []);
       // subcolecciones (cada helper actúa solo en su modo: bulkSetAll* en nube, persist* en local)
@@ -344,6 +346,24 @@ export function renderSettings(root, onSignOut) {
     forcePersistLocal(s2.user.uid);
     paintVeh();
     toast(on ? "Módulo de Vehículos activado — míralo en 'Más'" : "Módulo de Vehículos desactivado");
+  };
+
+  // activar/desactivar módulo de Deudas
+  const debtBtn = root.querySelector("#debt-toggle");
+  const paintDebt = () => {
+    const on = getState().debtsEnabled;
+    debtBtn.textContent = on ? "✓ Deudas activado" : "Activar Deudas y préstamos";
+    debtBtn.className = "btn btn-sm " + (on ? "btn-primary" : "btn-ghost");
+  };
+  paintDebt();
+  debtBtn.onclick = async () => {
+    const on = !getState().debtsEnabled;
+    setState({ debtsEnabled: on });
+    const s2 = getState();
+    await saveConfig(s2.user.uid, { profile: s2.profile, cats: s2.cats, budgets: s2.budgets, debts: s2.debts, debtsEnabled: on });
+    forcePersistLocal(s2.user.uid);
+    paintDebt();
+    toast(on ? "Módulo de Deudas activado — míralo en 'Más'" : "Módulo de Deudas desactivado");
   };
 
   root.querySelector("#logout").onclick = () => confirmDialog("¿Cerrar sesión?", async () => { await signOutUser(); onSignOut(); }, { yesLabel: "Cerrar sesión" });

@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v79.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v80.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v79). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v80). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v79**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v80**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v80 — Nuevo módulo: Deudas, préstamos y tarjetas
+- 💳 Módulo opcional **Deudas y préstamos** (se activa en Ajustes, aparece en "Más"). Registra tres tipos: **Debo**, **Me deben** y **Tarjeta de crédito** (con cupo, día de corte y día de pago). Resumen arriba: total que debes, total que te deben y cupo disponible. Cada deuda muestra su saldo y progreso; registras **abonos** (y en tarjetas, consumos/pagos) que ajustan el saldo, con historial. Datos en el doc de config (`debts[]`, `debtsEnabled`); incluidos en respaldo/restauración. Vista `debts.js`.
 
 ### 2026-08-24 · caché v79 — Ajustes: reporte mensual (PDF)
 - 🖨️ Nuevo **Reporte mensual** en Ajustes: eliges un mes y se genera una hoja (resumen ingresos/gastos/balance/tasa, regla 50/30/20, top categorías y saldos de cuentas) lista para **imprimir o "Guardar como PDF"** desde el diálogo del navegador. Sin dependencias: usa `window.print()` con un `@media print` que oculta la app y muestra solo el reporte. Funciones `openReportModal`/`printReport`/`buildReportHTML`.
@@ -337,10 +340,11 @@ Cada módulo es una vista en `js/views/`. Formato: **para qué · cómo se usa �
   - **Borrado seguro**: eliminar un registro del módulo **nunca borra el gasto** de Movimientos — solo quita la asociación (y el aviso lo explica).
   - **Desglose de gasto por vehículo** *(v72)*: en la tarjeta del vehículo, la línea **"Gasto asociado a este vehículo ›"** es tocable y abre un modal (dona + barras + conteo) que reparte el total en **Combustible · Mantenimiento · Lavado · Obligaciones · Otros**. Clasifica cada gasto etiquetado por su vínculo (`fuelId`→Combustible, `maintId`→Mantenimiento, `obligId`→Obligaciones), luego por la **subcategoría exacta "Lavado"** *(v73)* y, como respaldo, por la palabra `lavad…` en subcategoría/descripción; si nada aplica, en Otros. Función `openVehicleBreakdown`.
   - *Estado:* `activeFuelVid`/`activeMaintVid`/`activeObligVid` (qué bitácora se ve) y cachés `allFuel`/`allMaint`/`allOblig` (se cargan bajo demanda, no en tiempo real).
-- **Ajustes** (`settings.js`) — *Para qué:* configuración y datos. *Cómo se usa:* editar perfil, importar Excel o **JSON** de gastos/ingresos (reemplaza, con confirmación), respaldar/restaurar (JSON, incluye recurrentes), exportar, **reporte mensual en PDF** *(v79, vía impresión del navegador)*, medios de pago, **gastos recurrentes** (CRUD: descripción, monto, categoría, día del mes → alimentan la tarjeta de Movimientos), **Recordatorios** (activar/desactivar notificaciones), tema claro/oscuro, activar/desactivar Vehículos, guía de ayuda y cerrar sesión.
+- **Deudas y préstamos** (`debts.js`) *(v80)* — *Para qué:* módulo opcional para deudas, préstamos y tarjetas de crédito. *Cómo se usa:* se activa en Ajustes y se abre desde "Más". Tres tipos: **Debo**, **Me deben**, **Tarjeta** (cupo + día de corte/pago). Muestra un resumen (debes / te deben / cupo disponible) y una tarjeta por deuda con saldo, progreso y próximo pago; el botón principal registra **abonos** (en tarjetas, consumo `+` o pago `−`) que ajustan el saldo, con historial. *Datos:* `debts[]` y `debtsEnabled` en el doc de config; cada deuda `{ id, tipo, nombre, monto, saldo, tasa?, corte?, pago?, nota?, abonos:[{id,date,delta,note,kind}] }` (`delta` = cambio aplicado al saldo). *Funciones:* `openDebtModal`, `openAbonoModal`.
+- **Ajustes** (`settings.js`) — *Para qué:* configuración y datos. *Cómo se usa:* editar perfil, importar Excel o **JSON** de gastos/ingresos (reemplaza, con confirmación), respaldar/restaurar (JSON, incluye recurrentes), exportar, **reporte mensual en PDF** *(v79, vía impresión del navegador)*, medios de pago, **gastos recurrentes** (CRUD: descripción, monto, categoría, día del mes → alimentan la tarjeta de Movimientos), **Recordatorios** (activar/desactivar notificaciones), tema claro/oscuro, activar/desactivar los módulos opcionales (Vehículos y **Deudas**), guía de ayuda y cerrar sesión.
 
 ### Modelo de datos en Firestore (`users/{uid}`)
-- **Doc del usuario** (config en campos): `profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes`.
+- **Doc del usuario** (config en campos): `profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes, debts, debtsEnabled`.
 - **Subcolecciones** (crecen): `transactions`, `incomes`, `fuel`, `maintenance`, `obligations`. Los registros de fuel/maint/oblig llevan `vehicleId`; los gastos enlazados llevan `vehicleId` + `fuelId`/`maintId`/`obligId`.
 - **Cuenta** (`accounts[]`): `{ id, name, type, balance, movs?: [...], lastSaldoUpdate?: "YYYY-MM-DD" }`. Los **movimientos propios** viven dentro de la cuenta (no en subcolección), cada uno `{ id, date, amount, note, kind }` con `kind ∈ { "rendimiento", "aporte", "suma", "resta", "transfer" }`; `amount` es con signo (positivo suma, negativo resta). Los de `kind:"transfer"` llevan además `transferId` que enlaza las dos patas (origen/destino) de una transferencia *(v75)*. El `balance` es el saldo actual y se mantiene consistente con esos movimientos; los `kind:"suma"/"resta"` provienen del **movimiento manual** *(v69)* y los `kind:"rendimiento"/"aporte"` de **Actualizar saldo** *(v70)*. **Ninguno** de estos movimientos entra en `transactions`/`incomes` (son ajustes de saldo, no gastos ni ingresos).
 

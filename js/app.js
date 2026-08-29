@@ -16,6 +16,7 @@ import { renderAccounts } from "./views/accounts.js";
 import { renderCategories } from "./views/categories.js";
 import { renderSettings } from "./views/settings.js";
 import { renderVehicles } from "./views/vehicles.js";
+import { renderDebts } from "./views/debts.js";
 import { openModal, closeModal, toast } from "./components/modals.js";
 
 const app = document.getElementById("app");
@@ -82,6 +83,7 @@ function moreRoutes() {
   const s = getState();
   const items = [];
   if (s.vehiclesEnabled) items.push({ id: "vehicles", label: "Vehículos", icon: "🚗" });
+  if (s.debtsEnabled) items.push({ id: "debts", label: "Deudas y préstamos", icon: "💳" });
   return items;
 }
 function openMoreMenu() {
@@ -127,6 +129,7 @@ function startSession(user) {
       profile: data.profile, cats: data.cats, budgets: data.budgets,
       accounts: data.accounts || [], payMethods: data.payMethods || [],
       vehicles: data.vehicles || [], vehiclesEnabled: data.vehiclesEnabled || false, goals: data.goals || [], recurrentes: data.recurrentes || [],
+      debts: data.debts || [], debtsEnabled: data.debtsEnabled || false,
       txs: data.txs, incomes: data.incomes || [], loading: false,
     });
     if (!booted) {
@@ -180,7 +183,7 @@ function go(route) {
   if (prev === "vehicles" && route !== "vehicles") checkVehicleAlerts();
   document.querySelectorAll("#nav button").forEach((b) => {
     const r = b.getAttribute("data-route");
-    b.classList.toggle("on", r === route || (r === "more" && route === "vehicles"));
+    b.classList.toggle("on", r === route || (r === "more" && (route === "vehicles" || route === "debts")));
   });
   const view = document.getElementById("view");
   view.classList.remove("pop"); void view.offsetWidth; view.classList.add("pop");
@@ -198,6 +201,7 @@ function draw(route) {
     case "accounts": return renderAccounts(view);
     case "cats": return renderCategories(view);
     case "vehicles": return renderVehicles(view);
+    case "debts": return renderDebts(view);
     case "settings": return renderSettings(view, () => { stopSession(); setState({ user: null }); renderLogin(app, afterLogin); });
   }
 }
