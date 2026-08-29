@@ -7,7 +7,7 @@ import { openModal, closeModal, toast, toastUndo, confirmDialog, submitOnce, mon
 
 let query = "";
 let tabKind = "gasto";
-let fMonth = "", fCat = "", fMin = "", fMax = "";
+let fMonth = "", fCat = "", fMin = "", fMax = "", fAcct = "", fPay = "";
 let limit = 300;
 
 function applyFilters(arr, isGasto) {
@@ -15,6 +15,8 @@ function applyFilters(arr, isGasto) {
   if (query) f = f.filter((t) => ((t.desc || "") + (t.cat || "") + (t.sub || "") + (t.type || "")).toLowerCase().includes(query.toLowerCase()));
   if (fMonth) f = f.filter((t) => ym(t.date) === fMonth);
   if (isGasto && fCat) f = f.filter((t) => t.cat === fCat);
+  if (isGasto && fAcct) f = f.filter((t) => (t.acct || "") === fAcct);
+  if (isGasto && fPay) f = f.filter((t) => (t.pay || "") === fPay);
   if (fMin !== "") f = f.filter((t) => (+t.amount || 0) >= +fMin);
   if (fMax !== "") f = f.filter((t) => (+t.amount || 0) <= +fMax);
   return f;
@@ -40,6 +42,10 @@ export function renderHome(root) {
         <select id="f-month" class="input" style="flex:1;min-width:130px"><option value="">Todos los meses</option>${allMonths.map((m) => `<option value="${m}" ${m === fMonth ? "selected" : ""}>${monthLabel(m)}</option>`).join("")}</select>
         ${tabKind === "gasto" ? `<select id="f-cat" class="input" style="flex:1;min-width:130px"><option value="">Todas las categorías</option>${s.cats.map((c) => `<option ${c.name === fCat ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select>` : ""}
       </div>
+      ${tabKind === "gasto" ? `<div class="row gap-2 wrap mt-2">
+        <select id="f-acct" class="input" style="flex:1;min-width:130px"><option value="">Todas las cuentas</option>${(s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}" ${a.id === fAcct ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("")}</select>
+        <select id="f-pay" class="input" style="flex:1;min-width:130px"><option value="">Todos los medios</option>${[...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"].map((m) => `<option ${m === fPay ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}</select>
+      </div>` : ""}
       <div class="row gap-2 wrap mt-2">
         <input id="f-min" class="input" type="number" placeholder="Monto mín" value="${fMin}" style="flex:1;min-width:90px">
         <input id="f-max" class="input" type="number" placeholder="Monto máx" value="${fMax}" style="flex:1;min-width:90px">
@@ -53,9 +59,11 @@ export function renderHome(root) {
   root.querySelector("#q").oninput = (e) => { query = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-month").onchange = (e) => { fMonth = e.target.value; limit = 300; drawList(); };
   const fcatSel = root.querySelector("#f-cat"); if (fcatSel) fcatSel.onchange = (e) => { fCat = e.target.value; limit = 300; drawList(); };
+  const facctSel = root.querySelector("#f-acct"); if (facctSel) facctSel.onchange = (e) => { fAcct = e.target.value; limit = 300; drawList(); };
+  const fpaySel = root.querySelector("#f-pay"); if (fpaySel) fpaySel.onchange = (e) => { fPay = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-min").oninput = (e) => { fMin = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-max").oninput = (e) => { fMax = e.target.value; limit = 300; drawList(); };
-  root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; renderHome(root); };
+  root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; fAcct = ""; fPay = ""; renderHome(root); };
 
   // FAB fuera del contenedor animado (#view), pegado a la pantalla, siempre visible
   let fab = document.getElementById("fab");
@@ -239,7 +247,7 @@ export function openTxModal(existing) {
   const canEditVeh = existing && s.vehiclesEnabled && (s.vehicles || []).length && !existing.fuelId && !existing.maintId && !existing.obligId;
   const linkedVeh = existing && (existing.fuelId || existing.maintId || existing.obligId);
   const vehEditBlock = canEditVeh ? `
-    <div class="field"><label class="label">Asociar a vehículo</label>
+    <div class="field" id="m-veh-edit-wrap" style="display:none"><label class="label">Asociar a vehículo</label>
       <select id="m-veh-edit" class="input"><option value="">— no asociar —</option>${s.vehicles.map((v) => `<option value="${escapeHtml(v.id)}" ${existing.vehicleId === v.id ? "selected" : ""}>${v.tipo === "Moto" ? "🏍️" : "🚗"} ${escapeHtml(v.alias || v.modelo)}</option>`).join("")}</select>
       <p class="tiny muted" style="margin-top:4px">Etiqueta este gasto a un vehículo para separar sus costos. No crea tanqueo ni mantenimiento.</p></div>`
     : (linkedVeh ? `<div class="field"><p class="tiny muted">🔗 Este gasto está vinculado a un registro del vehículo (combustible/mantenimiento/obligación). Su vehículo se administra desde ese módulo.</p></div>` : "");
@@ -265,9 +273,12 @@ export function openTxModal(existing) {
       // el bloque de vehículo solo aparece en categorías de vehículo (Moto, Carro, Vehículo, variantes)
       const isVehCat = (n) => /moto|carro|veh[ií]culo|autom[oó]vil|\bauto\b/i.test(n || "");
       const vehWrap = b.querySelector("#m-veh-wrap"), vehSelEl = b.querySelector("#m-veh");
+      const vehEditWrap = b.querySelector("#m-veh-edit-wrap"); // bloque "Asociar a vehículo" al editar
       const toggleVehWrap = () => {
-        if (!vehWrap) return;
         const show = isVehCat(catSel.value);
+        // al editar: el selector de asociación solo aparece en categorías de vehículo (Moto, Carro…)
+        if (vehEditWrap) vehEditWrap.style.display = show ? "block" : "none";
+        if (!vehWrap) return;
         vehWrap.style.display = show ? "block" : "none";
         if (!show && vehSelEl) { vehSelEl.value = ""; const ex = b.querySelector("#m-veh-extra"); if (ex) ex.style.display = "none"; }
       };
@@ -310,8 +321,11 @@ export function openTxModal(existing) {
           pay: b.querySelector("#m-pay").value, acct: b.querySelector("#m-acct").value || "",
         };
         if (existing) {
-          const veSel = b.querySelector("#m-veh-edit");
-          tx.vehicleId = veSel ? veSel.value : (existing.vehicleId || "");
+          const veWrap = b.querySelector("#m-veh-edit-wrap"), veSel = b.querySelector("#m-veh-edit");
+          // solo se puede cambiar la asociación cuando el bloque es visible (categoría de vehículo);
+          // en otras categorías se conserva la asociación existente (no se borra en silencio)
+          const veVisible = veWrap && veWrap.style.display !== "none";
+          tx.vehicleId = (veSel && veVisible) ? veSel.value : (existing.vehicleId || "");
           tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; tx.obligId = existing.obligId || "";
         }
         if (!tx.date) return toast("Falta la fecha", true);
