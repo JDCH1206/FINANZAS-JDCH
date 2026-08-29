@@ -1,7 +1,7 @@
 // js/views/dashboard.js
 import { getState } from "../state.js";
 import { RULE_503020, PALETTE } from "../config.js";
-import { fmt, ym, monthLabel, sum, curMonth, todayISO, escapeHtml } from "../utils.js";
+import { fmt, fmtShort, ym, monthLabel, sum, curMonth, todayISO, escapeHtml } from "../utils.js";
 import { donut, lineTrend, lineTrendPct, categoryBars, groupedBars } from "../components/charts.js";
 import { openModal } from "../components/modals.js";
 
@@ -22,8 +22,9 @@ function deltaBadge(cur, prev) {
 let period = "all";
 let subCat = null; // categoría seleccionada para el desglose por subcategoría
 let kpisOpen = false; // mostrar todos los indicadores o solo los principales
-let dashTab = "resumen";       // "resumen" | "detalle"
+let dashTab = "resumen";       // "resumen" | "detalle" | "calendario"
 let detPath = { year: null, month: null, cat: null }; // ruta del drill-down Año › Mes › Categoría › Subcat
+let calMonth = null;           // mes del calendario/mapa de calor
 
 export function renderDashboard(root) {
   const s = getState();
@@ -34,11 +35,13 @@ export function renderDashboard(root) {
   const months = [...new Set(s.txs.map((t) => ym(t.date)).filter(Boolean))].sort().reverse();
   const tabs = `
     <h2 class="page-title disp">Tablero</h2>
-    <div class="row gap-2 mb-3" id="dash-tabs">
+    <div class="row gap-2 mb-3 wrap" id="dash-tabs">
       <button class="chip ${dashTab === "resumen" ? "on" : ""}" data-tab="resumen">Resumen</button>
       <button class="chip ${dashTab === "detalle" ? "on" : ""}" data-tab="detalle">Detalle por mes</button>
+      <button class="chip ${dashTab === "calendario" ? "on" : ""}" data-tab="calendario">Calendario</button>
     </div>`;
   if (dashTab === "detalle") { renderDetalle(root, tabs); return; }
+  if (dashTab === "calendario") { renderCalendar(root, tabs); return; }
 
   root.innerHTML = `
     ${tabs}
@@ -296,6 +299,69 @@ export function renderDashboard(root) {
 
 function kpi(label, val, sm) {
   return `<div class="kpi"><div class="k-label">${label}</div><div class="k-val ${sm ? "sm" : ""}">${val}</div></div>`;
+}
+
+/* ===================== CALENDARIO / MAPA DE CALOR ===================== */
+function renderCalendar(root, tabs) {
+  const s = getState();
+  const months = [...new Set([...s.txs, ...s.incomes].map((t) => ym(t.date)).filter(Boolean)), curMonth()];
+  const allMonths = [...new Set(months)].sort().reverse();
+  if (!calMonth || !allMonths.includes(calMonth)) calMonth = allMonths[0] || curMonth();
+
+  // total de gasto por día del mes
+  const byDay = {};
+  s.txs.filter((t) => ym(t.date) === calMonth).forEach((t) => { const d = +(t.date || "").slice(8, 10); if (d) byDay[d] = (byDay[d] || 0) + (+t.amount || 0); });
+  const [Y, M] = calMonth.split("-").map(Number);
+  const dim = new Date(Y, M, 0).getDate();
+  const firstDow = (new Date(Y, M - 1, 1).getDay() + 6) % 7; // 0 = lunes
+  const maxDay = Math.max(1, ...Object.values(byDay));
+  const totalMes = sum(Object.values(byDay));
+  const diasCon = Object.keys(byDay).length;
+  const hoy = todayISO();
+
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push(`<div></div>`);
+  for (let d = 1; d <= dim; d++) {
+    const val = byDay[d] || 0;
+    const inten = val / maxDay;                       // 0..1
+    const alpha = val ? (0.15 + 0.65 * inten).toFixed(2) : 0;
+    const iso = `${calMonth}-${String(d).padStart(2, "0")}`;
+    const isHoy = iso === hoy;
+    cells.push(`<button class="cal-cell" ${val ? `data-day="${d}"` : "disabled"} style="border:1px solid ${isHoy ? "var(--gold)" : "var(--line)"};background:rgba(216,166,87,${alpha});border-radius:8px;min-height:52px;padding:4px 5px;display:flex;flex-direction:column;justify-content:space-between;cursor:${val ? "pointer" : "default"};color:var(--ink);font-family:inherit;text-align:left">
+      <span class="tiny" style="opacity:.8">${d}</span>
+      ${val ? `<span class="tiny bold" style="font-size:10.5px">${fmtShort(val)}</span>` : ""}
+    </button>`);
+  }
+
+  root.innerHTML = tabs + `
+    <div class="card mb-3">
+      <div class="row between mb-2" style="align-items:center">
+        <div class="card-title" style="margin:0">Mapa de calor del gasto</div>
+        <select id="cal-mes" class="input" style="width:auto">${allMonths.map((m) => `<option value="${m}" ${m === calMonth ? "selected" : ""}>${monthLabel(m)}</option>`).join("")}</select>
+      </div>
+      <div class="row between tiny muted mb-2"><span>${diasCon} días con gasto</span><span>Total ${fmt(totalMes)}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px">
+        ${["L", "M", "M", "J", "V", "S", "D"].map((x) => `<div class="tiny muted center" style="text-align:center">${x}</div>`).join("")}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${cells.join("")}</div>
+      <p class="tiny muted mt-3">Cada día se colorea según cuánto gastaste (más intenso = más gasto). Toca un día para ver sus movimientos.</p>
+    </div>`;
+
+  root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
+  root.querySelector("#cal-mes").onchange = (e) => { calMonth = e.target.value; renderCalendar(root, tabs); };
+  root.querySelectorAll("[data-day]").forEach((b) => b.onclick = () => openDayModal(calMonth, +b.getAttribute("data-day")));
+}
+
+function openDayModal(mes, day) {
+  const s = getState();
+  const iso = `${mes}-${String(day).padStart(2, "0")}`;
+  const list = s.txs.filter((t) => t.date === iso).sort((a, b) => (+b.amount || 0) - (+a.amount || 0));
+  const tot = sum(list, (t) => t.amount);
+  const rows = list.map((t) => `<div class="row between" style="padding:6px 0;border-top:1px solid var(--line)">
+    <span class="small muted" style="min-width:0">${escapeHtml(t.desc || "")} <span class="tiny">· ${escapeHtml(t.cat || "")}</span></span>
+    <span class="small bold" style="flex:none">${fmt(t.amount)}</span></div>`).join("");
+  openModal(`${day} de ${monthLabel(mes)} · ${fmt(tot)}`,
+    `<div style="max-height:55vh;overflow:auto">${rows || '<div class="muted small">Sin gastos ese día</div>'}</div>`);
 }
 
 /* ===================== DETALLE: drill-down por niveles (Año › Mes › Cat › Subcat) ===================== */
