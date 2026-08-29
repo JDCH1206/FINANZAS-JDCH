@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v75.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v76.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v75). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v76). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v75**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v76**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v76 — Cuentas: rentabilidad aproximada (% E.A.)
+- 📊 En la gráfica "Así ha crecido tu dinero" (al elegir una cuenta) y en el modal de movimientos ahora se muestra la **rentabilidad estimada** en **% anual efectivo (E.A.)**, tipo el "9,80% / 11,00%" de Nu. Se calcula del último rendimiento registrado (rendimiento ÷ saldo previo) anualizado por los días del intervalo. Es una **aproximación** (no modela aportes ni el momento exacto al 100%).
 
 ### 2026-08-24 · caché v75 — Cuentas: transferencias entre cuentas
 - ⇄ Nuevo botón **Transferir** en Cuentas (con ≥2 cuentas): mueve dinero de una cuenta a otra en un paso (resta en origen, suma en destino), con nota y fecha. Crea dos movimientos enlazados (`kind:"transfer"`, mismo `transferId`) que muestran "→ destino" / "← origen". Al **eliminar** una de las dos patas se borran ambas y se revierten los dos saldos. No afecta gastos ni ingresos.
@@ -315,6 +318,7 @@ Cada módulo es una vista en `js/views/`. Formato: **para qué · cómo se usa �
   - **⇄ Transferir** *(v75)* — botón en la cabecera (con ≥2 cuentas): mueve dinero de una cuenta a otra (resta en origen, suma en destino) con nota y fecha. Crea dos movimientos enlazados (`kind:"transfer"`, mismo `transferId`); borrar una pata borra ambas y revierte los dos saldos. `openTransferModal`.
   - **Recordatorio semanal (sugerido viernes)** *(v70)* — la vista muestra arriba una tarjeta **📈 Actualiza el saldo de esta semana** con las cuentas de tipo Ahorro/Inversión/Corriente pendientes (`acctNeedsUpdate`: ≥7 días desde `lastSaldoUpdate`, o el viernes desde 5 días, o sin registrar), cada una con botón directo. Si las notificaciones están activadas, también llega el aviso diario junto con los de vehículos (ver `app.js`).
   - **Gráfica "Así ha crecido tu dinero"** *(v71)* — tarjeta con la **evolución del saldo** en el tiempo (reconstruida de los movimientos: se ancla al saldo actual y se resta hacia atrás, un punto por fecha con movimiento), con selector por cuenta o **Todas**; debajo, **Rendimientos** y **Aportes** acumulados. Aparece con ≥2 fechas registradas.
+  - **Rentabilidad aproximada (% E.A.)** *(v76)* — al elegir una cuenta en la gráfica (y en el modal de movimientos) muestra el rendimiento como **% anual efectivo** estimado (`yieldEstimate`: último rendimiento ÷ saldo previo, anualizado por los días del intervalo). Es una aproximación, marcada como tal.
   - *Estado y funciones:* `savScope` (ámbito de la gráfica); exporta `daysBetweenISO` y `acctNeedsUpdate` (las usa `app.js`); helpers internos `rendTotal`, `savingsSeries`, `openUpdateModal`, `openMovsModal`. Guarda con `debounce` (los movimientos viven dentro de cada cuenta en el doc de config, no en una subcolección).
 - **Categorías** (`categories.js`) — *Para qué:* gestionar categorías y subcategorías (y su tipo 50/30/20). *Cómo se usa:* crear/renombrar/eliminar; al renombrar o borrar, migra los gastos afectados (las categorías se guardan por nombre en cada gasto). *Estado:* `openId`; `migrateCatName` con `bulkUpdateTx`.
 - **Vehículos** (`vehicles.js`) — *Para qué:* módulo opcional multi-vehículo. *Cómo se usa:* se activa en Ajustes y se abre desde el menú "Más". Contiene tres sub-módulos por vehículo:

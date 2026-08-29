@@ -32,6 +32,27 @@ export function acctNeedsUpdate(a, today) {
 // total que ha "crecido tu dinero" en una cuenta (suma de rendimientos registrados)
 const rendTotal = (a) => sum((a.movs || []).filter((m) => m.kind === "rendimiento"), (m) => m.amount);
 
+// Rentabilidad aproximada de una cuenta: toma el último rendimiento registrado, lo divide por
+// el saldo justo antes de ese rendimiento, y lo anualiza (E.A.) según los días del intervalo.
+// Es una estimación (los aportes y el momento exacto no se modelan al 100%).
+function yieldEstimate(a) {
+  const movs = (a.movs || []).slice().sort((x, y) => (x.date || "").localeCompare(y.date || "") || (x.id > y.id ? 1 : -1));
+  const rends = movs.filter((m) => m.kind === "rendimiento");
+  if (!rends.length) return null;
+  const last = rends[rends.length - 1];
+  const anchor = +a.balance || 0;
+  const totalAll = movs.reduce((s, m) => s + (+m.amount || 0), 0);
+  let balanceBefore = anchor - totalAll;                 // saldo antes del primer movimiento
+  for (const m of movs) { if (m.id === last.id) break; balanceBefore += (+m.amount || 0); }
+  if (balanceBefore <= 0) return null;
+  const r = (+last.amount || 0) / balanceBefore;
+  const idx = movs.findIndex((m) => m.id === last.id);
+  let days = idx > 0 ? daysBetweenISO(movs[idx - 1].date, last.date) : 7;
+  if (!days || days <= 0) days = 7;
+  const ea = Math.pow(1 + r, 365 / days) - 1;
+  return { r, days, ea };
+}
+
 // Reconstruye la evolución del saldo a partir de los movimientos registrados.
 // Ancla al saldo actual real y va restando hacia atrás; agrupa por fecha (un punto por día con movimiento).
 function savingsSeries(accts, scope) {
@@ -139,12 +160,15 @@ function drawSavings(root) {
     wrap.innerHTML = `<div class="muted small">Registra el saldo unas semanas (con "Actualizar saldo") para ver aquí cómo crece tu dinero.</div>`;
     return;
   }
+  const ye = savScope !== "all" ? yieldEstimate(accts.find((a) => a.id === savScope)) : null;
   wrap.innerHTML = `
     <div class="chart-box" style="height:200px"><canvas id="ch-sav"></canvas></div>
-    <div class="row gap-2 mt-2">
-      <div class="kpi flex1"><div class="k-label">Rendimientos</div><div class="k-val sm" style="color:var(--green)">↑ ${fmt(ser.rend)}</div></div>
-      <div class="kpi flex1"><div class="k-label">Aportes</div><div class="k-val sm">${fmt(ser.aportes)}</div></div>
-    </div>`;
+    <div class="row gap-2 mt-2 wrap">
+      <div class="kpi flex1" style="min-width:100px"><div class="k-label">Rendimientos</div><div class="k-val sm" style="color:var(--green)">↑ ${fmt(ser.rend)}</div></div>
+      <div class="kpi flex1" style="min-width:100px"><div class="k-label">Aportes</div><div class="k-val sm">${fmt(ser.aportes)}</div></div>
+      ${ye ? `<div class="kpi flex1" style="min-width:100px"><div class="k-label">Rentab. aprox.</div><div class="k-val sm" style="color:var(--green)">≈ ${(ye.ea * 100).toFixed(1)}% <span class="tiny muted">E.A.</span></div></div>` : ""}
+    </div>
+    ${ye ? `<p class="tiny muted mt-2">Rentabilidad estimada del último rendimiento (${(ye.r * 100).toFixed(2)}% en ${ye.days} días), anualizada. Aproximada.</p>` : ""}`;
   lineTrend("ch-sav", ser.labels, ser.values);
 }
 
@@ -311,6 +335,7 @@ function openMovsModal(root, acctId) {
   if (!acct) return;
   const movs = (acct.movs || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.id > a.id ? 1 : -1));
   const rend = rendTotal(acct);
+  const ye = yieldEstimate(acct);
 
   const listHtml = movs.length
     ? movs.map((m) => {
@@ -327,7 +352,7 @@ function openMovsModal(root, acctId) {
   openModal(`Movimientos · ${escapeHtml(acct.name)}`, `
     <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)">
       <div class="k-label">Saldo actual</div><div class="k-val">${fmt(acct.balance)}</div>
-      ${rend ? `<div class="tiny" style="color:var(--green);margin-top:4px">↑ ${fmt(rend)} en rendimientos</div>` : ""}
+      ${rend ? `<div class="tiny" style="color:var(--green);margin-top:4px">↑ ${fmt(rend)} en rendimientos${ye ? ` · ≈ ${(ye.ea * 100).toFixed(1)}% E.A.` : ""}</div>` : ""}
     </div>
     <button id="m-updbtn" class="btn btn-primary btn-block mb-3">📈 Actualizar saldo (rendimiento / aporte)</button>
     <p class="tiny muted mb-3">O registra un ajuste manual. Nada de esto afecta tus gastos ni ingresos.</p>
