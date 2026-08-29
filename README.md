@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v76.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v77.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v76). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v77). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -74,7 +74,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v76**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v77**. Cambios por fecha (más reciente primero):
+
+### 2026-08-24 · caché v77 — Resumen: insights / alertas proactivas
+- 💡 Nueva tarjeta **"Para tu atención"** en Resumen que genera avisos automáticos de tus propios datos (sin nada nuevo que registrar): categoría que va camino a superar tu promedio, presupuesto del mes ya superado o en riesgo, días sin registrar gastos, y balance del mes (gastas más de lo que ingresó / buen ahorro). Muestra hasta 4, priorizando lo más urgente (rojo/amarillo/verde/dorado). Función `buildInsights`.
 
 ### 2026-08-24 · caché v76 — Cuentas: rentabilidad aproximada (% E.A.)
 - 📊 En la gráfica "Así ha crecido tu dinero" (al elegir una cuenta) y en el modal de movimientos ahora se muestra la **rentabilidad estimada** en **% anual efectivo (E.A.)**, tipo el "9,80% / 11,00%" de Nu. Se calcula del último rendimiento registrado (rendimiento ÷ saldo previo) anualizado por los días del intervalo. Es una **aproximación** (no modela aportes ni el momento exacto al 100%).
@@ -308,7 +311,7 @@ Cada módulo es una vista en `js/views/`. Formato: **para qué · cómo se usa �
 
 - **Login** (`login.js`) — *Para qué:* entrar a la cuenta. *Cómo se usa:* correo/contraseña (o Google en modo nube); en modo local cualquier correo crea una sesión en el navegador. *Estado:* sin estado a nivel de módulo.
 - **Onboarding** (`onboarding.js`) — *Para qué:* configuración inicial al primer ingreso (perfil e ingreso mensual). *Cómo se usa:* aparece solo si el usuario es nuevo; al terminar entra al Resumen.
-- **Resumen** (`summary.js`) — *Para qué:* foto general de tus finanzas. *Cómo se usa:* muestra ingresos/gastos totales, tasa de ahorro, disponible en cuentas, reparto 50/30/20, top categorías, metas de ahorro y el recordatorio de respaldo. *Variables:* calcula `ahorroFlujo`, `tasa`, `disponible`, buckets `Necesidad/Deseo/Deuda`; lee `fz_last_backup` de `localStorage`.
+- **Resumen** (`summary.js`) — *Para qué:* foto general de tus finanzas. *Cómo se usa:* muestra ingresos/gastos totales, tasa de ahorro, disponible en cuentas, reparto 50/30/20, top categorías, metas de ahorro, el recordatorio de respaldo y la tarjeta **💡 Para tu atención** (insights automáticos, `buildInsights` *(v77)*). *Variables:* calcula `ahorroFlujo`, `tasa`, `disponible`, buckets `Necesidad/Deseo/Deuda`; lee `fz_last_backup` de `localStorage`.
 - **Movimientos** (`home.js`) — *Para qué:* registrar y ver gastos e ingresos. *Cómo se usa:* botón flotante (+) para agregar; tocar una fila para editar; pestañas Gastos/Ingresos; buscador y filtros (mes, categoría, **cuenta**, **medio de pago** *(v74)* y rango de monto — cuenta/medio/categoría solo en Gastos); fechas amigables ("Hoy"/"Ayer"/"2 jul"). Eliminar un gasto o ingreso simple ofrece **"Deshacer"** (~6 s); si el gasto está vinculado a un tanqueo/mantenimiento, pide confirmación y explica el borrado doble. Asociar un gasto a un vehículo (combustible / mantenimiento / otro) crea el registro enlazado en el módulo Vehículos. **Al editar** un gasto ya existente aparece el selector **"Asociar a vehículo"** *(v72)* para etiquetar/cambiar/quitar el vehículo (solo la etiqueta `vehicleId`); si el gasto ya está vinculado a un tanqueo/mantenimiento/obligación, muestra una nota indicando que su vehículo se administra desde ese módulo (evita registros huérfanos). Arriba de la lista aparece la tarjeta **🔁 Gastos recurrentes por registrar**: los recurrentes del mes cuyo día ya llegó, con monto editable y botones Registrar/Omitir (recomienda, tú confirmas — nada se registra solo). *Estado:* `tabKind`, `query`, `fMonth`/`fCat`/`fMin`/`fMax`, `limit` (paginación); `recurrentes` con `lastGen` por mes. *Funciones:* `openTxModal`, `openIncomeModal`, `drawPending`.
 - **Tablero** (`dashboard.js`) — *Para qué:* análisis con KPIs y gráficos. *Cómo se usa:* dos pestañas. **Resumen**: 6 KPIs principales + botón "Ver más indicadores" (otros 7), comparativo mes/año, recomendación 50/30/20 según salario, donut por categoría, **desglose por subcategoría** (selector de categoría), tendencias 12m, gasto por día de la semana, balance acumulado y comparación con canasta DANE. **Detalle por mes**: filtro en cadena con migas de pan **Año → Mes → Categoría → Subcategoría**, con ingresos/gastos/balance (valor y %, verde/rojo) en cada nivel. *Estado:* `period`, `subCat`, `kpisOpen`, `dashTab`, `detPath` (`{year, month, cat}`).
 - **Presupuesto** (`budget.js`) — *Para qué:* fijar y seguir el presupuesto mensual por categoría (y opcionalmente por subcategoría). *Cómo se usa:* eliges el mes y editas por valor o por % del ingreso; "⚡ Calcular automático" reparte tu ingreso con la regla 50/30/20 pesando tu gasto real de 12 meses. Cada fila muestra **% de ejecución con semáforo** (verde ≤100 %, amarillo 100–110 %, rojo >110 %), **Real** y **Diferencia**; el caret ▸ despliega las subcategorías con sus propios topes; al final, fila **TOTAL**. *Estado:* `mes`, `mode` (`valor`/`%`), `expanded` (subcategorías desplegadas); guarda con `debounce`.

@@ -1,7 +1,7 @@
 // js/views/summary.js
 import { getState, setState } from "../state.js";
 import { RULE_503020 } from "../config.js";
-import { fmt, ym, monthLabel, sum, curMonth, uid, escapeHtml } from "../utils.js";
+import { fmt, ym, monthLabel, sum, curMonth, uid, escapeHtml, todayISO } from "../utils.js";
 import { saveConfig, forcePersistLocal } from "../firebase-service.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 
@@ -48,11 +48,21 @@ export function renderSummary(root) {
   s.txs.forEach((t) => { if (t.pay) byPay[t.pay] = (byPay[t.pay] || 0) + (+t.amount || 0); });
   const topPay = Object.entries(byPay).sort((a, b) => b[1] - a[1]);
 
+  // insights / alertas proactivas (v77)
+  const insList = buildInsights(s, cm, incMes, expMes);
+  const insColor = { bad: "var(--red)", warn: "var(--yel)", good: "var(--green)", info: "var(--gold)" };
+  const insCard = insList.length ? `<div class="card mb-3"><div class="card-title">💡 Para tu atención</div>
+    ${insList.map((i) => `<div class="row gap-2" style="align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)">
+      <span style="width:8px;height:8px;border-radius:3px;background:${insColor[i.tone] || "var(--gold)"};margin-top:6px;flex:none"></span>
+      <span class="small">${escapeHtml(i.text)}</span></div>`).join("")}</div>` : "";
+
   root.innerHTML = `
     <h2 class="page-title disp">Resumen</h2>
     <p class="page-sub">Panorama consolidado de tus finanzas</p>
 
     ${bkDays >= 30 ? `<div class="card mb-3" style="border:1px solid var(--yel)"><div class="small">💾 ${lastBk ? `Hace ${bkDays} días no descargas un respaldo` : "Aún no has descargado un respaldo"}. Hazlo en <b>Ajustes → Descargar respaldo</b> para proteger tus datos.</div></div>` : ""}
+
+    ${insCard}
 
     <div class="grid-kpi mb-4">
       ${kpi("Total ingresos", fmt(totalInc))}
@@ -165,6 +175,60 @@ function openGoalModal(root, existing) {
       });
     },
   });
+}
+
+// Genera avisos proactivos a partir de los datos ya cargados (sin datos nuevos).
+// Cada aviso: { tone: "bad"|"warn"|"good"|"info", text }. Se muestran los más relevantes.
+function buildInsights(s, cm, incMes, expMes) {
+  const daysBetween = (a, b) => Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+  const domDay = +todayISO().slice(8, 10);
+  const dim = new Date(+cm.slice(0, 4), +cm.slice(5, 7), 0).getDate();
+  const projF = domDay ? dim / domDay : 1;
+
+  // promedio mensual por categoría (meses pasados completos, hasta 12)
+  const past = [...new Set(s.txs.map((t) => ym(t.date)).filter((m) => m && m < cm))].sort().slice(-12);
+  const nPast = past.length || 1, setPast = new Set(past);
+  const avgByCat = {}, curByCat = {};
+  s.txs.forEach((t) => {
+    const k = ym(t.date);
+    if (setPast.has(k)) avgByCat[t.cat] = (avgByCat[t.cat] || 0) + (+t.amount || 0);
+    if (k === cm) curByCat[t.cat] = (curByCat[t.cat] || 0) + (+t.amount || 0);
+  });
+  Object.keys(avgByCat).forEach((k) => (avgByCat[k] /= nPast));
+
+  const ins = [];
+
+  // A. categoría proyectada muy por encima de su promedio (el mayor desvío)
+  let worst = null;
+  Object.keys(curByCat).forEach((c) => {
+    const avg = avgByCat[c] || 0; if (avg < 30000) return;
+    const proj = curByCat[c] * projF;
+    if (proj > avg * 1.3) { const d = proj - avg; if (!worst || d > worst.d) worst = { c, pct: (d / avg) * 100, d }; }
+  });
+  if (worst && domDay >= 6) ins.push({ tone: "warn", text: `Al ritmo de este mes, gastarás ~${worst.pct.toFixed(0)}% más en ${worst.c} que tu promedio.` });
+
+  // B. presupuesto del mes: ya superado, o en camino a superarse
+  const budg = s.budgets[cm] || {};
+  Object.keys(budg).forEach((k) => {
+    if (k.includes("›") || k.includes("__pct")) return;
+    const b = +budg[k] || 0; if (b <= 0) return;
+    const cur = curByCat[k] || 0, proj = cur * projF;
+    if (cur > b) ins.push({ tone: "bad", text: `Ya te pasaste del presupuesto de ${k} (${fmt(cur)} / ${fmt(b)}).` });
+    else if (proj > b * 1.05 && domDay >= 6) ins.push({ tone: "warn", text: `Vas camino a pasarte del presupuesto de ${k} (proyectado ${fmt(proj)} / ${fmt(b)}).` });
+  });
+
+  // C. días sin registrar gastos
+  const lastTx = s.txs.map((t) => t.date).filter(Boolean).sort().slice(-1)[0];
+  if (lastTx) { const d = daysBetween(lastTx, todayISO()); if (d >= 5) ins.push({ tone: "info", text: `Llevas ${d} días sin registrar gastos. ¿Todo al día?` }); }
+
+  // D. balance del mes
+  if (incMes > 0) {
+    if (expMes > incMes) ins.push({ tone: "bad", text: `Este mes llevas gastando más de lo que ha ingresado (${fmt(expMes)} vs ${fmt(incMes)}).` });
+    else { const tasaM = ((incMes - expMes) / incMes) * 100; if (tasaM >= 20) ins.push({ tone: "good", text: `Buen mes: llevas ahorrando el ${tasaM.toFixed(0)}% de lo que ha ingresado.` }); }
+  }
+
+  const rank = { bad: 0, warn: 1, good: 2, info: 3 };
+  return ins.sort((a, b) => rank[a.tone] - rank[b.tone]).slice(0, 4);
 }
 
 function kpi(label, val, sm) {
