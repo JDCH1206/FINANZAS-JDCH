@@ -72,6 +72,44 @@ flowchart TD
   IMP --> SEAM
 ```
 
+## Roadmap y mejoras propuestas
+
+Comparación con apps de finanzas populares (Monarch, YNAB) y de código abierto (Firefly III, Actual Budget, ezBookkeeping). Marcado según se puede hacer **con los recursos actuales** (JS puro, sin backend, Firebase gratis) o no.
+
+**Lo que la app ya tiene** (a la par de esas apps): multi-cuenta, categorías/subcategorías, presupuesto por mes (valor/%), 50/30/20 + DANE, tablero con drill-down y calendario, gastos recurrentes, metas, deudas/tarjetas, transferencias entre cuentas, rentabilidad E.A., insights, reporte PDF, import/export Excel-JSON, respaldo completo, recordatorios, caché offline, modo oscuro.
+
+**Mejoras propuestas** (prioridad según valor/esfuerzo):
+
+| Mejora | Qué aporta | Viable ahora |
+|---|---|---|
+| **Patrimonio mensual (snapshot)** | Foto del patrimonio al cierre de cada mes → ver cómo evoluciona mes a mes | ✅ Sí — campo de config + gráfica |
+| **Etiquetas (tags)** en movimientos | Marcar gastos transversales (ej. "viaje", "regalo") sin depender de la categoría | ✅ Sí |
+| **Dividir un gasto** (split) | Un pago repartido en varias categorías (ej. mercado + aseo en una compra) | ✅ Sí |
+| **Autocompletar comercio/descripción** | Sugerir descripciones ya usadas al escribir | ✅ Sí |
+| **Presupuesto con arrastre (rollover)** | Lo no gastado pasa al mes siguiente (estilo YNAB) | ✅ Sí |
+| **Bloqueo con PIN** | Capa de privacidad al abrir la app (dato sensible) | ✅ Sí |
+| **Filtros guardados / búsqueda avanzada** | Guardar vistas frecuentes en Movimientos | ✅ Sí |
+| **Adjuntar foto de recibo** | Guardar la imagen del recibo en cada gasto | ⚠️ Requiere Firebase Storage |
+| **Sincronización bancaria automática** | Importar movimientos del banco sin digitar | ❌ Requiere backend/servicio pago |
+| **Multi-moneda / multi-usuario** | — | ❌ No aplica (uso personal, COP) |
+
+### Próxima mejora recomendada: Patrimonio mensual
+
+Idea: guardar automáticamente, al cambiar de mes, una **foto del patrimonio** (saldo de todas las cuentas + lo que te deben − lo que debes) para graficar su evolución mes a mes. Se construye hacia adelante (no se puede reconstruir el pasado con fiabilidad). Datos en un campo `snapshots[]` del doc de configuración (incluido en respaldo). Viable con los recursos actuales.
+
+```mermaid
+flowchart TD
+  OPEN(["Usuario abre la app"]) --> CHK{"¿Falta el snapshot<br/>del mes anterior?"}
+  CHK -->|no| SKIP["No hacer nada"]
+  CHK -->|sí| SNAP["Calcular patrimonio de cierre:<br/>Σ saldos de cuentas<br/>+ Σ 'me deben' − Σ deudas/tarjetas"]
+  SNAP --> STORE["Guardar en snapshots[]<br/>{ ym, disponible, deudas, meDeben, patrimonio, porCuenta }"]
+  STORE --> SAVE["saveConfig → nube/local (va en el respaldo)"]
+  BTN["Botón 'Capturar ahora' (manual)"] -.-> SNAP
+  SAVE --> CHART["Nueva gráfica en Resumen/Cuentas:<br/>Evolución del patrimonio mes a mes"]
+```
+
+> Estado del código: auditado en **v80**, consistente con las convenciones (escapeHtml, COP, fechas locales, respaldo, costura nube/local). Nota de escala: los movimientos de cuenta (`accounts[].movs`) y abonos de deuda (`debts[].abonos`) viven en el doc de configuración; para uso personal aguanta años, pero si crecen mucho conviene moverlos a subcolecciones.
+
 ## Novedades (changelog)
 
 La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v80**. Cambios por fecha (más reciente primero):
