@@ -85,7 +85,7 @@ Comparación con apps de finanzas populares (Monarch, YNAB) y de código abierto
 | ~~**Patrimonio mensual (snapshot)**~~ ✅ **hecho (v81)** | Foto del patrimonio al cierre de cada mes → ver cómo evoluciona mes a mes | Implementado en Cuentas |
 | **Etiquetas (tags)** en movimientos | Marcar gastos transversales (ej. "viaje", "regalo") sin depender de la categoría | ✅ Sí |
 | **Dividir un gasto** (split) | Un pago repartido en varias categorías (ej. mercado + aseo en una compra) | ✅ Sí |
-| **Autocompletar comercio/descripción** | Sugerir descripciones ya usadas al escribir | ✅ Sí |
+| ~~**Autocompletar comercio/descripción**~~ ✅ **hecho (v82)** | Sugerir descripciones ya usadas al escribir | Implementado (sin lecturas extra) |
 | **Presupuesto con arrastre (rollover)** | Lo no gastado pasa al mes siguiente (estilo YNAB) | ✅ Sí |
 | **Bloqueo con PIN** | Capa de privacidad al abrir la app (dato sensible) | ✅ Sí |
 | **Filtros guardados / búsqueda avanzada** | Guardar vistas frecuentes en Movimientos | ✅ Sí |
@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v81**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v82**. Cambios por fecha (más reciente primero):
+
+### 2026-08-30 · caché v82 — Autocompletar descripción/comercio
+- ✍️ Al registrar un gasto o ingreso, el campo **Descripción** ahora sugiere textos que ya usaste antes (comercios, conceptos), ordenados por frecuencia (vía `<datalist>`). Acelera el registro y evita que el mismo comercio quede escrito de varias formas. **No genera lecturas a Firebase**: las sugerencias se arman de los movimientos ya cargados en memoria.
 
 ### 2026-08-30 · caché v81 — Patrimonio mensual (foto del cierre de mes)
 - 🐞 Fix (modo local): `persistLocal` no guardaba `debts`/`debtsEnabled`/`snapshots`. En modo nube no afectaba; ahora el modo local persiste todo.

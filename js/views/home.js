@@ -10,6 +10,16 @@ let tabKind = "gasto";
 let fMonth = "", fCat = "", fMin = "", fMax = "", fAcct = "", fPay = "";
 let limit = 300;
 
+// sugerencias de autocompletado para la descripción, a partir de lo YA cargado en memoria
+// (recorre el arreglo en RAM: NO genera ninguna lectura adicional a Firebase). Ordena por
+// frecuencia de uso y toma las 60 más usadas.
+function descDatalist(id, arr) {
+  const freq = {};
+  for (const t of (arr || [])) { const d = (t.desc || "").trim(); if (d) freq[d] = (freq[d] || 0) + 1; }
+  const opts = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 60);
+  return `<datalist id="${id}">${opts.map((d) => `<option value="${escapeHtml(d)}"></option>`).join("")}</datalist>`;
+}
+
 function applyFilters(arr, isGasto) {
   let f = arr;
   if (query) f = f.filter((t) => ((t.desc || "") + (t.cat || "") + (t.sub || "") + (t.type || "")).toLowerCase().includes(query.toLowerCase()));
@@ -253,7 +263,7 @@ export function openTxModal(existing) {
     : (linkedVeh ? `<div class="field"><p class="tiny muted">🔗 Este gasto está vinculado a un registro del vehículo (combustible/mantenimiento/obligación). Su vehículo se administra desde ese módulo.</p></div>` : "");
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
-    <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : ""}"></div>
+    <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" list="m-desc-list" autocomplete="off" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : ""}">${descDatalist("m-desc-list", s.txs)}</div>
     <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : ""}"></div>
     <div class="field"><label class="label">Categoría</label><select id="m-cat" class="input">${catOpts}</select></div>
     ${missingCat ? `<p class="tiny" style="color:var(--yel);margin:-6px 0 10px">⚠ La categoría original de este gasto fue eliminada. Puedes dejarla o elegir una nueva (si la cambias, no podrás volver a la anterior).</p>` : ""}
@@ -393,7 +403,7 @@ export function openIncomeModal(existing) {
   const typeOpts = INCOME_TYPES.map((t) => `<option>${t}</option>`).join("");
   openModal(existing ? "Editar ingreso" : "Nuevo ingreso", `
     <div class="field"><label class="label">Fecha</label><input id="i-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
-    <div class="field"><label class="label">Descripción</label><input id="i-desc" class="input" placeholder="Ej: Salario" value="${existing ? escapeHtml(existing.desc) : ""}"></div>
+    <div class="field"><label class="label">Descripción</label><input id="i-desc" class="input" list="i-desc-list" autocomplete="off" placeholder="Ej: Salario" value="${existing ? escapeHtml(existing.desc) : ""}">${descDatalist("i-desc-list", s.incomes)}</div>
     <div class="field"><label class="label">Monto (COP)</label><input id="i-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : ""}"></div>
     <div class="field"><label class="label">Tipo</label><select id="i-type" class="input">${typeOpts}</select></div>
     <button id="i-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
