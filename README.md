@@ -83,7 +83,7 @@ Comparación con apps de finanzas populares (Monarch, YNAB) y de código abierto
 | Mejora | Qué aporta | Viable ahora |
 |---|---|---|
 | ~~**Patrimonio mensual (snapshot)**~~ ✅ **hecho (v81)** | Foto del patrimonio al cierre de cada mes → ver cómo evoluciona mes a mes | Implementado en Cuentas |
-| **Etiquetas (tags)** en movimientos | Marcar gastos transversales (ej. "viaje", "regalo") sin depender de la categoría | ✅ Sí |
+| ~~**Etiquetas (tags)** en movimientos~~ ✅ **hecho (v83)** | Marcar gastos transversales (ej. "viaje", "regalo") sin depender de la categoría | Implementado |
 | **Dividir un gasto** (split) | Un pago repartido en varias categorías (ej. mercado + aseo en una compra) | ✅ Sí |
 | ~~**Autocompletar comercio/descripción**~~ ✅ **hecho (v82)** | Sugerir descripciones ya usadas al escribir | Implementado (sin lecturas extra) |
 | **Presupuesto con arrastre (rollover)** | Lo no gastado pasa al mes siguiente (estilo YNAB) | ✅ Sí |
@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v82**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v83**. Cambios por fecha (más reciente primero):
+
+### 2026-08-30 · caché v83 — Etiquetas (tags) en gastos
+- 🏷️ Cada gasto puede llevar **etiquetas** libres (ej. `viaje`, `regalo`) además de su categoría, para agrupar gastos que cruzan categorías. Se escriben separadas por coma (con autocompletado de las ya usadas), se muestran como chips en la lista y hay un **filtro por etiqueta** en Movimientos. Campo `tags[]` en cada transacción (añadido en `addTx`/`bulkUpdateTx`/`bulkSetTx`).
 
 ### 2026-08-30 · caché v82 — Autocompletar descripción/comercio
 - ✍️ Al registrar un gasto o ingreso, el campo **Descripción** ahora sugiere textos que ya usaste antes (comercios, conceptos), ordenados por frecuencia (vía `<datalist>`). Acelera el registro y evita que el mismo comercio quede escrito de varias formas. **No genera lecturas a Firebase**: las sugerencias se arman de los movimientos ya cargados en memoria.

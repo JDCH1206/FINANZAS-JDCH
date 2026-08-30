@@ -7,7 +7,7 @@ import { openModal, closeModal, toast, toastUndo, confirmDialog, submitOnce, mon
 
 let query = "";
 let tabKind = "gasto";
-let fMonth = "", fCat = "", fMin = "", fMax = "", fAcct = "", fPay = "";
+let fMonth = "", fCat = "", fMin = "", fMax = "", fAcct = "", fPay = "", fTag = "";
 let limit = 300;
 
 // sugerencias de autocompletado para la descripción, a partir de lo YA cargado en memoria
@@ -19,6 +19,19 @@ function descDatalist(id, arr) {
   const opts = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 60);
   return `<datalist id="${id}">${opts.map((d) => `<option value="${escapeHtml(d)}"></option>`).join("")}</datalist>`;
 }
+// etiquetas ya usadas (desde memoria) para sugerir al escribir y para el filtro
+function allTags(arr) {
+  const set = new Set();
+  for (const t of (arr || [])) for (const g of (t.tags || [])) { const v = String(g).trim(); if (v) set.add(v); }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+function tagsDatalist(id, arr) {
+  return `<datalist id="${id}">${allTags(arr).map((g) => `<option value="${escapeHtml(g)}"></option>`).join("")}</datalist>`;
+}
+// convierte el texto del campo de etiquetas en un arreglo limpio (sin duplicados ni vacíos)
+function parseTags(str) {
+  return [...new Set((str || "").split(",").map((x) => x.trim()).filter(Boolean))];
+}
 
 function applyFilters(arr, isGasto) {
   let f = arr;
@@ -27,6 +40,7 @@ function applyFilters(arr, isGasto) {
   if (isGasto && fCat) f = f.filter((t) => t.cat === fCat);
   if (isGasto && fAcct) f = f.filter((t) => (t.acct || "") === fAcct);
   if (isGasto && fPay) f = f.filter((t) => (t.pay || "") === fPay);
+  if (isGasto && fTag) f = f.filter((t) => (t.tags || []).includes(fTag));
   if (fMin !== "") f = f.filter((t) => (+t.amount || 0) >= +fMin);
   if (fMax !== "") f = f.filter((t) => (+t.amount || 0) <= +fMax);
   return f;
@@ -55,6 +69,7 @@ export function renderHome(root) {
       ${tabKind === "gasto" ? `<div class="row gap-2 wrap mt-2">
         <select id="f-acct" class="input" style="flex:1;min-width:130px"><option value="">Todas las cuentas</option>${(s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}" ${a.id === fAcct ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("")}</select>
         <select id="f-pay" class="input" style="flex:1;min-width:130px"><option value="">Todos los medios</option>${[...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"].map((m) => `<option ${m === fPay ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}</select>
+        ${allTags(s.txs).length ? `<select id="f-tag" class="input" style="flex:1;min-width:130px"><option value="">Todas las etiquetas</option>${allTags(s.txs).map((g) => `<option ${g === fTag ? "selected" : ""}>${escapeHtml(g)}</option>`).join("")}</select>` : ""}
       </div>` : ""}
       <div class="row gap-2 wrap mt-2">
         <input id="f-min" class="input" type="number" placeholder="Monto mín" value="${fMin}" style="flex:1;min-width:90px">
@@ -71,9 +86,10 @@ export function renderHome(root) {
   const fcatSel = root.querySelector("#f-cat"); if (fcatSel) fcatSel.onchange = (e) => { fCat = e.target.value; limit = 300; drawList(); };
   const facctSel = root.querySelector("#f-acct"); if (facctSel) facctSel.onchange = (e) => { fAcct = e.target.value; limit = 300; drawList(); };
   const fpaySel = root.querySelector("#f-pay"); if (fpaySel) fpaySel.onchange = (e) => { fPay = e.target.value; limit = 300; drawList(); };
+  const ftagSel = root.querySelector("#f-tag"); if (ftagSel) ftagSel.onchange = (e) => { fTag = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-min").oninput = (e) => { fMin = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-max").oninput = (e) => { fMax = e.target.value; limit = 300; drawList(); };
-  root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; fAcct = ""; fPay = ""; renderHome(root); };
+  root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; fAcct = ""; fPay = ""; fTag = ""; renderHome(root); };
 
   // FAB fuera del contenedor animado (#view), pegado a la pantalla, siempre visible
   let fab = document.getElementById("fab");
@@ -148,7 +164,8 @@ function drawList() {
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:${PALETTE[(ci + 11) % PALETTE.length]}"></span>
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${veh ? (veh.tipo === "Moto" ? " 🏍️" : " 🚗") : ""}</div>
-          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}</div></div>
+          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}</div>
+          ${(t.tags || []).length ? `<div class="tx-meta">${t.tags.map((g) => `<span class="badge" style="background:var(--panel-2);color:var(--gold);font-size:10px;padding:1px 6px;margin-right:4px">#${escapeHtml(g)}</span>`).join("")}</div>` : ""}</div>
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}" aria-label="Eliminar gasto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`;
@@ -270,6 +287,7 @@ export function openTxModal(existing) {
     <div class="field"><label class="label">Subcategoría</label><select id="m-sub" class="input"></select></div>
     <div class="field"><label class="label">Medio de pago</label><select id="m-pay" class="input">${payOpts}</select></div>
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="m-acct" class="input">${acctOpts}</select></div>
+    <div class="field"><label class="label">Etiquetas (opcional)</label><input id="m-tags" class="input" list="m-tags-list" autocomplete="off" placeholder="Ej: viaje, regalo (separadas por coma)" value="${existing && existing.tags ? escapeHtml(existing.tags.join(", ")) : ""}">${tagsDatalist("m-tags-list", s.txs)}</div>
     ${vehBlock}${vehEditBlock}
     <button id="m-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
@@ -329,6 +347,7 @@ export function openTxModal(existing) {
           id: existing ? existing.id : uid(), date: b.querySelector("#m-date").value, desc: b.querySelector("#m-desc").value.trim(),
           amount: +b.querySelector("#m-amt").value, cat: catSel.value, sub: subSel.value,
           pay: b.querySelector("#m-pay").value, acct: b.querySelector("#m-acct").value || "",
+          tags: parseTags(b.querySelector("#m-tags").value),
         };
         if (existing) {
           const veWrap = b.querySelector("#m-veh-edit-wrap"), veSel = b.querySelector("#m-veh-edit");

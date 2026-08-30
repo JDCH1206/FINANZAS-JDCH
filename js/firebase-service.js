@@ -232,7 +232,7 @@ export async function addTx(uid, tx) {
   if (FIREBASE_READY) {
     const { db, fsMod } = await initFirebase();
     const ref = fsMod.doc(db, "users", uid, "transactions", tx.id);
-    await fsMod.setDoc(ref, { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "", maintId: tx.maintId || "", obligId: tx.obligId || "" });
+    await fsMod.setDoc(ref, { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "", maintId: tx.maintId || "", obligId: tx.obligId || "", tags: tx.tags || [] });
   } else { persistLocal(uid); }
 }
 
@@ -249,7 +249,7 @@ export async function bulkUpdateTx(uid, txs) {
   const { db, fsMod } = await initFirebase();
   let batch = fsMod.writeBatch(db), n = 0;
   for (const tx of txs) {
-    batch.set(fsMod.doc(db, "users", uid, "transactions", tx.id), { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "", maintId: tx.maintId || "", obligId: tx.obligId || "" });
+    batch.set(fsMod.doc(db, "users", uid, "transactions", tx.id), { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "", maintId: tx.maintId || "", obligId: tx.obligId || "", tags: tx.tags || [] });
     if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
   }
   if (n) await batch.commit();
@@ -267,7 +267,7 @@ export async function bulkSetTx(uid, txs) {
     // inserta nuevos
     batch = fsMod.writeBatch(db); n = 0;
     for (const tx of txs) {
-      batch.set(fsMod.doc(db, "users", uid, "transactions", tx.id), { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "", maintId: tx.maintId || "", obligId: tx.obligId || "" });
+      batch.set(fsMod.doc(db, "users", uid, "transactions", tx.id), { date: tx.date, desc: tx.desc, amount: tx.amount, cat: tx.cat, sub: tx.sub, pay: tx.pay || "", acct: tx.acct || "", vehicleId: tx.vehicleId || "", fuelId: tx.fuelId || "", maintId: tx.maintId || "", obligId: tx.obligId || "", tags: tx.tags || [] });
       if (++n >= 400) { await batch.commit(); batch = fsMod.writeBatch(db); n = 0; }
     }
     if (n) await batch.commit();
