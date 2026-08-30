@@ -82,7 +82,7 @@ Comparación con apps de finanzas populares (Monarch, YNAB) y de código abierto
 
 | Mejora | Qué aporta | Viable ahora |
 |---|---|---|
-| **Patrimonio mensual (snapshot)** | Foto del patrimonio al cierre de cada mes → ver cómo evoluciona mes a mes | ✅ Sí — campo de config + gráfica |
+| ~~**Patrimonio mensual (snapshot)**~~ ✅ **hecho (v81)** | Foto del patrimonio al cierre de cada mes → ver cómo evoluciona mes a mes | Implementado en Cuentas |
 | **Etiquetas (tags)** en movimientos | Marcar gastos transversales (ej. "viaje", "regalo") sin depender de la categoría | ✅ Sí |
 | **Dividir un gasto** (split) | Un pago repartido en varias categorías (ej. mercado + aseo en una compra) | ✅ Sí |
 | **Autocompletar comercio/descripción** | Sugerir descripciones ya usadas al escribir | ✅ Sí |
@@ -112,9 +112,12 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v80**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v81**. Cambios por fecha (más reciente primero):
 
-### 2026-08-24 · caché v80 — Nuevo módulo: Deudas, préstamos y tarjetas
+### 2026-08-30 · caché v81 — Patrimonio mensual (foto del cierre de mes)
+- 🐞 Fix (modo local): `persistLocal` no guardaba `debts`/`debtsEnabled`/`snapshots`. En modo nube no afectaba; ahora el modo local persiste todo.
+- 🏛️ Nueva tarjeta **Patrimonio mensual** en Cuentas: muestra tu patrimonio hoy (saldo de cuentas + lo que te deben − lo que debes) y un botón para **guardar la foto del mes**. Al acumular ≥2 fotos aparece la gráfica **evolución del patrimonio mes a mes**.
+- 🗓️ **Aviso de cierre de mes**: el último día del mes (y en Cuentas los últimos 3 días) la app invita a **actualizar los saldos de las cuentas** y guardar la foto, para que el patrimonio quede fiel. Datos en `snapshots[]` del doc de config (incluidos en respaldo). Se construye hacia adelante.
 - 💳 Módulo opcional **Deudas y préstamos** (se activa en Ajustes, aparece en "Más"). Registra tres tipos: **Debo**, **Me deben** y **Tarjeta de crédito** (con cupo, día de corte y día de pago). Resumen arriba: total que debes, total que te deben y cupo disponible. Cada deuda muestra su saldo y progreso; registras **abonos** (y en tarjetas, consumos/pagos) que ajustan el saldo, con historial. Datos en el doc de config (`debts[]`, `debtsEnabled`); incluidos en respaldo/restauración. Vista `debts.js`.
 
 ### 2026-08-24 · caché v79 — Ajustes: reporte mensual (PDF)

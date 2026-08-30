@@ -130,12 +130,13 @@ function startSession(user) {
       accounts: data.accounts || [], payMethods: data.payMethods || [],
       vehicles: data.vehicles || [], vehiclesEnabled: data.vehiclesEnabled || false, goals: data.goals || [], recurrentes: data.recurrentes || [],
       debts: data.debts || [], debtsEnabled: data.debtsEnabled || false,
+      snapshots: data.snapshots || [],
       txs: data.txs, incomes: data.incomes || [], loading: false,
     });
     if (!booted) {
       booted = true;
       if (data.isNew) { renderOnboarding(app, () => mountShell("summary")); }
-      else { mountShell("summary"); checkBackupReminder(); checkVehicleAlerts(); }
+      else { mountShell("summary"); checkBackupReminder(); checkVehicleAlerts(); checkMonthEndSnapshot(); }
     } else if (data.fromRemote) {
       liveRefresh();
     }
@@ -212,6 +213,21 @@ function checkBackupReminder() {
     const last = localStorage.getItem("fz_last_backup");
     const days = last ? Math.round((Date.now() - new Date(last + "T00:00:00")) / 86400000) : 999;
     if (days >= 30) setTimeout(() => toast(last ? `Hace ${days} días no descargas un respaldo. Ajustes → Descargar respaldo.` : "Tip: descarga un respaldo en Ajustes para proteger tus datos."), 1800);
+  } catch (e) { /* noop */ }
+}
+
+// recordatorio de FIN DE MES: el último día del mes, invita a actualizar los saldos de las
+// cuentas y guardar la foto del patrimonio (si aún no se guardó la de este mes).
+function checkMonthEndSnapshot() {
+  try {
+    const t = todayISO();
+    const [y, m, d] = t.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    if (d !== lastDay) return;                          // solo el último día del mes
+    const ym = t.slice(0, 7);
+    const snaps = getState().snapshots || [];
+    if (snaps.some((x) => x.ym === ym)) return;         // ya capturado este mes
+    setTimeout(() => toast("Hoy es fin de mes: actualiza los saldos de tus cuentas y guarda la foto del patrimonio (Cuentas → Patrimonio mensual).", false), 2400);
   } catch (e) { /* noop */ }
 }
 

@@ -1,10 +1,34 @@
 // js/views/accounts.js
 import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal } from "../firebase-service.js";
-import { fmt, uid, escapeHtml, debounce, sum, fmtDate, todayISO } from "../utils.js";
+import { fmt, uid, escapeHtml, debounce, sum, fmtDate, todayISO, curMonth, monthLabel } from "../utils.js";
 import { ACCOUNT_TYPES, PALETTE } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend } from "../components/charts.js";
+
+// Patrimonio actual = saldo de cuentas + lo que te deben − lo que debes (deudas/tarjetas)
+export function netWorthNow(s) {
+  const disponible = sum(s.accounts || [], (a) => +a.balance || 0);
+  const debts = s.debts || [];
+  const deudas = sum(debts.filter((d) => d.tipo === "debo" || d.tipo === "tarjeta"), (d) => +d.saldo || 0);
+  const meDeben = sum(debts.filter((d) => d.tipo === "me_deben"), (d) => +d.saldo || 0);
+  return { disponible, deudas, meDeben, patrimonio: disponible + meDeben - deudas };
+}
+
+// guarda (o reemplaza) la foto del patrimonio del mes actual
+async function captureSnapshot(root) {
+  const s = getState();
+  const ym = curMonth();
+  const nw = netWorthNow(s);
+  const porCuenta = Object.fromEntries((s.accounts || []).map((a) => [a.id, +a.balance || 0]));
+  const snap = { ym, fecha: todayISO(), ...nw, porCuenta };
+  const snapshots = [...(s.snapshots || []).filter((x) => x.ym !== ym), snap].sort((a, b) => a.ym.localeCompare(b.ym));
+  setState({ snapshots });
+  await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, snapshots });
+  forcePersistLocal(s.user.uid);
+  renderAccounts(root);
+  toast("Patrimonio de " + monthLabel(ym) + " guardado");
+}
 
 let savScope = "all"; // ámbito de la gráfica de evolución: "all" o id de cuenta
 
@@ -114,6 +138,8 @@ export function renderAccounts(root) {
         <select id="sav-scope" class="input" style="width:auto"></select></div>
       <div id="sav-wrap"></div></div>` : ""}
 
+    ${patrimonioCard(s)}
+
     <div class="card mb-3">
       <div class="row between mb-3"><div class="card-title" style="margin:0">Tus cuentas</div>
         <div class="row gap-2">
@@ -141,6 +167,38 @@ export function renderAccounts(root) {
   }
 
   drawSavings(root);
+
+  // patrimonio mensual: botón para guardar la foto + gráfica de evolución
+  const snapBtn = root.querySelector("#snap-save");
+  if (snapBtn) snapBtn.onclick = () => captureSnapshot(root);
+  const snaps = (s.snapshots || []).slice().sort((a, b) => a.ym.localeCompare(b.ym));
+  if (snaps.length >= 2 && root.querySelector("#ch-nw")) {
+    lineTrend("ch-nw", snaps.map((x) => monthLabel(x.ym)), snaps.map((x) => Math.round(x.patrimonio || 0)));
+  }
+}
+
+// tarjeta "Patrimonio mensual": patrimonio actual, aviso de cierre de mes y evolución mes a mes
+function patrimonioCard(s) {
+  const nw = netWorthNow(s);
+  const ym = curMonth(), snaps = s.snapshots || [];
+  const yaEsteMed = snaps.some((x) => x.ym === ym);
+  const t = todayISO(), [y, m, d] = t.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const cierreMes = d >= lastDay - 2; // últimos 3 días del mes
+  const aviso = (cierreMes && !yaEsteMed)
+    ? `<div class="tiny" style="color:var(--gold);margin:2px 0 10px">📸 Es cierre de mes: revisa y actualiza los saldos de tus cuentas arriba, luego guarda la foto del patrimonio de <b>${monthLabel(ym)}</b>.</div>`
+    : "";
+  return `<div class="card mb-3" ${cierreMes && !yaEsteMed ? 'style="border:1px solid var(--gold)"' : ""}>
+    <div class="card-title">🏛️ Patrimonio mensual</div>
+    ${aviso}
+    <div class="row between small" style="padding:3px 0"><span class="muted">Disponible (cuentas)</span><span>${fmt(nw.disponible)}</span></div>
+    ${nw.meDeben ? `<div class="row between small" style="padding:3px 0"><span class="muted">+ Te deben</span><span style="color:var(--green)">${fmt(nw.meDeben)}</span></div>` : ""}
+    ${nw.deudas ? `<div class="row between small" style="padding:3px 0"><span class="muted">− Debes</span><span style="color:var(--red)">${fmt(nw.deudas)}</span></div>` : ""}
+    <div class="row between" style="padding:6px 0;border-top:1px solid var(--line);font-weight:700"><span>Patrimonio hoy</span><span style="color:${nw.patrimonio >= 0 ? "var(--green)" : "var(--red)"}">${fmt(nw.patrimonio)}</span></div>
+    <button id="snap-save" class="btn ${yaEsteMed ? "btn-ghost" : "btn-primary"} btn-block btn-sm mt-2">📸 ${yaEsteMed ? "Actualizar" : "Guardar"} patrimonio de ${monthLabel(ym)}</button>
+    ${snaps.length >= 2 ? `<div class="chart-box mt-3"><canvas id="ch-nw"></canvas></div>
+      <p class="tiny muted mt-1">Evolución del patrimonio al cierre de cada mes.</p>` : `<p class="tiny muted mt-2">${yaEsteMed ? "Guardaste la foto de este mes. El próximo mes verás la evolución." : "Guarda la primera foto para empezar a ver tu patrimonio mes a mes."}</p>`}
+  </div>`;
 }
 
 // gráfica "Así ha crecido tu dinero": evolución del saldo + rendimiento/aportes acumulados

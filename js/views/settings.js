@@ -235,8 +235,8 @@ export function renderSettings(root, onSignOut) {
     const file = impJson.files[0]; if (!file) return;
     try {
       const d = JSON.parse(await file.text());
-      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false });
-      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false });
+      setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false, snapshots: d.snapshots || [] });
+      await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false, snapshots: d.snapshots || [] });
       await bulkSetTx(s.user.uid, d.txs || []);
       await bulkSetIncomes(s.user.uid, d.incomes || []);
       // subcolecciones (cada helper actúa solo en su modo: bulkSetAll* en nube, persist* en local)

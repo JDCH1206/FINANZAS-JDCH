@@ -125,6 +125,7 @@ export async function loadData(uid) {
       recurrentes: base?.recurrentes || [],
       debts: base?.debts || [],
       debtsEnabled: base?.debtsEnabled || false,
+      snapshots: base?.snapshots || [],
       txs, incomes,
       isNew: !snap.exists(),
     };
@@ -165,6 +166,7 @@ export function subscribeData(uid, onData) {
       recurrentes: base?.recurrentes || [],
       debts: base?.debts || [],
       debtsEnabled: base?.debtsEnabled || false,
+      snapshots: base?.snapshots || [],
       txs: txs.slice(),
       incomes: incomes.slice(),
       isNew: !baseExists,
@@ -206,7 +208,7 @@ export function subscribeData(uid, onData) {
 }
 
 /* ---------- Guardado de config (profile, cats, budgets) ---------- */
-export async function saveConfig(uid, { profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes, debts, debtsEnabled }) {
+export async function saveConfig(uid, { profile, cats, budgets, accounts, payMethods, vehicles, vehiclesEnabled, goals, recurrentes, debts, debtsEnabled, snapshots }) {
   if (FIREBASE_READY) {
     const { db, fsMod } = await initFirebase();
     const payload = { profile, cats, budgets };
@@ -218,6 +220,7 @@ export async function saveConfig(uid, { profile, cats, budgets, accounts, payMet
     if (recurrentes !== undefined) payload.recurrentes = recurrentes;
     if (debts !== undefined) payload.debts = debts;
     if (debtsEnabled !== undefined) payload.debtsEnabled = debtsEnabled;
+    if (snapshots !== undefined) payload.snapshots = snapshots;
     await fsMod.setDoc(fsMod.doc(db, "users", uid), payload, { merge: true });
   } else {
     persistLocal(uid);
@@ -459,6 +462,6 @@ export function bindLocalState(getter) { _stateGetter = getter; }
 function persistLocal(uid) {
   if (!_stateGetter) return;
   const s = _stateGetter();
-  localStorage.setItem("fz_data_" + uid, JSON.stringify({ profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: s.vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals, recurrentes: s.recurrentes, txs: s.txs, incomes: s.incomes }));
+  localStorage.setItem("fz_data_" + uid, JSON.stringify({ profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: s.vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals, recurrentes: s.recurrentes, debts: s.debts, debtsEnabled: s.debtsEnabled, snapshots: s.snapshots, txs: s.txs, incomes: s.incomes }));
 }
 export function forcePersistLocal(uid) { if (!FIREBASE_READY) persistLocal(uid); }
