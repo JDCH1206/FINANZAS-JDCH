@@ -33,6 +33,14 @@ function parseTags(str) {
   return [...new Set((str || "").split(",").map((x) => x.trim()).filter(Boolean))];
 }
 
+// filtros guardados: combinaciones con nombre, por dispositivo (localStorage; no toca la nube)
+function getSavedFilters() {
+  try { return JSON.parse(localStorage.getItem("fz_filters_" + getState().user.uid) || "[]"); } catch (e) { return []; }
+}
+function setSavedFilters(arr) {
+  try { localStorage.setItem("fz_filters_" + getState().user.uid, JSON.stringify(arr)); } catch (e) { /* noop */ }
+}
+
 function applyFilters(arr, isGasto) {
   let f = arr;
   if (query) f = f.filter((t) => ((t.desc || "") + (t.cat || "") + (t.sub || "") + (t.type || "")).toLowerCase().includes(query.toLowerCase()));
@@ -76,6 +84,7 @@ export function renderHome(root) {
         <input id="f-max" class="input" type="number" placeholder="Monto máx" value="${fMax}" style="flex:1;min-width:90px">
         <button id="f-clear" class="btn btn-ghost btn-sm">Limpiar</button>
       </div>
+      ${tabKind === "gasto" ? `<div id="saved-filters" class="row gap-2 wrap mt-2"></div>` : ""}
     </div>
     <div id="rec-pending"></div>
     <div class="card" style="padding:0" id="list"></div>`;
@@ -90,6 +99,7 @@ export function renderHome(root) {
   root.querySelector("#f-min").oninput = (e) => { fMin = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-max").oninput = (e) => { fMax = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; fAcct = ""; fPay = ""; fTag = ""; renderHome(root); };
+  drawSavedFilters(root);
 
   // FAB fuera del contenedor animado (#view), pegado a la pantalla, siempre visible
   let fab = document.getElementById("fab");
@@ -147,6 +157,42 @@ async function skipRec(root, id) {
   await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, recurrentes: getState().recurrentes });
   forcePersistLocal(s.user.uid);
   drawPending(root); toast("Omitido este mes");
+}
+
+// chips de filtros guardados + botón para guardar la combinación actual
+function drawSavedFilters(root) {
+  const host = root.querySelector("#saved-filters"); if (!host) return;
+  const arr = getSavedFilters();
+  host.innerHTML = arr.map((sf) => `<span class="chip" data-fapply="${sf.id}" style="cursor:pointer">🔖 ${escapeHtml(sf.name)} <b data-fdel="${sf.id}" style="color:var(--red);cursor:pointer;margin-left:4px">✕</b></span>`).join("")
+    + `<button class="chip" id="f-save-btn" style="cursor:pointer">★ Guardar filtro actual</button>`;
+  host.querySelectorAll("[data-fapply]").forEach((c) => c.onclick = (e) => {
+    if (e.target.closest("[data-fdel]")) return;
+    const sf = getSavedFilters().find((x) => x.id === c.getAttribute("data-fapply")); if (!sf) return;
+    const f = sf.f || {};
+    query = f.query || ""; fMonth = f.fMonth || ""; fCat = f.fCat || ""; fAcct = f.fAcct || ""; fPay = f.fPay || ""; fTag = f.fTag || ""; fMin = f.fMin || ""; fMax = f.fMax || "";
+    limit = 300; renderHome(root);
+  });
+  host.querySelectorAll("[data-fdel]").forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();
+    setSavedFilters(getSavedFilters().filter((x) => x.id !== b.getAttribute("data-fdel")));
+    drawSavedFilters(root); toast("Filtro eliminado");
+  });
+  root.querySelector("#f-save-btn").onclick = () => {
+    openModal("Guardar filtro", `
+      <p class="tiny muted mb-3">Guarda la combinación actual de filtros (mes, categoría, cuenta, medio, etiqueta, montos y búsqueda) con un nombre. Se guarda en este dispositivo.</p>
+      <div class="field"><label class="label">Nombre</label><input id="fs-name" class="input" placeholder="Ej: Gastos moto 2026"></div>
+      <button id="fs-save" class="btn btn-primary btn-block">Guardar</button>`, {
+      onMount(b) {
+        submitOnce(b.querySelector("#fs-save"), async () => {
+          const name = b.querySelector("#fs-name").value.trim();
+          if (!name) return toast("Ponle un nombre", true);
+          const sf = { id: uid(), name, f: { query, fMonth, fCat, fAcct, fPay, fTag, fMin, fMax } };
+          setSavedFilters([...getSavedFilters(), sf]);
+          closeModal(); drawSavedFilters(root); toast("Filtro guardado");
+        });
+      },
+    });
+  };
 }
 
 function drawList() {

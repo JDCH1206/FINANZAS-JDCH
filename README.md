@@ -88,7 +88,7 @@ Comparación con apps de finanzas populares (Monarch, YNAB) y de código abierto
 | ~~**Autocompletar comercio/descripción**~~ ✅ **hecho (v82)** | Sugerir descripciones ya usadas al escribir | Implementado (sin lecturas extra) |
 | **Presupuesto con arrastre (rollover)** | Lo no gastado pasa al mes siguiente (estilo YNAB) | ✅ Sí |
 | **Bloqueo con PIN** | Capa de privacidad al abrir la app (dato sensible) | ✅ Sí |
-| **Filtros guardados / búsqueda avanzada** | Guardar vistas frecuentes en Movimientos | ✅ Sí |
+| ~~**Filtros guardados / búsqueda avanzada**~~ ✅ **hecho (v85)** | Guardar vistas frecuentes en Movimientos | Implementado (por dispositivo) |
 | **Adjuntar foto de recibo** | Guardar la imagen del recibo en cada gasto | ⚠️ Requiere Firebase Storage |
 | **Sincronización bancaria automática** | Importar movimientos del banco sin digitar | ❌ Requiere backend/servicio pago |
 | **Multi-moneda / multi-usuario** | — | ❌ No aplica (uso personal, COP) |
@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v84**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v85**. Cambios por fecha (más reciente primero):
+
+### 2026-08-30 · caché v85 — Filtros guardados en Movimientos
+- 🔖 En Movimientos (Gastos) puedes **guardar la combinación de filtros actual** (mes, categoría, cuenta, medio, etiqueta, montos, búsqueda) con un nombre y reaplicarla con un toque; se muestran como chips, con ✕ para borrar. Se guardan **por dispositivo** (localStorage), así que **no generan lecturas a Firebase**.
 
 ### 2026-08-30 · caché v84 — Dividir un gasto (split)
 - ➗ Nuevo botón **"Dividir en varias categorías"** en el modal de nuevo gasto: un mismo pago se reparte en varias partes (categoría + monto), compartiendo fecha, descripción, medio de pago y cuenta. Crea **un gasto por parte** (cada uno editable/borrable por separado), enlazados por un `splitId`; en la lista se marcan con "÷". Campo `splitId` añadido a los escritores de transacciones.
