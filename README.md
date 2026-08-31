@@ -84,7 +84,7 @@ Comparación con apps de finanzas populares (Monarch, YNAB) y de código abierto
 |---|---|---|
 | ~~**Patrimonio mensual (snapshot)**~~ ✅ **hecho (v81)** | Foto del patrimonio al cierre de cada mes → ver cómo evoluciona mes a mes | Implementado en Cuentas |
 | ~~**Etiquetas (tags)** en movimientos~~ ✅ **hecho (v83)** | Marcar gastos transversales (ej. "viaje", "regalo") sin depender de la categoría | Implementado |
-| **Dividir un gasto** (split) | Un pago repartido en varias categorías (ej. mercado + aseo en una compra) | ✅ Sí |
+| ~~**Dividir un gasto** (split)~~ ✅ **hecho (v84)** | Un pago repartido en varias categorías (ej. mercado + aseo en una compra) | Implementado |
 | ~~**Autocompletar comercio/descripción**~~ ✅ **hecho (v82)** | Sugerir descripciones ya usadas al escribir | Implementado (sin lecturas extra) |
 | **Presupuesto con arrastre (rollover)** | Lo no gastado pasa al mes siguiente (estilo YNAB) | ✅ Sí |
 | **Bloqueo con PIN** | Capa de privacidad al abrir la app (dato sensible) | ✅ Sí |
@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v83**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v84**. Cambios por fecha (más reciente primero):
+
+### 2026-08-30 · caché v84 — Dividir un gasto (split)
+- ➗ Nuevo botón **"Dividir en varias categorías"** en el modal de nuevo gasto: un mismo pago se reparte en varias partes (categoría + monto), compartiendo fecha, descripción, medio de pago y cuenta. Crea **un gasto por parte** (cada uno editable/borrable por separado), enlazados por un `splitId`; en la lista se marcan con "÷". Campo `splitId` añadido a los escritores de transacciones.
 
 ### 2026-08-30 · caché v83 — Etiquetas (tags) en gastos
 - 🏷️ Cada gasto puede llevar **etiquetas** libres (ej. `viaje`, `regalo`) además de su categoría, para agrupar gastos que cruzan categorías. Se escriben separadas por coma (con autocompletado de las ya usadas), se muestran como chips en la lista y hay un **filtro por etiqueta** en Movimientos. Campo `tags[]` en cada transacción (añadido en `addTx`/`bulkUpdateTx`/`bulkSetTx`).

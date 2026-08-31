@@ -164,7 +164,7 @@ function drawList() {
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:${PALETTE[(ci + 11) % PALETTE.length]}"></span>
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${veh ? (veh.tipo === "Moto" ? " 🏍️" : " 🚗") : ""}</div>
-          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}</div>
+          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}${t.splitId ? ' · <span title="Parte de un gasto dividido">÷</span>' : ""}</div>
           ${(t.tags || []).length ? `<div class="tx-meta">${t.tags.map((g) => `<span class="badge" style="background:var(--panel-2);color:var(--gold);font-size:10px;padding:1px 6px;margin-right:4px">#${escapeHtml(g)}</span>`).join("")}</div>` : ""}</div>
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}" aria-label="Eliminar gasto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
@@ -289,8 +289,11 @@ export function openTxModal(existing) {
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="m-acct" class="input">${acctOpts}</select></div>
     <div class="field"><label class="label">Etiquetas (opcional)</label><input id="m-tags" class="input" list="m-tags-list" autocomplete="off" placeholder="Ej: viaje, regalo (separadas por coma)" value="${existing && existing.tags ? escapeHtml(existing.tags.join(", ")) : ""}">${tagsDatalist("m-tags-list", s.txs)}</div>
     ${vehBlock}${vehEditBlock}
+    ${!existing ? `<button type="button" id="m-split" class="btn btn-ghost btn-block btn-sm" style="margin-bottom:8px">➗ Dividir en varias categorías</button>` : ""}
     <button id="m-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
+      const splitBtn = b.querySelector("#m-split");
+      if (splitBtn) splitBtn.onclick = () => openSplitModal({ date: b.querySelector("#m-date").value, desc: b.querySelector("#m-desc").value.trim() });
       const catSel = b.querySelector("#m-cat"), subSel = b.querySelector("#m-sub");
       const fillSubs = () => {
         const c = s.cats.find((x) => x.name === catSel.value);
@@ -412,6 +415,61 @@ export function openTxModal(existing) {
         setState({ txs: [tx, ...s.txs] });
         await addTx(s.user.uid, tx); forcePersistLocal(s.user.uid);
         closeModal(); drawList(); toast(vehId ? "Gasto agregado y registrado en el vehículo" : "Gasto agregado");
+      });
+    },
+  });
+}
+
+// Dividir un gasto: un mismo pago repartido en varias categorías. Crea una transacción por
+// parte (cada una es un gasto normal), enlazadas por un mismo splitId. Fecha/desc/pago/cuenta
+// se comparten. Cada parte se puede editar o borrar por separado luego.
+export function openSplitModal(prefill = {}) {
+  const s = getState();
+  const catOpts = s.cats.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
+  const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
+  const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
+  const partRow = () => `<div class="row gap-2 split-part" style="margin-bottom:6px;align-items:center">
+      <select class="input sp-cat" style="flex:1;min-width:0">${catOpts}</select>
+      <input class="input sp-amt" type="number" placeholder="0" style="width:110px">
+      <button type="button" class="icon-btn sp-del" aria-label="Quitar parte">✕</button></div>`;
+  openModal("Dividir gasto", `
+    <p class="tiny muted" style="margin:-4px 0 10px">Un pago repartido en varias categorías (ej. mercado + aseo en una compra). Se crea un gasto por parte, con la misma fecha y descripción.</p>
+    <div class="field"><label class="label">Fecha</label><input id="sp-date" class="input" type="date" value="${prefill.date || todayISO()}"></div>
+    <div class="field"><label class="label">Descripción</label><input id="sp-desc" class="input" list="sp-desc-list" autocomplete="off" placeholder="Ej: Compra Éxito" value="${escapeHtml(prefill.desc || "")}">${descDatalist("sp-desc-list", s.txs)}</div>
+    <div class="field"><label class="label">Medio de pago</label><select id="sp-pay" class="input">${payOpts}</select></div>
+    <div class="field"><label class="label">Cuenta (opcional)</label><select id="sp-acct" class="input">${acctOpts}</select></div>
+    <label class="label">Partes (categoría · monto)</label>
+    <div id="sp-parts">${partRow()}${partRow()}</div>
+    <button type="button" id="sp-add" class="btn btn-ghost btn-sm">+ Agregar parte</button>
+    <div class="row between mt-2 small" style="padding-top:6px;border-top:1px solid var(--line)"><span class="muted">Total repartido</span><span id="sp-total" class="bold" style="color:var(--gold)">$0</span></div>
+    <button id="sp-save" class="btn btn-primary btn-block mt-2">Guardar gasto dividido</button>`, {
+    onMount(b) {
+      const parts = b.querySelector("#sp-parts");
+      const recalc = () => { const t = [...b.querySelectorAll(".sp-amt")].reduce((a, i) => a + (+i.value || 0), 0); b.querySelector("#sp-total").textContent = fmt(t); };
+      const wire = () => {
+        b.querySelectorAll(".sp-amt").forEach((i) => i.oninput = recalc);
+        b.querySelectorAll(".sp-del").forEach((x) => x.onclick = () => { if (b.querySelectorAll(".split-part").length > 1) { x.closest(".split-part").remove(); recalc(); } });
+      };
+      wire();
+      b.querySelector("#sp-add").onclick = () => { parts.insertAdjacentHTML("beforeend", partRow()); wire(); };
+      submitOnce(b.querySelector("#sp-save"), async () => {
+        const date = b.querySelector("#sp-date").value, desc = b.querySelector("#sp-desc").value.trim();
+        const pay = b.querySelector("#sp-pay").value, acct = b.querySelector("#sp-acct").value || "";
+        if (!date || !desc) return toast("Falta fecha o descripción", true);
+        const partsData = [...b.querySelectorAll(".split-part")]
+          .map((p) => ({ cat: p.querySelector(".sp-cat").value, amount: +p.querySelector(".sp-amt").value || 0 }))
+          .filter((p) => p.amount > 0);
+        if (partsData.length < 2) return toast("Necesitas al menos 2 partes con monto", true);
+        const splitId = uid(), s2 = getState();
+        const newTxs = partsData.map((p) => {
+          const c = s2.cats.find((x) => x.name === p.cat);
+          return { id: uid(), date, desc, amount: p.amount, cat: p.cat, sub: (c && c.subs && c.subs[0]) || "", pay, acct, tags: [], splitId };
+        });
+        setState({ txs: [...newTxs, ...s2.txs] });
+        for (const t of newTxs) await addTx(s2.user.uid, t);
+        forcePersistLocal(s2.user.uid);
+        closeModal(); drawList(); toast(`Gasto dividido en ${newTxs.length} partes`);
       });
     },
   });
