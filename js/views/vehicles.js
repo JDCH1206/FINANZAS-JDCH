@@ -583,9 +583,18 @@ function drawMaint(root, v) {
       <button id="back" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
       <div><div class="page-title disp" style="font-size:21px;margin:0">🔧 Mantenimiento</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)} · ${Number(v.odometro || 0).toLocaleString("es-CO")} km</div></div>
     </div>
-    <button id="add-visit" class="btn btn-primary btn-block mb-2">🧾 Registrar visita (varias líneas)</button>
-    <button id="add-maint" class="btn btn-ghost btn-block mb-2">+ Ítem suelto</button>
-    <button id="import-maint" class="btn btn-ghost btn-block mb-2">📥 Importar gastos de mantenimiento</button>
+    <button id="add-visit" class="btn btn-primary btn-block mb-2" style="display:block;text-align:left;height:auto;padding:12px 14px;line-height:1.3">
+      <div style="font-weight:700">🧾 Registrar orden de trabajo</div>
+      <div style="font-size:11.5px;opacity:.85;font-weight:400;margin-top:3px">Una factura del taller con <b>varias líneas</b> (mano de obra + repuestos). El total se suma y queda <b>un solo gasto</b>. Úsalo cuando llevas la moto a servicio.</div>
+    </button>
+    <button id="add-maint" class="btn btn-ghost btn-block mb-2" style="display:block;text-align:left;height:auto;padding:12px 14px;line-height:1.3">
+      <div style="font-weight:700">🔧 Registrar ítem individual</div>
+      <div class="tiny muted" style="font-weight:400;margin-top:3px">Un <b>solo</b> servicio o repuesto (ej. lubricar cadena, revisar presión). Entra solo a la bitácora; <b>no crea gasto</b>. Útil para rutinas y chequeos sin factura.</div>
+    </button>
+    <button id="import-maint" class="btn btn-ghost btn-block mb-2" style="display:block;text-align:left;height:auto;padding:12px 14px;line-height:1.3">
+      <div style="font-weight:700">📥 Importar desde Movimientos</div>
+      <div class="tiny muted" style="font-weight:400;margin-top:3px">Vincula a esta bitácora gastos de la moto que <b>ya registraste en Movimientos</b>, sin duplicarlos.</div>
+    </button>
     ${maintDupes ? `<button id="dedupe-maint" class="btn btn-ghost btn-block mb-3" style="color:var(--red)">🧹 Quitar ${maintDupes} duplicado(s)</button>` : `<div class="mb-1"></div>`}
     <div class="grid-kpi mb-4">
       ${kpi("Gasto total", fmt(totalCost))}

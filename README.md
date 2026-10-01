@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v89**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v90**. Cambios por fecha (más reciente primero):
+
+### 2026-10-01 · caché v90 — Mantenimiento: botones más claros con descripción
+- 🧭 Los tres botones de Mantenimiento se renombraron y ahora traen una línea que explica **qué hace cada uno y cuándo usarlo**: **🧾 Registrar orden de trabajo** (factura con varias líneas → un solo gasto), **🔧 Registrar ítem individual** (un solo servicio/repuesto, solo bitácora, no crea gasto) e **📥 Importar desde Movimientos** (vincula gastos ya registrados sin duplicarlos).
 
 ### 2026-10-01 · caché v89 — Visita de taller: clasificación por línea
 - 🏷️ Cada línea de una visita ahora tiene un selector de **clasificación**: **Mantenimiento · Insumo · Accesorio · Otros** (actividades por defecto "Mantenimiento", repuestos "Insumo"). Se guarda como la categoría de la línea, con su color de etiqueta en la bitácora. Al editar una línea después, se conservan tanto su clasificación como su descripción/referencia. Constante `MAINT_CLASES`.
