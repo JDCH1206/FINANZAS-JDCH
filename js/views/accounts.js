@@ -108,6 +108,17 @@ export function renderAccounts(root) {
   const pend = accts.filter((a) => acctNeedsUpdate(a, today));
   const rendGlobal = sum(accts, (a) => rendTotal(a));
 
+  // KPIs de rendimiento (a partir de los movimientos de las cuentas)
+  const curY = today.slice(0, 4);
+  const allMovs = accts.flatMap((a) => a.movs || []);
+  const rendYTD = sum(allMovs.filter((m) => m.kind === "rendimiento" && (m.date || "").slice(0, 4) === curY), (m) => m.amount);
+  const aportesTot = sum(allMovs.filter((m) => m.kind === "aporte"), (m) => m.amount);
+  const rendMonths = new Set(allMovs.filter((m) => m.kind === "rendimiento").map((m) => (m.date || "").slice(0, 7)).filter(Boolean)).size || 1;
+  const rendProm = rendGlobal / rendMonths;
+  const eas = accts.map((a) => yieldEstimate(a)).filter(Boolean).map((y) => y.ea);
+  const eaAvg = eas.length ? eas.reduce((a, b) => a + b, 0) / eas.length : null;
+  const kpiBox = (label, val, col) => `<div class="kpi"><div class="k-label">${label}</div><div class="k-val sm"${col ? ` style="color:${col}"` : ""}>${val}</div></div>`;
+
   root.innerHTML = `
     <h2 class="page-title disp">Cuentas y ahorro</h2>
     <p class="page-sub">Dónde está tu dinero y cómo se distribuye</p>
@@ -117,6 +128,15 @@ export function renderAccounts(root) {
       <div class="k-val">${fmt(total)}</div>
       ${rendGlobal ? `<div class="tiny" style="color:var(--green);margin-top:4px">↑ ${fmt(rendGlobal)} registrado en rendimientos</div>` : ""}
     </div>
+
+    ${rendGlobal ? `<div class="card mb-3"><div class="card-title">Rendimientos</div>
+      <div class="grid-kpi">
+        ${kpiBox("Total ganado", fmt(rendGlobal), "var(--green)")}
+        ${kpiBox("Este año", fmt(rendYTD), "var(--green)")}
+        ${kpiBox("Prom./mes", fmt(rendProm))}
+        ${kpiBox("Aportes", fmt(aportesTot))}
+        ${eaAvg != null ? kpiBox("Rentab. prom", "≈ " + (eaAvg * 100).toFixed(1) + "% E.A.", "var(--green)") : ""}
+      </div></div>` : ""}
 
     ${pend.length ? `<div class="card mb-3" style="border:1px solid var(--gold)">
       <div class="card-title">📈 Actualiza el saldo de esta semana</div>

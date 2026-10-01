@@ -39,9 +39,11 @@ export function renderDashboard(root) {
       <button class="chip ${dashTab === "resumen" ? "on" : ""}" data-tab="resumen">Resumen</button>
       <button class="chip ${dashTab === "detalle" ? "on" : ""}" data-tab="detalle">Detalle por mes</button>
       <button class="chip ${dashTab === "calendario" ? "on" : ""}" data-tab="calendario">Calendario</button>
+      <button class="chip ${dashTab === "avanzado" ? "on" : ""}" data-tab="avanzado">Avanzado</button>
     </div>`;
   if (dashTab === "detalle") { renderDetalle(root, tabs); return; }
   if (dashTab === "calendario") { renderCalendar(root, tabs); return; }
+  if (dashTab === "avanzado") { renderAvanzado(root, tabs); return; }
 
   root.innerHTML = `
     ${tabs}
@@ -350,6 +352,53 @@ function renderCalendar(root, tabs) {
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
   root.querySelector("#cal-mes").onchange = (e) => { calMonth = e.target.value; renderCalendar(root, tabs); };
   root.querySelectorAll("[data-day]").forEach((b) => b.onclick = () => openDayModal(calMonth, +b.getAttribute("data-day")));
+}
+
+/* ===================== ANÁLISIS AVANZADO (gasto hormiga + recurrentes) ===================== */
+const _norm = (x) => (x || "").trim().toLowerCase().replace(/\s+/g, " ");
+function renderAvanzado(root, tabs) {
+  const s = getState();
+  const txs = s.txs || [];
+  // agrupar por descripción normalizada
+  const g = {};
+  txs.forEach((t) => {
+    const k = _norm(t.desc); if (!k) return;
+    const G = g[k] || (g[k] = { n: 0, tot: 0, orig: {}, months: new Set() });
+    G.n++; G.tot += (+t.amount || 0); G.orig[t.desc] = (G.orig[t.desc] || 0) + 1; G.months.add((t.date || "").slice(0, 7));
+  });
+  const name = (G) => Object.entries(G.orig).sort((a, b) => b[1] - a[1])[0][0];
+  const groups = Object.values(g);
+  const nMonths = new Set(txs.map((t) => (t.date || "").slice(0, 7)).filter(Boolean)).size || 1;
+
+  // gasto hormiga: compras repetidas (>=3 veces), ordenadas por total
+  const horm = groups.filter((G) => G.n >= 3).sort((a, b) => b.tot - a.tot).slice(0, 20);
+  const hormTot = sum(horm.map((G) => G.tot));
+
+  // recurrentes detectados: aparecen en muchos meses distintos (>=5) y aún no están como recurrente
+  const yaRec = new Set((s.recurrentes || []).map((r) => _norm(r.desc)));
+  const recs = groups.filter((G) => G.months.size >= 5 && !yaRec.has(_norm(name(G))))
+    .sort((a, b) => b.months.size - a.months.size).slice(0, 12);
+
+  const rowH = (G) => `<div class="tx-row">
+    <div class="flex1"><div class="tx-desc">${escapeHtml(name(G))}</div><div class="tx-meta">${G.n} veces · prom ${fmt(G.tot / G.n)}</div></div>
+    <div class="tx-amt">${fmt(G.tot)}</div></div>`;
+  const rowR = (G) => `<div class="tx-row">
+    <div class="flex1"><div class="tx-desc">${escapeHtml(name(G))}</div><div class="tx-meta">en ${G.months.size} meses · ${G.n} veces</div></div>
+    <div class="tx-amt">${fmt(G.tot / Math.max(1, G.months.size))}<div class="tiny muted">prom/mes</div></div></div>`;
+
+  root.innerHTML = tabs + `
+    <div class="card mb-3">
+      <div class="card-title">🐜 Compras repetidas (gasto hormiga)</div>
+      <p class="tiny muted" style="margin:-4px 0 8px">Lo que compras ≥3 veces, ordenado por total. Estas ${horm.length} suman <b>${fmt(hormTot)}</b> (≈ ${fmt(hormTot / (nMonths / 12))}/año).</p>
+      <div style="padding:0" id="adv-horm">${horm.map(rowH).join("") || '<div class="muted small">Sin datos</div>'}</div>
+    </div>
+    <div class="card mb-3">
+      <div class="card-title">🔁 Posibles gastos fijos / recurrentes</div>
+      <p class="tiny muted" style="margin:-4px 0 8px">Aparecen casi todos los meses. Puedes volverlos recurrentes en <b>Ajustes → Gastos recurrentes</b> para que la app te los recuerde.</p>
+      <div id="adv-rec">${recs.map(rowR).join("") || '<div class="muted small">No se detectaron recurrentes nuevos</div>'}</div>
+    </div>`;
+
+  root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
 }
 
 function openDayModal(mes, day) {

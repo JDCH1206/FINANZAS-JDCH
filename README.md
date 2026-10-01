@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v92**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v93**. Cambios por fecha (más reciente primero):
+
+### 2026-10-01 · caché v93 — Tablero "Avanzado" + KPIs de rendimiento en Cuentas
+- 🐜 Nueva pestaña **Avanzado** en el Tablero: **compras repetidas (gasto hormiga)** —lo que compras ≥3 veces, por total, con conteo y promedio— y **detección de posibles gastos fijos/recurrentes** (ítems que aparecen casi todos los meses y aún no están como recurrentes). `renderAvanzado`.
+- 📊 **KPIs de rendimiento en Cuentas**: tarjeta con **Total ganado**, **Este año**, **Promedio/mes**, **Aportes** y **Rentabilidad promedio (% E.A.)**, calculados de los movimientos de tus cuentas.
 
 ### 2026-10-01 · caché v92 — Gasto: cuenta ligada al medio de pago
 - 💳 Al registrar un gasto, **Efectivo oculta el campo Cuenta** (no aplica: el efectivo no sale de una cuenta rastreada); con **Tarjeta débito/crédito, Transferencia u otro**, el campo aparece y **se prellena con la última cuenta usada con ese medio** (recordada por dispositivo en `localStorage`, clave `fz_pay_acct`). Así los gastos no-efectivo quedan con cuenta casi solos y el filtro por cuenta se vuelve confiable, sin estorbar en los de efectivo.
