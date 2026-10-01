@@ -19,18 +19,20 @@ function descDatalist(id, arr) {
   const opts = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 60);
   return `<datalist id="${id}">${opts.map((d) => `<option value="${escapeHtml(d)}"></option>`).join("")}</datalist>`;
 }
-// etiquetas ya usadas (desde memoria) para sugerir al escribir y para el filtro
+// normaliza una etiqueta: quita el "#" inicial y espacios (así "#viaje" y "viaje" son la misma)
+const normTag = (g) => String(g || "").trim().replace(/^#+/, "").trim();
+// etiquetas ya usadas (desde memoria) para sugerir al escribir y para el filtro (normalizadas y sin duplicados)
 function allTags(arr) {
   const set = new Set();
-  for (const t of (arr || [])) for (const g of (t.tags || [])) { const v = String(g).trim(); if (v) set.add(v); }
+  for (const t of (arr || [])) for (const g of (t.tags || [])) { const v = normTag(g); if (v) set.add(v); }
   return [...set].sort((a, b) => a.localeCompare(b));
 }
 function tagsDatalist(id, arr) {
   return `<datalist id="${id}">${allTags(arr).map((g) => `<option value="${escapeHtml(g)}"></option>`).join("")}</datalist>`;
 }
-// convierte el texto del campo de etiquetas en un arreglo limpio (sin duplicados ni vacíos)
+// convierte el texto del campo de etiquetas en un arreglo limpio (sin "#", duplicados ni vacíos)
 function parseTags(str) {
-  return [...new Set((str || "").split(",").map((x) => x.trim()).filter(Boolean))];
+  return [...new Set((str || "").split(",").map(normTag).filter(Boolean))];
 }
 
 // filtros guardados: combinaciones con nombre, por dispositivo (localStorage; no toca la nube)
@@ -43,12 +45,12 @@ function setSavedFilters(arr) {
 
 function applyFilters(arr, isGasto) {
   let f = arr;
-  if (query) f = f.filter((t) => ((t.desc || "") + (t.cat || "") + (t.sub || "") + (t.type || "")).toLowerCase().includes(query.toLowerCase()));
+  if (query) { const q = query.toLowerCase().replace(/^#+/, ""); f = f.filter((t) => ((t.desc || "") + (t.cat || "") + (t.sub || "") + (t.type || "") + " " + (t.tags || []).map(normTag).join(" ")).toLowerCase().includes(q)); }
   if (fMonth) f = f.filter((t) => ym(t.date) === fMonth);
   if (isGasto && fCat) f = f.filter((t) => t.cat === fCat);
   if (isGasto && fAcct) f = f.filter((t) => (t.acct || "") === fAcct);
   if (isGasto && fPay) f = f.filter((t) => (t.pay || "") === fPay);
-  if (isGasto && fTag) f = f.filter((t) => (t.tags || []).includes(fTag));
+  if (isGasto && fTag) { const ft = normTag(fTag); f = f.filter((t) => (t.tags || []).some((g) => normTag(g) === ft)); }
   if (fMin !== "") f = f.filter((t) => (+t.amount || 0) >= +fMin);
   if (fMax !== "") f = f.filter((t) => (+t.amount || 0) <= +fMax);
   return f;
@@ -211,7 +213,7 @@ function drawList() {
         <span class="tx-dot" style="background:${PALETTE[(ci + 11) % PALETTE.length]}"></span>
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${veh ? (veh.tipo === "Moto" ? " 🏍️" : " 🚗") : ""}</div>
           <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}${t.splitId ? ' · <span title="Parte de un gasto dividido">÷</span>' : ""}</div>
-          ${(t.tags || []).length ? `<div class="tx-meta">${t.tags.map((g) => `<span class="badge" style="background:var(--panel-2);color:var(--gold);font-size:10px;padding:1px 6px;margin-right:4px">#${escapeHtml(g)}</span>`).join("")}</div>` : ""}</div>
+          ${(t.tags || []).length ? `<div class="tx-meta">${t.tags.map((g) => `<span class="badge" style="background:var(--panel-2);color:var(--gold);font-size:10px;padding:1px 6px;margin-right:4px">#${escapeHtml(normTag(g))}</span>`).join("")}</div>` : ""}</div>
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}" aria-label="Eliminar gasto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`;

@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v85**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v86**. Cambios por fecha (más reciente primero):
+
+### 2026-10-01 · caché v86 — Etiquetas: fix del filtro con "#"
+- 🐞 **Fix:** si escribías una etiqueta con numeral (`#viaje`), se guardaba con el `#` y además el chip mostraba `##viaje`; y como el autocompletado sugería la versión sin `#`, quedaban **dos etiquetas distintas** (`#viaje` y `viaje`) y el filtro por una no traía la otra. Ahora las etiquetas se **normalizan** (se quita el `#` inicial al guardar, listar y comparar), tanto para datos nuevos como viejos, así que `#viaje` y `viaje` son la misma y el filtro funciona. Helper `normTag`.
+- 🔎 La **barra de búsqueda** ahora también busca dentro de las etiquetas (antes solo miraba descripción/categoría/subcategoría/tipo).
 
 ### 2026-08-30 · caché v85 — Filtros guardados en Movimientos
 - 🔖 En Movimientos (Gastos) puedes **guardar la combinación de filtros actual** (mes, categoría, cuenta, medio, etiqueta, montos, búsqueda) con un nombre y reaplicarla con un toque; se muestran como chips, con ✕ para borrar. Se guardan **por dispositivo** (localStorage), así que **no generan lecturas a Firebase**.
