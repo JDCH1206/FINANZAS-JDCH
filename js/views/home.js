@@ -4,6 +4,7 @@ import { addTx, deleteTx, addIncome, deleteIncome, forcePersistLocal, addFuel, l
 import { fmt, uid, todayISO, escapeHtml, ym, monthLabel, curMonth, fmtDate } from "../utils.js";
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
 import { openModal, closeModal, toast, toastUndo, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
+import { openVisitModal } from "./vehicles.js";
 
 let query = "";
 let tabKind = "gasto";
@@ -341,6 +342,9 @@ export function openTxModal(existing) {
     <div class="field"><label class="label">Categoría</label><select id="m-cat" class="input">${catOpts}</select></div>
     ${missingCat ? `<p class="tiny" style="color:var(--yel);margin:-6px 0 10px">⚠ La categoría original de este gasto fue eliminada. Puedes dejarla o elegir una nueva (si la cambias, no podrás volver a la anterior).</p>` : ""}
     <div class="field"><label class="label">Subcategoría</label><select id="m-sub" class="input"></select></div>
+    ${(!existing && s.vehiclesEnabled && (s.vehicles || []).length) ? `<div id="m-visit-cta" class="field" style="display:none">
+      <button type="button" id="m-visit-btn" class="btn btn-ghost btn-block" style="border-color:var(--gold);color:var(--gold)">🧾 Registrar como visita de taller (varias líneas)</button>
+      <p class="tiny muted" style="margin-top:4px">Para facturas con varias actividades y repuestos (cada uno con su valor). Crea un solo gasto por el total.</p></div>` : ""}
     <div class="field"><label class="label">Medio de pago</label><select id="m-pay" class="input">${payOpts}</select></div>
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="m-acct" class="input">${acctOpts}</select></div>
     <div class="field"><label class="label">Etiquetas (opcional)</label><input id="m-tags" class="input" list="m-tags-list" autocomplete="off" placeholder="Ej: viaje, regalo (separadas por coma)" value="${existing && existing.tags ? escapeHtml(existing.tags.join(", ")) : ""}">${tagsDatalist("m-tags-list", s.txs)}</div>
@@ -369,9 +373,21 @@ export function openTxModal(existing) {
         vehWrap.style.display = show ? "block" : "none";
         if (!show && vehSelEl) { vehSelEl.value = ""; const ex = b.querySelector("#m-veh-extra"); if (ex) ex.style.display = "none"; }
       };
+      // atajo "Registrar como visita de taller" cuando es categoría de vehículo + subcategoría de mantenimiento
+      const visitCta = b.querySelector("#m-visit-cta");
+      const toggleVisitCta = () => { if (visitCta) visitCta.style.display = (isVehCat(catSel.value) && /mantenimiento|reparaci/i.test(subSel.value || "")) ? "block" : "none"; };
       moneyPreview(b.querySelector("#m-amt"));
       if (existing) catSel.value = existing.cat;
-      catSel.onchange = () => { fillSubs(); toggleVehWrap(); }; fillSubs(); toggleVehWrap();
+      catSel.onchange = () => { fillSubs(); toggleVehWrap(); toggleVisitCta(); }; fillSubs(); toggleVehWrap(); toggleVisitCta();
+      subSel.addEventListener("change", toggleVisitCta);
+      if (visitCta) b.querySelector("#m-visit-btn").onclick = () => {
+        const vehs = s.vehicles || [];
+        const vid = (vehSelEl && vehSelEl.value) || (vehs.length === 1 ? vehs[0].id : "");
+        const veh = vehs.find((x) => x.id === vid);
+        if (!veh) return toast("Primero elige el vehículo arriba", true);
+        const view = document.getElementById("view");
+        openVisitModal(veh, view, () => { renderHome(view); });
+      };
       if (existing) { subSel.value = existing.sub || ""; b.querySelector("#m-pay").value = existing.pay || "Efectivo"; b.querySelector("#m-acct").value = existing.acct || ""; }
       const vehSel = b.querySelector("#m-veh");
       if (vehSel) {

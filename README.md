@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v87**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v88**. Cambios por fecha (más reciente primero):
+
+### 2026-10-01 · caché v88 — Atajo a "visita de taller" desde Movimientos
+- 🧾 Al crear un gasto y elegir una **categoría de vehículo** (Moto/Carro) + subcategoría **Mantenimiento/reparaciones**, aparece automáticamente el botón **"Registrar como visita de taller (varias líneas)"**, que abre el formulario de visita (v87) con el vehículo preseleccionado y crea el gasto por el total. `openVisitModal` ahora es reutilizable (exportada, con callback) y recarga la bitácora antes de persistir para no pisar datos al abrirse desde Movimientos.
 
 ### 2026-10-01 · caché v87 — Mantenimiento: registrar visita con varias líneas (factura de taller)
 - 🧾 Nuevo **"Registrar visita (varias líneas)"** en Mantenimiento: capturas la orden de trabajo del taller como **Actividades** (mano de obra) y **Repuestos** (con referencia, cantidad y valor unit). El **total se va sumando** en vivo; cada línea es un registro de la bitácora agrupado por `visitaId`. Los valores **incluyen IVA** (lo que pagas).

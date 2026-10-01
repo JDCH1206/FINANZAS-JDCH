@@ -692,7 +692,8 @@ async function recalcVisitGasto(visitaId) {
 }
 
 // ----- Registrar visita al taller: varias líneas (actividades + repuestos) que suman, un gasto -----
-function openVisitModal(v, root) {
+// onDone: si se da (ej. abierto desde Movimientos), se llama al terminar en vez de redibujar la bitácora.
+export function openVisitModal(v, root, onDone) {
   const s = getState();
   const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
   const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
@@ -780,13 +781,16 @@ function openVisitModal(v, root) {
         const sub = (catObj && (catObj.subs || []).includes("Mantenimiento/reparaciones")) ? "Mantenimiento/reparaciones" : ((catObj && catObj.subs && catObj.subs[0]) || "");
         const tx = { id: gastoId, date: fecha, desc: "Taller" + (taller ? " " + taller : ""), amount: total, cat: catName, sub, pay: b.querySelector("#v-pay").value, acct: b.querySelector("#v-acct").value || "", vehicleId: v.id, visitaId, tags: [] };
 
-        allMaint = [...allMaint, ...recs];
+        // recarga la bitácora completa antes de persistir (evita pisar datos si se abrió desde Movimientos)
+        const fresh = await loadMaint(getState().user.uid);
+        allMaint = [...fresh, ...recs];
         await bulkAddMaint(getState().user.uid, recs); persistMaintLocal(getState().user.uid, allMaint);
         setState({ txs: [tx, ...getState().txs] });
         await addTx(getState().user.uid, tx);
         if (odometro != null && odometro > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro } : x)) }); v.odometro = odometro; await persistVehicles(); }
         forcePersistLocal(getState().user.uid);
-        closeModal(); drawMaint(root, v); toast(`Visita registrada · ${fmt(total)}`);
+        closeModal(); toast(`Visita registrada · ${fmt(total)}`);
+        if (onDone) onDone(); else drawMaint(root, v);
       });
     },
   });
