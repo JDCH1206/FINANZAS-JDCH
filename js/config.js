@@ -59,6 +59,8 @@ export const OBLIG_TIPOS = [
 ];
 export const AVISO_DIAS = [15, 30, 60];
 export const MAINT_CATEGORIES = ["Taller", "Rutina", "Insumos"];
+// clasificación por línea en una visita de taller (qué es cada ítem)
+export const MAINT_CLASES = ["Mantenimiento", "Insumo", "Accesorio", "Otros"];
 export const MAINT_TIPOS = {
   Taller: ["Cambio de aceite", "Filtro de aceite", "Llantas", "Frenos (pastillas)", "Kit de arrastre", "Bujía", "Sincronización / válvulas", "Batería", "Reparación", "Otro"],
   Rutina: ["Lubricación de cadena", "Tensión de cadena", "Presión de llantas", "Nivel de aceite", "Luces", "Limpieza", "Otro"],

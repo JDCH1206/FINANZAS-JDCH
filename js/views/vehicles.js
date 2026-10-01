@@ -1,7 +1,7 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, addTx, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
-import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
+import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_CLASES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
@@ -574,7 +574,8 @@ function drawMaint(root, v) {
   const alerts = [];
   Object.values(latest).forEach((r) => { const st = maintStatus(r, v.odometro, today); if (st.st) alerts.push({ r, st }); });
   alerts.sort((a, b) => (a.st.st === "vencido" ? 0 : 1) - (b.st.st === "vencido" ? 0 : 1));
-  const badge = (c) => `<span class="badge" style="background:${c === "Taller" ? "var(--blue)" : c === "Insumos" ? "var(--green)" : "var(--gold)"};color:#10171a">${c}</span>`;
+  const badgeCol = { Taller: "var(--blue)", Mantenimiento: "var(--blue)", Insumos: "var(--green)", Insumo: "var(--green)", Accesorio: "#c98bb9", Rutina: "var(--gold)", Otros: "#8aa0a3" };
+  const badge = (c) => `<span class="badge" style="background:${badgeCol[c] || "var(--gold)"};color:#10171a">${escapeHtml(c)}</span>`;
   const maintDupes = dupeCount(items);
 
   root.innerHTML = `
@@ -717,9 +718,11 @@ export function openVisitModal(v, root, onDone) {
     <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)"><div class="k-label">Total visita</div><div class="k-val" id="v-total">$0</div></div>
     <button id="v-save" class="btn btn-primary btn-block">Registrar visita</button>`, {
     onMount(b) {
+      const claseSel = (cls, def) => `<select class="input ${cls}" style="flex:1;min-width:0">${MAINT_CLASES.map((c) => `<option ${c === def ? "selected" : ""}>${c}</option>`).join("")}</select>`;
       const actRow = () => `<div class="vl" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">
         <input class="input va-desc" placeholder="Actividad (ej: Revisión 36.000 km)" style="margin-bottom:6px">
         <div class="row gap-2">
+          ${claseSel("va-clase", "Mantenimiento")}
           <input class="input va-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
           <input class="input va-val" type="number" inputmode="numeric" placeholder="valor" style="flex:1;min-width:0">
           <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
@@ -728,11 +731,12 @@ export function openVisitModal(v, root, onDone) {
         <input class="input vr-desc" placeholder="Repuesto (ej: Juego pastillas del.)" style="margin-bottom:6px">
         <div class="row gap-2" style="margin-bottom:6px">
           <input class="input vr-ref" placeholder="Referencia (opc)" style="flex:1;min-width:0">
-          <input class="input vr-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
+          ${claseSel("vr-clase", "Insumo")}
         </div>
         <div class="row gap-2">
-          <input class="input vr-cant" type="number" inputmode="numeric" value="1" style="width:64px">
+          <input class="input vr-cant" type="number" inputmode="numeric" value="1" style="width:56px">
           <input class="input vr-val" type="number" inputmode="numeric" placeholder="valor unit" style="flex:1;min-width:0">
+          <input class="input vr-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
           <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
         </div></div>`;
       const vaList = b.querySelector("#va-list"), vrList = b.querySelector("#vr-list");
@@ -763,13 +767,13 @@ export function openVisitModal(v, root, onDone) {
           const desc = row.querySelector(".va-desc").value.trim(); const val = +row.querySelector(".va-val").value || 0;
           if (!desc || !val) return;
           const km = row.querySelector(".va-km").value;
-          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "actividad", categoria: "Taller", tipo: desc, descripcion: desc, referencia: "", cantidad: 1, valorUnit: val, costo: val, fecha, odometro, taller, repuesto: "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
+          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "actividad", categoria: row.querySelector(".va-clase").value, tipo: desc, descripcion: desc, referencia: "", cantidad: 1, valorUnit: val, costo: val, fecha, odometro, taller, repuesto: "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
         });
         b.querySelectorAll("#vr-list .vl").forEach((row) => {
           const desc = row.querySelector(".vr-desc").value.trim(); const cant = +row.querySelector(".vr-cant").value || 0; const val = +row.querySelector(".vr-val").value || 0;
           if (!desc || !val || !cant) return;
           const km = row.querySelector(".vr-km").value;
-          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "repuesto", categoria: "Insumos", tipo: desc, descripcion: desc, referencia: row.querySelector(".vr-ref").value.trim(), cantidad: cant, valorUnit: val, costo: cant * val, fecha, odometro, taller, repuesto: desc, proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
+          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "repuesto", categoria: row.querySelector(".vr-clase").value, tipo: desc, descripcion: desc, referencia: row.querySelector(".vr-ref").value.trim(), cantidad: cant, valorUnit: val, costo: cant * val, fecha, odometro, taller, repuesto: desc, proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
         });
         if (!recs.length) return toast("Agrega al menos una línea con valor", true);
         const total = sum(recs, (r) => +r.costo || 0);
@@ -798,7 +802,8 @@ export function openVisitModal(v, root, onDone) {
 
 function openMaintModal(v, root, existing) {
   const f = (label, html) => `<div class="field"><label class="label">${label}</label>${html}</div>`;
-  const catOpts = MAINT_CATEGORIES.map((c) => `<option ${existing && existing.categoria === c ? "selected" : ""}>${c}</option>`).join("");
+  const extraCat = (existing && existing.categoria && !MAINT_CATEGORIES.includes(existing.categoria)) ? `<option selected>${escapeHtml(existing.categoria)}</option>` : "";
+  const catOpts = extraCat + MAINT_CATEGORIES.map((c) => `<option ${existing && existing.categoria === c ? "selected" : ""}>${c}</option>`).join("");
   const val = (x) => (x != null && x !== "" ? x : "");
   openModal(existing ? "Mantenimiento" : "Nuevo mantenimiento", `
     ${!existing ? `<p class="tiny muted" style="margin:-4px 0 10px">💡 Esto se guarda solo en la bitácora del vehículo. Si quieres que el costo <b>también cuente en tus gastos</b>, regístralo desde <b>Movimientos → + → asociar al vehículo → Mantenimiento</b>.</p>` : ""}
@@ -822,7 +827,12 @@ function openMaintModal(v, root, existing) {
     onMount(b) {
       moneyPreview(b.querySelector("#ma-costo"));
       const catSel = b.querySelector("#ma-cat"), tipoSel = b.querySelector("#ma-tipo");
-      const fillTipos = () => { tipoSel.innerHTML = (MAINT_TIPOS[catSel.value] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join(""); };
+      const fillTipos = () => {
+        const list = MAINT_TIPOS[catSel.value] || [];
+        // conserva el tipo libre de una línea de visita (p. ej. "Juego pastillas del.") aunque no esté en la lista
+        const arr = (existing && existing.tipo && !list.includes(existing.tipo)) ? [existing.tipo, ...list] : list;
+        tipoSel.innerHTML = arr.map((t) => `<option>${escapeHtml(t)}</option>`).join("");
+      };
       catSel.onchange = () => {
         fillTipos();
         // Insumos = compra sin instalar → el odómetro no aplica: se limpia solo (editable si se quiere)
