@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v91**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v92**. Cambios por fecha (más reciente primero):
+
+### 2026-10-01 · caché v92 — Gasto: cuenta ligada al medio de pago
+- 💳 Al registrar un gasto, **Efectivo oculta el campo Cuenta** (no aplica: el efectivo no sale de una cuenta rastreada); con **Tarjeta débito/crédito, Transferencia u otro**, el campo aparece y **se prellena con la última cuenta usada con ese medio** (recordada por dispositivo en `localStorage`, clave `fz_pay_acct`). Así los gastos no-efectivo quedan con cuenta casi solos y el filtro por cuenta se vuelve confiable, sin estorbar en los de efectivo.
 
 ### 2026-10-01 · caché v91 — Orden de trabajo: taxonomía unificada por línea (clasificación + tipo)
 - 🧩 La **orden de trabajo** y el **ítem individual** ahora **comparten las mismas listas**: cada línea de la orden se clasifica en **Taller / Rutina / Insumos** (nivel 1) y elige un **tipo** de la lista dependiente (Cambio de aceite, Filtro, Frenos, Kit de arrastre, Bujía, Sincronización/válvulas, Batería, Reparación…) con opción de **escribir uno propio** (nivel 2). Así los datos quedan consistentes y **filtrables objetivamente** por clasificación o por tipo.

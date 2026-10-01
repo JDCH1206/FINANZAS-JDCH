@@ -346,7 +346,7 @@ export function openTxModal(existing) {
       <button type="button" id="m-visit-btn" class="btn btn-ghost btn-block" style="border-color:var(--gold);color:var(--gold)">🧾 Registrar como visita de taller (varias líneas)</button>
       <p class="tiny muted" style="margin-top:4px">Para facturas con varias actividades y repuestos (cada uno con su valor). Crea un solo gasto por el total.</p></div>` : ""}
     <div class="field"><label class="label">Medio de pago</label><select id="m-pay" class="input">${payOpts}</select></div>
-    <div class="field"><label class="label">Cuenta (opcional)</label><select id="m-acct" class="input">${acctOpts}</select></div>
+    <div class="field" id="m-acct-field"><label class="label">Cuenta</label><select id="m-acct" class="input">${acctOpts}</select></div>
     <div class="field"><label class="label">Etiquetas (opcional)</label><input id="m-tags" class="input" list="m-tags-list" autocomplete="off" placeholder="Ej: viaje, regalo (separadas por coma)" value="${existing && existing.tags ? escapeHtml(existing.tags.join(", ")) : ""}">${tagsDatalist("m-tags-list", s.txs)}</div>
     ${vehBlock}${vehEditBlock}
     ${!existing ? `<button type="button" id="m-split" class="btn btn-ghost btn-block btn-sm" style="margin-bottom:8px">➗ Dividir en varias categorías</button>` : ""}
@@ -389,6 +389,19 @@ export function openTxModal(existing) {
         openVisitModal(veh, view, () => { renderHome(view); });
       };
       if (existing) { subSel.value = existing.sub || ""; b.querySelector("#m-pay").value = existing.pay || "Efectivo"; b.querySelector("#m-acct").value = existing.acct || ""; }
+      // medio de pago ↔ cuenta: Efectivo oculta la cuenta; otros medios la muestran y sugieren la última usada
+      const paySel = b.querySelector("#m-pay"), acctSel = b.querySelector("#m-acct"), acctField = b.querySelector("#m-acct-field");
+      const isCash = (p) => (p || "").trim().toLowerCase() === "efectivo";
+      const lastAcctMap = () => { try { return JSON.parse(localStorage.getItem("fz_pay_acct") || "{}"); } catch (e) { return {}; } };
+      const syncAcctByPay = (prefill) => {
+        if (isCash(paySel.value)) { acctField.style.display = "none"; acctSel.value = ""; }
+        else {
+          acctField.style.display = "";
+          if (prefill && !acctSel.value) { const id = lastAcctMap()[paySel.value]; if (id && (s.accounts || []).some((a) => a.id === id)) acctSel.value = id; }
+        }
+      };
+      paySel.addEventListener("change", () => syncAcctByPay(true));
+      syncAcctByPay(!existing); // en nuevo: prellena; en edición: solo ajusta visibilidad
       const vehSel = b.querySelector("#m-veh");
       if (vehSel) {
         const vtypeSel = b.querySelector("#m-vtype");
@@ -483,6 +496,10 @@ export function openTxModal(existing) {
               await saveConfig(s.user.uid, { profile: s.profile, cats: s.cats, budgets: s.budgets, accounts: s.accounts, payMethods: s.payMethods, vehicles: getState().vehicles, vehiclesEnabled: s.vehiclesEnabled, goals: s.goals });
             }
           }
+        }
+        // recuerda la última cuenta usada con este medio (para sugerirla la próxima vez)
+        if (tx.pay && tx.pay.trim().toLowerCase() !== "efectivo" && tx.acct) {
+          try { const m = JSON.parse(localStorage.getItem("fz_pay_acct") || "{}"); m[tx.pay] = tx.acct; localStorage.setItem("fz_pay_acct", JSON.stringify(m)); } catch (e) { /* noop */ }
         }
         setState({ txs: [tx, ...s.txs] });
         await addTx(s.user.uid, tx); forcePersistLocal(s.user.uid);
