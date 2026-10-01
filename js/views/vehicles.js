@@ -1,7 +1,7 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
 import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, addTx, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
-import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_CLASES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
+import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
@@ -708,62 +708,59 @@ export function openVisitModal(v, root, onDone) {
   const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
   const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
   const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
-  openModal("Registrar visita al taller", `
+  // listas de sugerencias de "tipo" por clasificación (las MISMAS del ítem individual → datos consistentes y filtrables)
+  const datalists = MAINT_CATEGORIES.map((c) => `<datalist id="vdl-${c}">${(MAINT_TIPOS[c] || []).map((t) => `<option value="${escapeHtml(t)}"></option>`).join("")}</datalist>`).join("");
+  const claseOpts = (sel) => MAINT_CATEGORIES.map((c) => `<option ${c === sel ? "selected" : ""}>${c}</option>`).join("");
+  openModal("Registrar orden de trabajo", `
+    ${datalists}
     <div class="field"><label class="label">Fecha</label><input id="v-fecha" type="date" class="input" value="${todayISO()}"></div>
     <div class="field"><label class="label">Odómetro (km)</label><input id="v-odo" type="number" class="input" value="${v.odometro ?? ""}" placeholder="km del tablero"></div>
     <div class="field"><label class="label">Taller</label><input id="v-taller" class="input" placeholder="Ej: Suzuki Bogotá 57"></div>
+    <div class="field"><label class="label">Clasificación por defecto (las líneas nuevas la heredan)</label><select id="v-clase-def" class="input">${claseOpts("Taller")}</select></div>
 
-    <div class="card-title" style="font-size:13px;margin-top:6px">Actividades (mano de obra)</div>
-    <div id="va-list"></div>
-    <button type="button" id="va-add" class="btn btn-ghost btn-sm mb-3">+ Actividad</button>
-
-    <div class="card-title" style="font-size:13px">Repuestos</div>
-    <div id="vr-list"></div>
-    <button type="button" id="vr-add" class="btn btn-ghost btn-sm mb-3">+ Repuesto</button>
+    <div class="card-title" style="font-size:13px;margin-top:6px">Líneas de la orden</div>
+    <p class="tiny muted" style="margin:-4px 0 8px">Cada línea: clasificación (Taller/Rutina/Insumos) + tipo (de la lista o escribe uno). La <b>referencia y cantidad</b> aparecen solo en Insumos. El valor es el <b>total de esa línea con IVA</b>.</p>
+    <div id="v-list"></div>
+    <button type="button" id="v-add" class="btn btn-ghost btn-sm mb-3">+ Línea</button>
 
     <div class="field"><label class="label">Medio de pago</label><select id="v-pay" class="input">${payOpts}</select></div>
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="v-acct" class="input">${acctOpts}</select></div>
-    <p class="tiny muted" style="margin:-4px 0 8px">Los valores incluyen IVA (lo que pagas). El total crea <b>un gasto</b> en Movimientos (categoría del vehículo), con el detalle aquí en la bitácora.</p>
-    <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)"><div class="k-label">Total visita</div><div class="k-val" id="v-total">$0</div></div>
-    <button id="v-save" class="btn btn-primary btn-block">Registrar visita</button>`, {
+    <p class="tiny muted" style="margin:-4px 0 8px">El total crea <b>un gasto</b> en Movimientos (categoría del vehículo); el detalle queda aquí en la bitácora.</p>
+    <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)"><div class="k-label">Total orden</div><div class="k-val" id="v-total">$0</div></div>
+    <button id="v-save" class="btn btn-primary btn-block">Registrar orden</button>`, {
     onMount(b) {
-      const claseSel = (cls, def) => `<select class="input ${cls}" style="flex:1;min-width:0">${MAINT_CLASES.map((c) => `<option ${c === def ? "selected" : ""}>${c}</option>`).join("")}</select>`;
-      const actRow = () => `<div class="vl" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">
-        <input class="input va-desc" placeholder="Actividad (ej: Revisión 36.000 km)" style="margin-bottom:6px">
-        <div class="row gap-2">
-          ${claseSel("va-clase", "Mantenimiento")}
-          <input class="input va-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
-          <input class="input va-val" type="number" inputmode="numeric" placeholder="valor" style="flex:1;min-width:0">
-          <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
-        </div></div>`;
-      const repRow = () => `<div class="vl" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">
-        <input class="input vr-desc" placeholder="Repuesto (ej: Juego pastillas del.)" style="margin-bottom:6px">
+      const rowHtml = (clase) => `<div class="vl" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">
         <div class="row gap-2" style="margin-bottom:6px">
-          <input class="input vr-ref" placeholder="Referencia (opc)" style="flex:1;min-width:0">
-          ${claseSel("vr-clase", "Insumo")}
+          <select class="input vl-clase" style="flex:1;min-width:0">${claseOpts(clase)}</select>
+          <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
+        </div>
+        <input class="input vl-tipo" list="vdl-${clase}" placeholder="Tipo (ej. Cambio de aceite) o escribe uno" style="margin-bottom:6px">
+        <div class="row gap-2 vl-parts" style="margin-bottom:6px;display:${clase === "Insumos" ? "flex" : "none"}">
+          <input class="input vl-ref" placeholder="Referencia (opc)" style="flex:1;min-width:0">
+          <input class="input vl-cant" type="number" inputmode="numeric" value="1" style="width:56px" title="Cantidad">
         </div>
         <div class="row gap-2">
-          <input class="input vr-cant" type="number" inputmode="numeric" value="1" style="width:56px">
-          <input class="input vr-val" type="number" inputmode="numeric" placeholder="valor unit" style="flex:1;min-width:0">
-          <input class="input vr-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
-          <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
+          <input class="input vl-val" type="number" inputmode="numeric" placeholder="valor total línea" style="flex:1;min-width:0">
+          <input class="input vl-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
         </div></div>`;
-      const vaList = b.querySelector("#va-list"), vrList = b.querySelector("#vr-list");
-      const recalc = () => {
-        let t = 0;
-        b.querySelectorAll(".va-val").forEach((i) => t += (+i.value || 0));
-        b.querySelectorAll("#vr-list .vl").forEach((row) => { t += (+row.querySelector(".vr-cant").value || 0) * (+row.querySelector(".vr-val").value || 0); });
-        b.querySelector("#v-total").textContent = fmt(t);
-      };
+      const vList = b.querySelector("#v-list");
+      const recalc = () => { let t = 0; b.querySelectorAll("#v-list .vl-val").forEach((i) => t += (+i.value || 0)); b.querySelector("#v-total").textContent = fmt(t); };
       const wire = () => {
-        b.querySelectorAll(".vl-del").forEach((x) => x.onclick = () => { x.closest(".vl").remove(); recalc(); });
-        b.querySelectorAll("#va-list input, #vr-list input").forEach((i) => i.oninput = recalc);
+        b.querySelectorAll("#v-list .vl").forEach((row) => {
+          row.querySelector(".vl-del").onclick = () => { row.remove(); recalc(); };
+          row.querySelectorAll("input").forEach((i) => i.oninput = recalc);
+          const cl = row.querySelector(".vl-clase");
+          cl.onchange = () => {
+            const val = cl.value;
+            row.querySelector(".vl-tipo").setAttribute("list", "vdl-" + val);
+            row.querySelector(".vl-parts").style.display = val === "Insumos" ? "flex" : "none";
+            recalc();
+          };
+        });
       };
-      vaList.insertAdjacentHTML("beforeend", actRow());
-      vrList.insertAdjacentHTML("beforeend", repRow());
-      wire(); recalc();
-      b.querySelector("#va-add").onclick = () => { vaList.insertAdjacentHTML("beforeend", actRow()); wire(); };
-      b.querySelector("#vr-add").onclick = () => { vrList.insertAdjacentHTML("beforeend", repRow()); wire(); };
+      const addRow = () => { vList.insertAdjacentHTML("beforeend", rowHtml(b.querySelector("#v-clase-def").value)); wire(); };
+      addRow(); recalc();
+      b.querySelector("#v-add").onclick = addRow;
 
       submitOnce(b.querySelector("#v-save"), async () => {
         const fecha = b.querySelector("#v-fecha").value, odo = b.querySelector("#v-odo").value;
@@ -772,21 +769,19 @@ export function openVisitModal(v, root, onDone) {
         const odometro = odo === "" ? null : +odo;
         const visitaId = uid(), gastoId = uid();
         const recs = [];
-        b.querySelectorAll("#va-list .vl").forEach((row) => {
-          const desc = row.querySelector(".va-desc").value.trim(); const val = +row.querySelector(".va-val").value || 0;
-          if (!desc || !val) return;
-          const km = row.querySelector(".va-km").value;
-          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "actividad", categoria: row.querySelector(".va-clase").value, tipo: desc, descripcion: desc, referencia: "", cantidad: 1, valorUnit: val, costo: val, fecha, odometro, taller, repuesto: "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
+        b.querySelectorAll("#v-list .vl").forEach((row) => {
+          const clase = row.querySelector(".vl-clase").value;
+          const tipo = row.querySelector(".vl-tipo").value.trim();
+          const val = +row.querySelector(".vl-val").value || 0;
+          if (!tipo || !val) return;
+          const isIns = clase === "Insumos";
+          const cant = isIns ? (+row.querySelector(".vl-cant").value || 1) : 1;
+          const ref = isIns ? row.querySelector(".vl-ref").value.trim() : "";
+          const km = row.querySelector(".vl-km").value;
+          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: isIns ? "repuesto" : "actividad", categoria: clase, tipo, descripcion: tipo, referencia: ref, cantidad: cant, valorUnit: cant ? val / cant : val, costo: val, fecha, odometro, taller, repuesto: isIns ? tipo : "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
         });
-        b.querySelectorAll("#vr-list .vl").forEach((row) => {
-          const desc = row.querySelector(".vr-desc").value.trim(); const cant = +row.querySelector(".vr-cant").value || 0; const val = +row.querySelector(".vr-val").value || 0;
-          if (!desc || !val || !cant) return;
-          const km = row.querySelector(".vr-km").value;
-          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "repuesto", categoria: row.querySelector(".vr-clase").value, tipo: desc, descripcion: desc, referencia: row.querySelector(".vr-ref").value.trim(), cantidad: cant, valorUnit: val, costo: cant * val, fecha, odometro, taller, repuesto: desc, proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
-        });
-        if (!recs.length) return toast("Agrega al menos una línea con valor", true);
+        if (!recs.length) return toast("Agrega al menos una línea con tipo y valor", true);
         const total = sum(recs, (r) => +r.costo || 0);
-        // categoría del vehículo para el gasto
         const cats = getState().cats || [];
         const catName = (v.tipo === "Moto" && cats.some((c) => c.name === "Moto")) ? "Moto"
           : (cats.find((c) => /carro|veh[ií]culo|autom[oó]vil/i.test(c.name)) || {}).name || (cats.some((c) => c.name === "Moto") ? "Moto" : (cats[0] || {}).name || "Moto");
@@ -794,7 +789,6 @@ export function openVisitModal(v, root, onDone) {
         const sub = (catObj && (catObj.subs || []).includes("Mantenimiento/reparaciones")) ? "Mantenimiento/reparaciones" : ((catObj && catObj.subs && catObj.subs[0]) || "");
         const tx = { id: gastoId, date: fecha, desc: "Taller" + (taller ? " " + taller : ""), amount: total, cat: catName, sub, pay: b.querySelector("#v-pay").value, acct: b.querySelector("#v-acct").value || "", vehicleId: v.id, visitaId, tags: [] };
 
-        // recarga la bitácora completa antes de persistir (evita pisar datos si se abrió desde Movimientos)
         const fresh = await loadMaint(getState().user.uid);
         allMaint = [...fresh, ...recs];
         await bulkAddMaint(getState().user.uid, recs); persistMaintLocal(getState().user.uid, allMaint);
@@ -802,7 +796,7 @@ export function openVisitModal(v, root, onDone) {
         await addTx(getState().user.uid, tx);
         if (odometro != null && odometro > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro } : x)) }); v.odometro = odometro; await persistVehicles(); }
         forcePersistLocal(getState().user.uid);
-        closeModal(); toast(`Visita registrada · ${fmt(total)}`);
+        closeModal(); toast(`Orden registrada · ${fmt(total)}`);
         if (onDone) onDone(); else drawMaint(root, v);
       });
     },
