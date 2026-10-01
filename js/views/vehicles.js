@@ -1,7 +1,7 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
-import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS } from "../config.js";
+import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, addTx, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
+import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend, lineNum } from "../components/charts.js";
@@ -158,7 +158,7 @@ function openVehicleBreakdown(v) {
   txs.forEach((t) => {
     let k;
     if (t.fuelId) k = "Combustible";
-    else if (t.maintId) k = "Mantenimiento";
+    else if (t.maintId || t.visitaId) k = "Mantenimiento";
     else if (t.obligId) k = "Obligaciones";
     // criterio principal: subcategoría exacta "Lavado"; respaldo: la palabra en subcategoría/descripción
     else if (t.sub === "Lavado" || /lavad/i.test((t.sub || "") + " " + (t.desc || ""))) k = "Lavado";
@@ -582,7 +582,8 @@ function drawMaint(root, v) {
       <button id="back" class="icon-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
       <div><div class="page-title disp" style="font-size:21px;margin:0">🔧 Mantenimiento</div><div class="tiny muted">${icon(v.tipo)} ${escapeHtml(v.alias || v.modelo)} · ${Number(v.odometro || 0).toLocaleString("es-CO")} km</div></div>
     </div>
-    <button id="add-maint" class="btn btn-primary btn-block mb-2">+ Mantenimiento</button>
+    <button id="add-visit" class="btn btn-primary btn-block mb-2">🧾 Registrar visita (varias líneas)</button>
+    <button id="add-maint" class="btn btn-ghost btn-block mb-2">+ Ítem suelto</button>
     <button id="import-maint" class="btn btn-ghost btn-block mb-2">📥 Importar gastos de mantenimiento</button>
     ${maintDupes ? `<button id="dedupe-maint" class="btn btn-ghost btn-block mb-3" style="color:var(--red)">🧹 Quitar ${maintDupes} duplicado(s)</button>` : `<div class="mb-1"></div>`}
     <div class="grid-kpi mb-4">
@@ -598,6 +599,7 @@ function drawMaint(root, v) {
     ${items.length ? `<div class="card" style="padding:0" id="maint-list"></div>` : `<div class="empty"><p>Sin mantenimientos aún. Registra cambios de aceite, llantas, lubricación de cadena, etc.<br>Usa "Taller" para servicios con costo y "Rutina" para inspecciones frecuentes.</p></div>`}`;
 
   root.querySelector("#back").onclick = () => { activeMaintVid = null; renderList(root); };
+  root.querySelector("#add-visit").onclick = () => openVisitModal(v, root);
   root.querySelector("#add-maint").onclick = () => openMaintModal(v, root);
   root.querySelector("#import-maint").onclick = () => openImportMaint(v, root);
   const dedupeBtn = root.querySelector("#dedupe-maint");
@@ -611,28 +613,183 @@ function drawMaint(root, v) {
     drawMaint(root, v); toast(`${delIds.length} duplicado(s) eliminado(s)`);
   });
   if (items.length) {
-    root.querySelector("#maint-list").innerHTML = items.slice(0, 300).map((r) => `
-      <div class="tx-row" data-rowm="${r.id}" style="cursor:pointer">
+    // agrupar por visitaId (factura con varias líneas); los sueltos quedan individuales
+    const rowLine = (r) => {
+      const refCant = [r.referencia ? "ref " + escapeHtml(r.referencia) : "", (r.cantidad && r.cantidad !== 1) ? "x" + r.cantidad : ""].filter(Boolean).join(" · ");
+      return `<div class="tx-row" data-rowm="${r.id}" style="cursor:pointer">
         <div class="flex1"><div class="tx-desc">${badge(r.categoria)} ${escapeHtml(r.tipo)}</div>
-          <div class="tx-meta">${escapeHtml(r.fecha)} · ${r.odometro != null ? Number(r.odometro).toLocaleString("es-CO") + " km" : "sin odómetro"}${r.taller ? " · " + escapeHtml(r.taller) : ""}</div></div>
+          <div class="tx-meta">${r.visitaId ? refCant || "&nbsp;" : `${escapeHtml(r.fecha)} · ${r.odometro != null ? Number(r.odometro).toLocaleString("es-CO") + " km" : "sin odómetro"}${r.taller ? " · " + escapeHtml(r.taller) : ""}`}</div></div>
         <div class="tx-amt">${r.costo ? fmt(r.costo) : "—"}</div>
         <button class="icon-btn" data-delm="${r.id}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
-      </div>`).join("");
+      </div>`;
+    };
+    const groups = []; const byV = {};
+    for (const r of items.slice(0, 400)) {
+      if (r.visitaId) { if (!byV[r.visitaId]) { byV[r.visitaId] = { v: r.visitaId, recs: [], head: r }; groups.push(byV[r.visitaId]); } byV[r.visitaId].recs.push(r); }
+      else groups.push({ single: r });
+    }
+    root.querySelector("#maint-list").innerHTML = groups.map((g) => {
+      if (g.single) return rowLine(g.single);
+      const h = g.head, tot = sum(g.recs, (r) => +r.costo || 0);
+      return `<div style="border-bottom:1px solid var(--line)">
+        <div class="row between" style="padding:9px 12px;background:var(--panel-2);align-items:center">
+          <div style="min-width:0"><div class="small bold">🧾 Visita · ${fmt(tot)}</div>
+            <div class="tiny muted">${escapeHtml(h.fecha)} · ${h.odometro != null ? Number(h.odometro).toLocaleString("es-CO") + " km" : "sin odómetro"}${h.taller ? " · " + escapeHtml(h.taller) : ""} · ${g.recs.length} ítems</div></div>
+          <button class="icon-btn" data-delvisit="${g.v}" aria-label="Eliminar visita"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
+        </div>
+        ${g.recs.map(rowLine).join("")}</div>`;
+    }).join("");
+
     root.querySelectorAll("[data-rowm]").forEach((rw) => rw.onclick = (e) => { if (e.target.closest("[data-delm]")) return; openMaintModal(v, root, allMaint.find((x) => x.id === rw.getAttribute("data-rowm"))); });
     root.querySelectorAll("[data-delm]").forEach((b) => b.onclick = (e) => {
       e.stopPropagation();
       const id = b.getAttribute("data-delm"); const rec = allMaint.find((x) => x.id === id);
-      const msg = rec && rec.gastoId
+      const msg = rec && rec.visitaId
+        ? "Se quita esta línea de la visita. El total de la visita (y su gasto en Movimientos) se recalculan."
+        : rec && rec.gastoId
         ? "Se quita este mantenimiento de la bitácora. <b>El gasto NO se borra</b>: sigue en Movimientos; solo se elimina el vínculo con el vehículo."
         : "¿Eliminar este mantenimiento de la bitácora?";
       confirmDialog(msg, async () => {
         allMaint = allMaint.filter((x) => x.id !== id);
         await deleteMaint(getState().user.uid, id); persistMaintLocal(getState().user.uid, allMaint);
-        if (rec && rec.gastoId) await unlinkGasto(rec.gastoId, "maintId");
-        drawMaint(root, v); toast(rec && rec.gastoId ? "Mantenimiento quitado (el gasto sigue en Movimientos)" : "Mantenimiento eliminado");
+        if (rec && rec.visitaId) await recalcVisitGasto(rec.visitaId);
+        else if (rec && rec.gastoId) await unlinkGasto(rec.gastoId, "maintId");
+        drawMaint(root, v); toast("Línea eliminada");
+      });
+    });
+    root.querySelectorAll("[data-delvisit]").forEach((b) => b.onclick = (e) => {
+      e.stopPropagation();
+      const vid = b.getAttribute("data-delvisit");
+      confirmDialog("¿Eliminar toda la visita? Se borran sus líneas de la bitácora y <b>el gasto asociado en Movimientos</b>.", async () => {
+        const recs = allMaint.filter((x) => x.visitaId === vid);
+        const gastoId = recs[0] && recs[0].gastoId;
+        allMaint = allMaint.filter((x) => x.visitaId !== vid);
+        for (const r of recs) await deleteMaint(getState().user.uid, r.id);
+        persistMaintLocal(getState().user.uid, allMaint);
+        if (gastoId && getState().txs.some((t) => t.id === gastoId)) {
+          setState({ txs: getState().txs.filter((t) => t.id !== gastoId) });
+          await deleteTx(getState().user.uid, gastoId); forcePersistLocal(getState().user.uid);
+        }
+        drawMaint(root, v); toast("Visita eliminada");
       });
     });
   }
+}
+
+// recalcula el total de una visita y actualiza el gasto enlazado en Movimientos
+async function recalcVisitGasto(visitaId) {
+  const recs = allMaint.filter((r) => r.visitaId === visitaId);
+  const gastoId = recs[0] && recs[0].gastoId;
+  if (!gastoId) return;
+  const tx = getState().txs.find((t) => t.id === gastoId);
+  if (!tx) return;
+  const total = sum(recs, (r) => +r.costo || 0);
+  if ((+tx.amount || 0) !== total) {
+    const ntx = { ...tx, amount: total };
+    setState({ txs: getState().txs.map((x) => (x.id === gastoId ? ntx : x)) });
+    await addTx(getState().user.uid, ntx); forcePersistLocal(getState().user.uid);
+  }
+}
+
+// ----- Registrar visita al taller: varias líneas (actividades + repuestos) que suman, un gasto -----
+function openVisitModal(v, root) {
+  const s = getState();
+  const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
+  const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
+  const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
+  openModal("Registrar visita al taller", `
+    <div class="field"><label class="label">Fecha</label><input id="v-fecha" type="date" class="input" value="${todayISO()}"></div>
+    <div class="field"><label class="label">Odómetro (km)</label><input id="v-odo" type="number" class="input" value="${v.odometro ?? ""}" placeholder="km del tablero"></div>
+    <div class="field"><label class="label">Taller</label><input id="v-taller" class="input" placeholder="Ej: Suzuki Bogotá 57"></div>
+
+    <div class="card-title" style="font-size:13px;margin-top:6px">Actividades (mano de obra)</div>
+    <div id="va-list"></div>
+    <button type="button" id="va-add" class="btn btn-ghost btn-sm mb-3">+ Actividad</button>
+
+    <div class="card-title" style="font-size:13px">Repuestos</div>
+    <div id="vr-list"></div>
+    <button type="button" id="vr-add" class="btn btn-ghost btn-sm mb-3">+ Repuesto</button>
+
+    <div class="field"><label class="label">Medio de pago</label><select id="v-pay" class="input">${payOpts}</select></div>
+    <div class="field"><label class="label">Cuenta (opcional)</label><select id="v-acct" class="input">${acctOpts}</select></div>
+    <p class="tiny muted" style="margin:-4px 0 8px">Los valores incluyen IVA (lo que pagas). El total crea <b>un gasto</b> en Movimientos (categoría del vehículo), con el detalle aquí en la bitácora.</p>
+    <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)"><div class="k-label">Total visita</div><div class="k-val" id="v-total">$0</div></div>
+    <button id="v-save" class="btn btn-primary btn-block">Registrar visita</button>`, {
+    onMount(b) {
+      const actRow = () => `<div class="vl" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">
+        <input class="input va-desc" placeholder="Actividad (ej: Revisión 36.000 km)" style="margin-bottom:6px">
+        <div class="row gap-2">
+          <input class="input va-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
+          <input class="input va-val" type="number" inputmode="numeric" placeholder="valor" style="flex:1;min-width:0">
+          <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
+        </div></div>`;
+      const repRow = () => `<div class="vl" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">
+        <input class="input vr-desc" placeholder="Repuesto (ej: Juego pastillas del.)" style="margin-bottom:6px">
+        <div class="row gap-2" style="margin-bottom:6px">
+          <input class="input vr-ref" placeholder="Referencia (opc)" style="flex:1;min-width:0">
+          <input class="input vr-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
+        </div>
+        <div class="row gap-2">
+          <input class="input vr-cant" type="number" inputmode="numeric" value="1" style="width:64px">
+          <input class="input vr-val" type="number" inputmode="numeric" placeholder="valor unit" style="flex:1;min-width:0">
+          <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
+        </div></div>`;
+      const vaList = b.querySelector("#va-list"), vrList = b.querySelector("#vr-list");
+      const recalc = () => {
+        let t = 0;
+        b.querySelectorAll(".va-val").forEach((i) => t += (+i.value || 0));
+        b.querySelectorAll("#vr-list .vl").forEach((row) => { t += (+row.querySelector(".vr-cant").value || 0) * (+row.querySelector(".vr-val").value || 0); });
+        b.querySelector("#v-total").textContent = fmt(t);
+      };
+      const wire = () => {
+        b.querySelectorAll(".vl-del").forEach((x) => x.onclick = () => { x.closest(".vl").remove(); recalc(); });
+        b.querySelectorAll("#va-list input, #vr-list input").forEach((i) => i.oninput = recalc);
+      };
+      vaList.insertAdjacentHTML("beforeend", actRow());
+      vrList.insertAdjacentHTML("beforeend", repRow());
+      wire(); recalc();
+      b.querySelector("#va-add").onclick = () => { vaList.insertAdjacentHTML("beforeend", actRow()); wire(); };
+      b.querySelector("#vr-add").onclick = () => { vrList.insertAdjacentHTML("beforeend", repRow()); wire(); };
+
+      submitOnce(b.querySelector("#v-save"), async () => {
+        const fecha = b.querySelector("#v-fecha").value, odo = b.querySelector("#v-odo").value;
+        const taller = b.querySelector("#v-taller").value.trim();
+        if (!fecha) return toast("Falta la fecha", true);
+        const odometro = odo === "" ? null : +odo;
+        const visitaId = uid(), gastoId = uid();
+        const recs = [];
+        b.querySelectorAll("#va-list .vl").forEach((row) => {
+          const desc = row.querySelector(".va-desc").value.trim(); const val = +row.querySelector(".va-val").value || 0;
+          if (!desc || !val) return;
+          const km = row.querySelector(".va-km").value;
+          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "actividad", categoria: "Taller", tipo: desc, descripcion: desc, referencia: "", cantidad: 1, valorUnit: val, costo: val, fecha, odometro, taller, repuesto: "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
+        });
+        b.querySelectorAll("#vr-list .vl").forEach((row) => {
+          const desc = row.querySelector(".vr-desc").value.trim(); const cant = +row.querySelector(".vr-cant").value || 0; const val = +row.querySelector(".vr-val").value || 0;
+          if (!desc || !val || !cant) return;
+          const km = row.querySelector(".vr-km").value;
+          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: "repuesto", categoria: "Insumos", tipo: desc, descripcion: desc, referencia: row.querySelector(".vr-ref").value.trim(), cantidad: cant, valorUnit: val, costo: cant * val, fecha, odometro, taller, repuesto: desc, proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
+        });
+        if (!recs.length) return toast("Agrega al menos una línea con valor", true);
+        const total = sum(recs, (r) => +r.costo || 0);
+        // categoría del vehículo para el gasto
+        const cats = getState().cats || [];
+        const catName = (v.tipo === "Moto" && cats.some((c) => c.name === "Moto")) ? "Moto"
+          : (cats.find((c) => /carro|veh[ií]culo|autom[oó]vil/i.test(c.name)) || {}).name || (cats.some((c) => c.name === "Moto") ? "Moto" : (cats[0] || {}).name || "Moto");
+        const catObj = cats.find((c) => c.name === catName);
+        const sub = (catObj && (catObj.subs || []).includes("Mantenimiento/reparaciones")) ? "Mantenimiento/reparaciones" : ((catObj && catObj.subs && catObj.subs[0]) || "");
+        const tx = { id: gastoId, date: fecha, desc: "Taller" + (taller ? " " + taller : ""), amount: total, cat: catName, sub, pay: b.querySelector("#v-pay").value, acct: b.querySelector("#v-acct").value || "", vehicleId: v.id, visitaId, tags: [] };
+
+        allMaint = [...allMaint, ...recs];
+        await bulkAddMaint(getState().user.uid, recs); persistMaintLocal(getState().user.uid, allMaint);
+        setState({ txs: [tx, ...getState().txs] });
+        await addTx(getState().user.uid, tx);
+        if (odometro != null && odometro > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro } : x)) }); v.odometro = odometro; await persistVehicles(); }
+        forcePersistLocal(getState().user.uid);
+        closeModal(); drawMaint(root, v); toast(`Visita registrada · ${fmt(total)}`);
+      });
+    },
+  });
 }
 
 function openMaintModal(v, root, existing) {
@@ -649,8 +806,9 @@ function openMaintModal(v, root, existing) {
     ${f("Descripción", `<input id="ma-desc" class="input" value="${existing ? escapeHtml(existing.descripcion || "") : ""}" placeholder="Detalle (opcional)">`)}
     ${f("Repuesto", `<input id="ma-rep" class="input" value="${existing ? escapeHtml(existing.repuesto || "") : ""}" placeholder="Opcional">`)}
     ${f("Taller", `<input id="ma-taller" class="input" value="${existing ? escapeHtml(existing.taller || "") : ""}" placeholder="Opcional">`)}
-    ${f("Costo (COP)", `<input id="ma-costo" type="number" class="input" value="${existing ? val(existing.costo) : ""}" placeholder="0" ${existing && existing.gastoId ? "readonly style='opacity:.55'" : ""}>`)}
-    ${existing && existing.gastoId ? `<p class="tiny muted">🔗 El valor y la fecha están vinculados a un gasto en Movimientos. Para cambiarlos, edita ese gasto.</p>` : ""}
+    ${f("Costo (COP)", `<input id="ma-costo" type="number" class="input" value="${existing ? val(existing.costo) : ""}" placeholder="0" ${existing && existing.gastoId && !existing.visitaId ? "readonly style='opacity:.55'" : ""}>`)}
+    ${existing && existing.gastoId && !existing.visitaId ? `<p class="tiny muted">🔗 El valor y la fecha están vinculados a un gasto en Movimientos. Para cambiarlos, edita ese gasto.</p>` : ""}
+    ${existing && existing.visitaId ? `<p class="tiny muted">🧾 Línea de una visita. Al cambiar su costo, el total de la visita y su gasto se recalculan.</p>` : ""}
     <div class="card-title" style="margin-top:10px;font-size:13px">Próximo aviso (opcional)</div>
     ${f("Avisar a los (km)", `<input id="ma-pkm" type="number" class="input" value="${existing ? val(existing.proximoKm) : ""}" placeholder="km absoluto, ej: 12000">`)}
     ${f("o repetir cada (km)", `<input id="ma-rkm" type="number" class="input" value="${existing ? val(existing.recurrenteKm) : ""}" placeholder="ej: 1000 (cadena)">`)}
@@ -678,9 +836,15 @@ function openMaintModal(v, root, existing) {
           proximoKm: num("ma-pkm"), recurrenteKm: num("ma-rkm"), proximaFecha: b.querySelector("#ma-pfecha").value || "", recurrenteDias: num("ma-rdias"),
         };
         if (existing && existing.gastoId) rec.gastoId = existing.gastoId; // conserva el vínculo con el gasto
+        // conserva los campos propios de una línea de visita (no los pide este formulario)
+        if (existing && existing.visitaId) {
+          rec.visitaId = existing.visitaId; rec.claseLinea = existing.claseLinea; rec.referencia = existing.referencia || "";
+          rec.cantidad = existing.cantidad || 1; rec.valorUnit = rec.cantidad ? (rec.costo / rec.cantidad) : rec.costo;
+        }
         if (!rec.fecha) return toast("Falta la fecha", true);
         allMaint = existing ? allMaint.map((x) => (x.id === rec.id ? rec : x)) : [...allMaint, rec];
         await addMaint(getState().user.uid, rec); persistMaintLocal(getState().user.uid, allMaint);
+        if (rec.visitaId) await recalcVisitGasto(rec.visitaId);
         if ((rec.odometro || 0) > (v.odometro || 0)) { setState({ vehicles: getState().vehicles.map((x) => (x.id === v.id ? { ...x, odometro: rec.odometro } : x)) }); v.odometro = rec.odometro; await persistVehicles(); }
         closeModal(); drawMaint(root, v); toast(existing ? "Mantenimiento actualizado" : "Mantenimiento registrado");
       });

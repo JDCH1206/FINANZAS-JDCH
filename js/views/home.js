@@ -236,11 +236,19 @@ function drawList() {
           await deleteMaint(s.user.uid, tx.maintId);
           if (!isCloud()) { const ex = await loadMaint(s.user.uid); persistMaintLocal(s.user.uid, ex.filter((x) => x.id !== tx.maintId)); }
         }
+        // borrar todas las líneas de la visita de taller (si lo es)
+        if (tx && tx.visitaId) {
+          const ex = await loadMaint(s.user.uid);
+          const del = ex.filter((x) => x.visitaId === tx.visitaId);
+          for (const r of del) await deleteMaint(s.user.uid, r.id);
+          if (!isCloud()) persistMaintLocal(s.user.uid, ex.filter((x) => x.visitaId !== tx.visitaId));
+        }
         drawList();
       };
-      if (tx && (tx.fuelId || tx.maintId)) {
+      if (tx && (tx.fuelId || tx.maintId || tx.visitaId)) {
         // vinculado a un registro del vehículo → confirmar (el borrado es doble)
         const msg = tx.fuelId ? "Este gasto está vinculado a un <b>tanqueo</b> del vehículo: se eliminarán el gasto y el tanqueo. ¿Continuar?"
+          : tx.visitaId ? "Este gasto es una <b>visita de taller</b>: se eliminarán el gasto y todas las líneas de esa visita en la bitácora. ¿Continuar?"
           : "Este gasto está vinculado a un <b>mantenimiento</b> del vehículo: se eliminarán el gasto y el registro de la bitácora. ¿Continuar?";
         confirmDialog(msg, async () => { await doDelete(); toast("Eliminado"); });
       } else {
@@ -319,17 +327,17 @@ export function openTxModal(existing) {
     </div>` : "";
   // Al EDITAR: permitir asociar/cambiar el vehículo (solo la etiqueta) si el gasto no está
   // vinculado a un tanqueo/mantenimiento/obligación (esos se administran desde su módulo).
-  const canEditVeh = existing && s.vehiclesEnabled && (s.vehicles || []).length && !existing.fuelId && !existing.maintId && !existing.obligId;
-  const linkedVeh = existing && (existing.fuelId || existing.maintId || existing.obligId);
+  const canEditVeh = existing && s.vehiclesEnabled && (s.vehicles || []).length && !existing.fuelId && !existing.maintId && !existing.obligId && !existing.visitaId;
+  const linkedVeh = existing && (existing.fuelId || existing.maintId || existing.obligId || existing.visitaId);
   const vehEditBlock = canEditVeh ? `
     <div class="field" id="m-veh-edit-wrap" style="display:none"><label class="label">Asociar a vehículo</label>
       <select id="m-veh-edit" class="input"><option value="">— no asociar —</option>${s.vehicles.map((v) => `<option value="${escapeHtml(v.id)}" ${existing.vehicleId === v.id ? "selected" : ""}>${v.tipo === "Moto" ? "🏍️" : "🚗"} ${escapeHtml(v.alias || v.modelo)}</option>`).join("")}</select>
       <p class="tiny muted" style="margin-top:4px">Etiqueta este gasto a un vehículo para separar sus costos. No crea tanqueo ni mantenimiento.</p></div>`
-    : (linkedVeh ? `<div class="field"><p class="tiny muted">🔗 Este gasto está vinculado a un registro del vehículo (combustible/mantenimiento/obligación). Su vehículo se administra desde ese módulo.</p></div>` : "");
+    : (linkedVeh ? `<div class="field"><p class="tiny muted">${existing.visitaId ? "🧾 Este gasto es una <b>visita de taller</b> con varias líneas. Su monto y detalle se editan en Vehículos → Mantenimiento." : "🔗 Este gasto está vinculado a un registro del vehículo (combustible/mantenimiento/obligación). Su vehículo se administra desde ese módulo."}</p></div>` : "");
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
     <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" list="m-desc-list" autocomplete="off" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : ""}">${descDatalist("m-desc-list", s.txs)}</div>
-    <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : ""}"></div>
+    <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : ""}" ${existing && existing.visitaId ? "readonly style='opacity:.55'" : ""}></div>
     <div class="field"><label class="label">Categoría</label><select id="m-cat" class="input">${catOpts}</select></div>
     ${missingCat ? `<p class="tiny" style="color:var(--yel);margin:-6px 0 10px">⚠ La categoría original de este gasto fue eliminada. Puedes dejarla o elegir una nueva (si la cambias, no podrás volver a la anterior).</p>` : ""}
     <div class="field"><label class="label">Subcategoría</label><select id="m-sub" class="input"></select></div>
@@ -406,7 +414,7 @@ export function openTxModal(existing) {
           // en otras categorías se conserva la asociación existente (no se borra en silencio)
           const veVisible = veWrap && veWrap.style.display !== "none";
           tx.vehicleId = (veSel && veVisible) ? veSel.value : (existing.vehicleId || "");
-          tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; tx.obligId = existing.obligId || "";
+          tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; tx.obligId = existing.obligId || ""; tx.visitaId = existing.visitaId || "";
         }
         if (!tx.date) return toast("Falta la fecha", true);
         if (!tx.desc || !tx.amount || tx.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
