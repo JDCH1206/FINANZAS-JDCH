@@ -4,7 +4,7 @@ import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFu
 import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
-import { donut, lineTrend, lineNum } from "../components/charts.js";
+import { donut, lineTrend, lineNum, multiLine } from "../components/charts.js";
 
 const icon = (t) => (t === "Moto" ? "🏍️" : "🚗");
 let activeFuelVid = null;   // si está fijo, mostramos la bitácora de ese vehículo
@@ -314,6 +314,7 @@ function drawFuel(root, v) {
     ${fuel.length ? `<div class="grid-cards">
       <div class="card col-span"><div class="card-title">Rendimiento por tanqueo (km/galón)</div><div class="chart-box"><canvas id="ch-rend"></canvas></div></div>
       <div class="card col-span"><div class="card-title">Gasto mensual en combustible</div><div class="chart-box"><canvas id="ch-mes"></canvas></div></div>
+      <div class="card col-span"><div class="card-title">Precio por galón en el tiempo (por tipo)</div><div class="chart-box"><canvas id="ch-pgal"></canvas></div><p class="tiny muted mt-2">Precio por galón (costo ÷ galones) promedio por mes, separado por tipo (Extra/Corriente/…).</p></div>
       <div class="card"><div class="card-title">Gasto por estación</div><div class="chart-box"><canvas id="ch-est"></canvas></div><div id="leg-est" class="row wrap gap-2 mt-2"></div></div>
     </div>
     <div class="card mt-3" style="padding:0" id="fuel-list"></div>`
@@ -334,6 +335,13 @@ function drawFuel(root, v) {
   if (fuel.length) {
     lineNum("ch-rend", m.points.map((p) => p.fecha), m.points.map((p) => +p.rend.toFixed(1)), "#7fbf7f", "");
     lineTrend("ch-mes", mKeys.map((k) => monthLabel(k)), mKeys.map((k) => Math.round(months[k])));
+    // precio por galón por tipo de combustible, promedio mensual (últimos 24 meses)
+    const byType = {};
+    fuel.forEach((r) => { const g = +r.galones || 0, c = +r.costo || 0, k = ym(r.fecha); if (g <= 0 || c <= 0 || !k) return; const t = r.tipoCombustible || "—"; (byType[t] = byType[t] || {}); (byType[t][k] = byType[t][k] || []).push(c / g); });
+    const pMonths = [...new Set(Object.values(byType).flatMap((o) => Object.keys(o)))].sort().slice(-24);
+    const pColors = { Corriente: "#d8a657", Extra: "#5a8fb0", "Diésel": "#7fbf7f", Gas: "#c98bb9" };
+    const pSeries = Object.keys(byType).map((t, i) => ({ label: t, color: pColors[t] || PALETTE[i % PALETTE.length], data: pMonths.map((k) => { const a = byType[t][k]; return a ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null; }) }));
+    if (pSeries.length) multiLine("ch-pgal", pMonths.map((k) => monthLabel(k)), pSeries);
     donut("ch-est", estE.map((e) => e[0]), estE.map((e) => e[1]));
     root.querySelector("#leg-est").innerHTML = estE.map((e, i) => `<span class="tiny muted row gap-1"><span style="width:9px;height:9px;border-radius:3px;background:${PALETTE[i % PALETTE.length]}"></span>${escapeHtml(e[0])} ${fmt(e[1])}</span>`).join("");
     drawFuelList(root, v, m);

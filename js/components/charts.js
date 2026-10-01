@@ -77,6 +77,19 @@ export function lineNum(id, labels, data, color = "#5a8fb0", suffix = "") {
   });
 }
 
+// varias líneas (ej. precio por galón Extra vs Corriente). series = [{label,data,color}]
+export function multiLine(id, labels, series) {
+  mount(id, {
+    type: "line",
+    data: { labels, datasets: series.map((s, i) => ({ label: s.label, data: s.data, borderColor: s.color || PALETTE[i % PALETTE.length], backgroundColor: "transparent", borderWidth: 2.5, tension: .3, pointRadius: 2, pointBackgroundColor: s.color || PALETTE[i % PALETTE.length], spanGaps: true })) },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: axis(), font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.raw)}` } } },
+      scales: baseScales(),
+    },
+  });
+}
+
 export function budgetBars(id, labels, presup, real) {
   mount(id, {
     type: "bar",

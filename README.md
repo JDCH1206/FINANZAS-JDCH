@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v93**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v94**. Cambios por fecha (más reciente primero):
+
+### 2026-10-01 · caché v94 — Sankey de flujo + precio de gasolina por tipo
+- 💵 **Diagrama Sankey** (SVG propio) en Tablero → Avanzado: muestra el **flujo del año** Ingresos → categorías de gasto (+ Ahorro), con cintas proporcionales y selector de año. `buildSankey`.
+- ⛽ Nueva gráfica **"Precio por galón en el tiempo (por tipo)"** en Combustible: precio/galón (costo ÷ galones) promedio mensual, **separado por tipo** (Extra/Corriente/…), que era la forma correcta de compararlo. Helper `multiLine` nuevo en charts.
 
 ### 2026-10-01 · caché v93 — Tablero "Avanzado" + KPIs de rendimiento en Cuentas
 - 🐜 Nueva pestaña **Avanzado** en el Tablero: **compras repetidas (gasto hormiga)** —lo que compras ≥3 veces, por total, con conteo y promedio— y **detección de posibles gastos fijos/recurrentes** (ítems que aparecen casi todos los meses y aún no están como recurrentes). `renderAvanzado`.

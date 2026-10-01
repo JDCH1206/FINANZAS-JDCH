@@ -25,6 +25,7 @@ let kpisOpen = false; // mostrar todos los indicadores o solo los principales
 let dashTab = "resumen";       // "resumen" | "detalle" | "calendario"
 let detPath = { year: null, month: null, cat: null }; // ruta del drill-down Año › Mes › Categoría › Subcat
 let calMonth = null;           // mes del calendario/mapa de calor
+let advYear = null;            // año del Sankey de flujo (pestaña Avanzado)
 
 export function renderDashboard(root) {
   const s = getState();
@@ -386,7 +387,26 @@ function renderAvanzado(root, tabs) {
     <div class="flex1"><div class="tx-desc">${escapeHtml(name(G))}</div><div class="tx-meta">en ${G.months.size} meses · ${G.n} veces</div></div>
     <div class="tx-amt">${fmt(G.tot / Math.max(1, G.months.size))}<div class="tiny muted">prom/mes</div></div></div>`;
 
+  // --- Sankey: flujo ingreso → categorías (+ ahorro) del año elegido ---
+  const years = [...new Set([...txs, ...(s.incomes || [])].map((t) => (t.date || "").slice(0, 4)).filter(Boolean))].sort().reverse();
+  if (!advYear || !years.includes(advYear)) advYear = years[0] || curMonth().slice(0, 4);
+  const inY = sum((s.incomes || []).filter((t) => (t.date || "").slice(0, 4) === advYear), (t) => t.amount);
+  const exByCat = {};
+  txs.filter((t) => (t.date || "").slice(0, 4) === advYear).forEach((t) => { exByCat[t.cat] = (exByCat[t.cat] || 0) + (+t.amount || 0); });
+  const exY = sum(Object.values(exByCat));
+  const flows = Object.entries(exByCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+    .map(([n, v], i) => ({ label: n, value: v, color: PALETTE[i % PALETTE.length] }));
+  if (inY - exY > 0) flows.push({ label: "Ahorro", value: inY - exY, color: "#7fbf7f" });
+  const sankey = buildSankey(flows);
+
   root.innerHTML = tabs + `
+    <div class="card mb-3">
+      <div class="row between mb-2" style="align-items:center"><div class="card-title" style="margin:0">💵 Flujo del dinero</div>
+        <select id="adv-year" class="input" style="width:auto">${years.map((y) => `<option ${y === advYear ? "selected" : ""}>${y}</option>`).join("")}</select></div>
+      <div class="row between tiny muted mb-2"><span>Ingresos ${fmt(inY)}</span><span>Gastos ${fmt(exY)}</span><span style="color:${inY - exY >= 0 ? "var(--green)" : "var(--red)"}">${inY - exY >= 0 ? "Ahorro" : "Déficit"} ${fmt(Math.abs(inY - exY))}</span></div>
+      ${sankey}
+      ${inY - exY < 0 ? `<p class="tiny" style="color:var(--red)">⚠ En ${advYear} gastaste más de lo que ingresó.</p>` : ""}
+    </div>
     <div class="card mb-3">
       <div class="card-title">🐜 Compras repetidas (gasto hormiga)</div>
       <p class="tiny muted" style="margin:-4px 0 8px">Lo que compras ≥3 veces, ordenado por total. Estas ${horm.length} suman <b>${fmt(hormTot)}</b> (≈ ${fmt(hormTot / (nMonths / 12))}/año).</p>
@@ -399,6 +419,33 @@ function renderAvanzado(root, tabs) {
     </div>`;
 
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
+  const yr = root.querySelector("#adv-year"); if (yr) yr.onchange = (e) => { advYear = e.target.value; renderDashboard(root); };
+}
+
+// Diagrama Sankey (SVG inline): nodo Ingresos (izq) → categorías + Ahorro (der), con cintas proporcionales.
+function buildSankey(flows) {
+  const total = sum(flows.map((f) => f.value));
+  if (!total) return `<div class="muted small">Sin datos para este año.</div>`;
+  const W = 320, H = Math.max(200, flows.length * 30), lx = 20, rx = 300, pad = 2;
+  const usable = H - pad * (flows.length - 1);
+  const sc = usable / total;
+  let yR = 0, yL = 0, bands = "", rnodes = "", leg = "";
+  flows.forEach((f, i) => {
+    const h = f.value * sc;
+    const y0R = yR, y1R = yR + h; yR += h + pad;
+    const y0L = yL, y1L = yL + h; yL += h; // izquierda sin pad (continuo)
+    bands += `<path d="M${lx},${y0L} C${(lx + rx) / 2},${y0L} ${(lx + rx) / 2},${y0R} ${rx},${y0R} L${rx},${y1R} C${(lx + rx) / 2},${y1R} ${(lx + rx) / 2},${y1L} ${lx},${y1L} Z" fill="${f.color}" opacity="0.4"></path>`;
+    rnodes += `<rect x="${rx}" y="${y0R}" width="14" height="${Math.max(1, h)}" rx="2" fill="${f.color}"></rect>`;
+    const pct = (f.value / total) * 100;
+    leg += `<div class="row gap-1" style="align-items:center;font-size:11px"><span style="width:9px;height:9px;border-radius:2px;background:${f.color};flex:none"></span><span class="ellipsis">${escapeHtml(f.label)} · ${fmt(f.value)} · ${pct.toFixed(0)}%</span></div>`;
+  });
+  const leftH = Math.min(usable, total * sc);
+  return `<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">
+      ${bands}
+      <rect x="6" y="0" width="14" height="${leftH}" rx="2" fill="var(--gold)"></rect>
+      ${rnodes}
+    </svg></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:6px">${leg}</div>`;
 }
 
 function openDayModal(mes, day) {
