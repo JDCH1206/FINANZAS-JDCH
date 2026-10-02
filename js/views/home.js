@@ -241,9 +241,24 @@ function drawList() {
   if (tabKind === "gasto") {
     const f = applyFilters(s.txs, true);
     const sorted = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    const rows = sorted.slice(0, limit), more = sorted.length > limit;
+    // las compras con varios productos se muestran como UNA fila; al buscar texto, filtrar por
+    // categoría o por monto se muestran los productos sueltos (para encontrarlos uno a uno)
+    const agrupar = !query && !fCat && !fMin && !fMax;
+    let items = sorted;
+    if (agrupar) {
+      const bySplit = {};
+      sorted.forEach((t) => { if (t.splitId) (bySplit[t.splitId] = bySplit[t.splitId] || []).push(t); });
+      const vistos = new Set(); items = [];
+      for (const t of sorted) {
+        const g = t.splitId && bySplit[t.splitId];
+        if (g && g.length > 1) { if (!vistos.has(t.splitId)) { vistos.add(t.splitId); items.push({ grupo: g }); } }
+        else items.push(t);
+      }
+    }
+    const rows = items.slice(0, limit), more = items.length > limit;
     if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin gastos con esos filtros.</div>`; return; }
     list.innerHTML = filterSummary(f, s) + rows.map((t) => {
+      if (t.grupo) return compraRow(t.grupo);
       const ci = s.cats.findIndex((c) => c.name === t.cat);
       const veh = t.vehicleId ? (s.vehicles || []).find((x) => x.id === t.vehicleId) : null;
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
@@ -254,7 +269,8 @@ function drawList() {
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}" aria-label="Eliminar gasto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
       </div>`;
-    }).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btn" style="margin:10px 0">Ver más (${sorted.length - limit} restantes)</button>` : "");
+    }).join("") + (more ? `<button class="btn btn-ghost btn-block" id="more-btn" style="margin:10px 0">Ver más (${items.length - limit} restantes)</button>` : "");
+    list.querySelectorAll("[data-split]").forEach((r) => r.onclick = () => openCompraModal(r.getAttribute("data-split")));
     if (more) list.querySelector("#more-btn").onclick = () => { limit += 300; drawList(); };
     list.querySelectorAll("[data-row]").forEach((r) => r.onclick = (e) => { if (e.target.closest("[data-del]")) return; openTxModal(getState().txs.find((x) => x.id === r.getAttribute("data-row"))); });
     list.querySelectorAll("[data-del]").forEach((b) => b.onclick = (e) => { e.stopPropagation();
@@ -386,8 +402,11 @@ export function openTxModal(existing) {
     <div class="field"><label class="label">Etiquetas (opcional)</label><input id="m-tags" class="input" list="m-tags-list" autocomplete="off" placeholder="Ej: viaje, regalo (separadas por coma)" value="${existing && existing.tags ? escapeHtml(existing.tags.join(", ")) : ""}">${tagsDatalist("m-tags-list", s.txs)}</div>
     ${vehBlock}${vehEditBlock}
     ${!existing ? `<button type="button" id="m-split" class="btn btn-ghost btn-block btn-sm" style="margin-bottom:8px">🧾 Compra con varios productos</button>` : ""}
+    ${existing && existing.splitId ? `<button type="button" id="m-compra" class="btn btn-ghost btn-block btn-sm" style="margin-bottom:8px">🧾 Ver compra completa</button>` : ""}
     <button id="m-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
+      const compraBtn = b.querySelector("#m-compra");
+      if (compraBtn) compraBtn.onclick = () => openCompraModal(existing.splitId);
       const splitBtn = b.querySelector("#m-split");
       if (splitBtn) splitBtn.onclick = () => openSplitModal({ date: b.querySelector("#m-date").value, desc: b.querySelector("#m-desc").value.trim() });
       const catSel = b.querySelector("#m-cat"), subSel = b.querySelector("#m-sub");
@@ -547,6 +566,90 @@ export function openTxModal(existing) {
   });
 }
 
+// aprendizaje del historial: producto → categoría/subcategoría que más has usado con él
+function makeLearner(txs) {
+  const kNorm = (x) => String(x || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");
+  const hist = {};
+  for (const t of txs) { const k = kNorm(t.desc); if (!k) continue; const c = `${t.cat}|${t.sub || ""}`; (hist[k] = hist[k] || {})[c] = (hist[k][c] || 0) + 1; }
+  return (desc) => { const h = hist[kNorm(desc)]; if (!h) return null; const [c, sub] = Object.entries(h).sort((x, y) => y[1] - x[1])[0][0].split("|"); return { c, sub }; };
+}
+
+// fila agrupada de una compra con varios productos (lista de Movimientos)
+function compraRow(g) {
+  const t0 = g[0], tot = g.reduce((a, t) => a + (+t.amount || 0), 0);
+  const tienda = (t0.tags || []).length ? normTag(t0.tags[0]) : "Compra";
+  const nCats = new Set(g.map((t) => t.cat)).size;
+  const nombres = [...g].sort((a, b) => (+b.amount || 0) - (+a.amount || 0)).map((t) => t.desc);
+  return `<div class="tx-row" data-split="${escapeHtml(t0.splitId)}" style="cursor:pointer">
+    <span class="tx-dot" style="background:var(--gold)"></span>
+    <div class="flex1" style="min-width:0"><div class="tx-desc ellipsis">🧾 ${escapeHtml(tienda)} · ${g.length} productos</div>
+      <div class="tx-meta">${fmtDate(t0.date)} · ${nCats} categoría${nCats === 1 ? "" : "s"}${t0.pay ? " · " + escapeHtml(t0.pay) : ""}</div>
+      <div class="tx-meta ellipsis">${escapeHtml(nombres.slice(0, 4).join(", "))}${nombres.length > 4 ? "…" : ""}</div></div>
+    <div class="tx-amt">${fmt(tot)}</div></div>`;
+}
+
+// Recibo completo de una compra con varios productos: ver, agregar lo que faltó, editar o borrar
+export function openCompraModal(splitId) {
+  const s = getState();
+  const items = s.txs.filter((t) => t.splitId === splitId).sort((a, b) => (+b.amount || 0) - (+a.amount || 0));
+  if (!items.length) return toast("Compra no encontrada", true);
+  const t0 = items[0], tot = items.reduce((a, t) => a + (+t.amount || 0), 0);
+  const tienda = (t0.tags || []).length ? normTag(t0.tags[0]) : "Compra";
+  const acct = t0.acct ? (s.accounts || []).find((a) => a.id === t0.acct) : null;
+  const porCat = {};
+  items.forEach((t) => { porCat[t.cat] = (porCat[t.cat] || 0) + (+t.amount || 0); });
+  const catOpts = s.cats.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  const subOpts = (catName, sel) => ((s.cats.find((c) => c.name === catName) || {}).subs || []).map((x) => `<option ${x === sel ? "selected" : ""}>${escapeHtml(x)}</option>`).join("");
+  openModal(`🧾 ${escapeHtml(tienda)}`, `
+    <div class="row between small"><span class="muted">${fmtDate(t0.date)}${t0.pay ? " · " + escapeHtml(t0.pay) : ""}${acct ? " · " + escapeHtml(acct.name) : ""}</span><span class="bold" style="color:var(--gold)">${fmt(tot)}</span></div>
+    <div class="tiny muted mb-2">${items.length} productos · ${Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${escapeHtml(c)} ${fmt(v)}`).join(" · ")}</div>
+    <div style="max-height:45vh;overflow:auto;border-top:1px solid var(--line)">
+      ${items.map((t) => `<div class="tx-row" data-ci="${t.id}" style="cursor:pointer;padding-left:0;padding-right:0">
+        <div class="flex1" style="min-width:0"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${t.qty ? ` <span class="muted">x${escapeHtml(String(t.qty))}</span>` : ""}</div>
+          <div class="tx-meta">${escapeHtml(t.cat)} › ${escapeHtml(t.sub || "")}</div></div>
+        <div class="tx-amt">${fmt(t.amount)}</div></div>`).join("")}
+    </div>
+    <p class="tiny muted mt-1">Toca un producto para editarlo.</p>
+    <details class="mt-2"><summary class="small" style="cursor:pointer;color:var(--gold)">+ Agregar producto que faltó</summary>
+      <div class="mt-2">
+        <input id="cp-prod" class="input mb-2" list="cp-prod-list" autocomplete="off" placeholder="Producto (ej. Coca cola)">${descDatalist("cp-prod-list", s.txs)}
+        <div class="row gap-2 mb-2"><input id="cp-qty" class="input" type="number" inputmode="decimal" value="1" style="width:70px" title="Cantidad">
+          <input id="cp-amt" class="input" type="number" inputmode="numeric" placeholder="Valor total del ítem" style="flex:1;min-width:0"></div>
+        <div class="row gap-2 mb-2"><select id="cp-cat" class="input" style="flex:1;min-width:0">${catOpts}</select><select id="cp-sub" class="input" style="flex:1;min-width:0"></select></div>
+        <button id="cp-add" class="btn btn-primary btn-block btn-sm">Agregar a esta compra</button>
+      </div></details>
+    <button id="cp-del" class="btn btn-ghost btn-block mt-3" style="color:var(--red)">Borrar compra completa</button>`, {
+    onMount(b) {
+      b.querySelectorAll("[data-ci]").forEach((r) => r.onclick = () => {
+        const t = getState().txs.find((x) => x.id === r.getAttribute("data-ci"));
+        if (t) { closeModal(); openTxModal(t); }
+      });
+      const cat = b.querySelector("#cp-cat"), sub = b.querySelector("#cp-sub"), prod = b.querySelector("#cp-prod");
+      cat.value = t0.cat; sub.innerHTML = subOpts(cat.value, t0.sub);
+      cat.onchange = () => { sub.innerHTML = subOpts(cat.value); };
+      const learned = makeLearner(s.txs);
+      prod.onchange = () => { const l = learned(prod.value); if (l && s.cats.some((c) => c.name === l.c)) { cat.value = l.c; sub.innerHTML = subOpts(l.c, l.sub); } };
+      submitOnce(b.querySelector("#cp-add"), async () => {
+        const desc = prod.value.trim(), amount = +b.querySelector("#cp-amt").value || 0, qty = +b.querySelector("#cp-qty").value || 1;
+        if (!desc || amount <= 0) return toast("Falta producto o valor", true);
+        const t = { id: uid(), date: t0.date, desc, amount, cat: cat.value, sub: sub.value, pay: t0.pay || "", acct: t0.acct || "", tags: [...(t0.tags || [])], splitId };
+        if (qty !== 1) t.qty = qty;
+        const st = getState();
+        setState({ txs: [t, ...st.txs] });
+        await addTx(st.user.uid, t); forcePersistLocal(st.user.uid);
+        drawList(); toast("Producto agregado"); openCompraModal(splitId);
+      });
+      b.querySelector("#cp-del").onclick = () => confirmDialog(`¿Borrar la compra completa (${items.length} productos, ${fmt(tot)})?`, async () => {
+        const st = getState(), ids = new Set(items.map((t) => t.id));
+        setState({ txs: st.txs.filter((t) => !ids.has(t.id)) });
+        for (const id of ids) await deleteTx(st.user.uid, id);
+        forcePersistLocal(st.user.uid);
+        closeModal(); drawList(); toast("Compra borrada");
+      });
+    },
+  });
+}
+
 // Compra con varios productos (antes "Dividir gasto"): un mismo pago con varios ítems. Cada
 // ítem se guarda como un gasto propio con SU descripción (ej. "Coca cola"), categoría,
 // subcategoría, cantidad y valor, así entra en búsquedas, seguimientos y gasto hormiga como
@@ -559,11 +662,7 @@ export function openSplitModal(prefill = {}) {
   const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
   const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
   const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
-  // aprendizaje del historial: producto → categoría/subcategoría que más has usado con él
-  const kNorm = (x) => String(x || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");
-  const hist = {};
-  for (const t of s.txs) { const k = kNorm(t.desc); if (!k) continue; const c = `${t.cat}|${t.sub || ""}`; (hist[k] = hist[k] || {})[c] = (hist[k][c] || 0) + 1; }
-  const learned = (desc) => { const h = hist[kNorm(desc)]; if (!h) return null; const [c, sub] = Object.entries(h).sort((x, y) => y[1] - x[1])[0][0].split("|"); return { c, sub }; };
+  const learned = makeLearner(s.txs);
   const firstCat = (s.cats.find((c) => c.name === "Alimentación") || s.cats[0] || {}).name || "";
   const firstSub = ((s.cats.find((c) => c.name === firstCat) || {}).subs || [])[0] || "";
   const itemRow = (cat = firstCat, sub = firstSub) => `<div class="split-part" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px">

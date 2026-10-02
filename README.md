@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v116.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v117.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v116). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v117). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,14 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v116**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v117**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v117 — Compras agrupadas en la lista + recibo completo
+- 🧾 En **Movimientos**, los productos de una **Compra con varios productos** se muestran como **una sola fila**: "🧾 Éxito · 3 productos · $28.500", con fecha, número de categorías, medio de pago y los primeros productos.
+- Al tocarla se abre el **recibo completo**: tienda, fecha, medio de pago, cuenta, total, total por categoría y la lista de productos (cantidad, categoría › subcategoría, valor). Desde ahí: tocar un producto para **editarlo**, **+ Agregar producto que faltó** (hereda fecha, pago, cuenta, etiquetas y vínculo; propone la categoría aprendida) y **Borrar compra completa**.
+- Al **buscar texto** o filtrar por **categoría** o **monto**, los productos salen **sueltos** (para encontrarlos uno a uno, con su ÷). Con los demás filtros (mes, cuenta, medio de pago, etiqueta) se ven agrupados.
+- En la edición de un producto aparece **🧾 Ver compra completa**.
+- La agrupación es solo visual: totales, presupuesto, gráficas, Seguimientos y gasto hormiga siguen contando cada producto.
 
 ### 2026-10-02 · caché v116 — Etiquetas sin distinguir mayúsculas ni tildes
 - 🏷️ "Éxito", "exito", "EXITO" y "#Éxito" ahora son **la misma etiqueta**: el filtro las encuentra todas, la lista de etiquetas muestra una sola (la escritura más usada) y al escribir una etiqueta que ya existe con otra forma se **reutiliza la escritura existente** (formulario de gasto y Compra con varios productos). Antes cada variante era una etiqueta distinta.
