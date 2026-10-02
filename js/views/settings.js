@@ -7,6 +7,7 @@ import { classify, classifyIncome, DEFAULT_PAY_METHODS, RULE_503020 } from "../c
 import { uid, normDate, escapeHtml, fmt, ym, monthLabel, curMonth, sum, todayISO } from "../utils.js";
 import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview } from "../components/modals.js";
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
+import { gruposVariantes, openUnificarDescripciones } from "./unificar.js";
 
 export function renderSettings(root, onSignOut) {
   const s = getState();
@@ -41,6 +42,12 @@ export function renderSettings(root, onSignOut) {
         <button id="imp-btn" class="btn btn-ghost btn-sm">⬆ Restaurar respaldo</button>
         <button id="exp-xls" class="btn btn-ghost btn-sm">⬇ Exportar a Excel</button>
       </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-title">Limpieza de datos 🧹</div>
+      <p class="small muted mb-3">Detecta gastos que son lo mismo escrito de varias formas (ej. "Almuerzo", "Almuerzos", "almuerzo") y te <b>recomienda</b> unificarlos. Tú eliges cuáles y cómo dejarlos.</p>
+      <button id="unif-btn" class="btn btn-ghost btn-sm">🧹 Unificar descripciones${(() => { const n = gruposVariantes(getState()).length; return n ? ` (${n} sugerencias)` : ""; })()}</button>
     </div>
 
     <div class="card mb-3">
@@ -213,6 +220,7 @@ export function renderSettings(root, onSignOut) {
   };
 
   // backup json — incluye TODO: config, gastos, ingresos, combustible, mantenimiento y obligaciones
+  root.querySelector("#unif-btn").onclick = () => openUnificarDescripciones(() => renderSettings(root, onSignOut));
   root.querySelector("#exp-json").onclick = async () => {
     const btn = root.querySelector("#exp-json"); const orig = btn.textContent;
     btn.disabled = true; btn.textContent = "Preparando…";
