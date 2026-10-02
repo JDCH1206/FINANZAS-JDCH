@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v103.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v104.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v103). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v104). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,13 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v103**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v104**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v104 — "¿Tu ahorro llegó a las cuentas?" (conciliación)
+- 🔎 Nueva tarjeta en **Tablero → Avanzado**, debajo del Flujo del dinero y con el **mismo período** (año o mes). Compara el **ahorro según tus registros** (Ingresos − Gastos) contra los **aportes netos a cuentas** (sumas/aportes menos retiros; sin rendimientos ni transferencias entre cuentas, sin cuentas "Por cobrar").
+- Si hay deudas con abonos en el período, también entran: **+ pagos a deudas** (tu ahorro se usó para bajar deuda), **− compras a crédito** (gasto que no salió de tu bolsillo) y **− pagos que te hicieron** (dinero que entra sin ser ingreso). Sin deudas, esas filas no aparecen.
+- Veredicto: ✅ **Cuadra** (diferencia ≤ máx($50.000, 2% de ingresos)), ⚠ **Faltan X por ubicar** (efectivo, cuenta no registrada, gastos sin anotar) o ⚠ **Aportaste X más** (salió de efectivo/saldo anterior o hay ingresos sin registrar).
+- Solo compara desde el mes en que empezaste a registrar aportes (antes no hay con qué comparar). En la vista anual se **excluye el mes en curso**; si eliges el mes actual se avisa que aún no termina. Los rendimientos se informan aparte.
 
 ### 2026-10-02 · caché v103 — Flujo del dinero por mes
 - 📅 Junto al selector de año ahora hay un selector de **mes** ("Todo el año" por defecto + los meses de ese año con movimientos). El Sankey, los totales de Ingresos/Gastos/Ahorro y el aviso de déficit se calculan para el período elegido; los % pasan a ser "sobre tus ingresos del mes".

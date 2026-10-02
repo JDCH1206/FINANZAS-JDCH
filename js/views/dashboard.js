@@ -401,6 +401,7 @@ function renderAvanzado(root, tabs) {
   txs.filter(inPer).forEach((t) => { exByCat[t.cat] = (exByCat[t.cat] || 0) + (+t.amount || 0); });
   const exY = sum(Object.values(exByCat));
   const sankey = buildSankey(inY, exByCat, advMonth ? "del mes" : "del año");
+  const concil = buildConciliacion(s, txs, period, periodLbl);
 
   root.innerHTML = tabs + `
     <div class="card mb-3">
@@ -411,6 +412,7 @@ function renderAvanzado(root, tabs) {
       ${sankey}
       ${inY - exY < 0 ? `<p class="tiny" style="color:var(--red)">⚠ En ${escapeHtml(periodLbl)} gastaste más de lo que ingresó.</p>` : ""}
     </div>
+    ${concil}
     <div class="card mb-3">
       <div class="card-title">🐜 Compras repetidas (gasto hormiga)</div>
       <p class="tiny muted" style="margin:-4px 0 8px">Lo que compras ≥3 veces, ordenado por total. Estas ${horm.length} suman <b>${fmt(hormTot)}</b> (≈ ${fmt(hormTot / (nMonths / 12))}/año).</p>
@@ -425,6 +427,64 @@ function renderAvanzado(root, tabs) {
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
   const yr = root.querySelector("#adv-year"); if (yr) yr.onchange = (e) => { advYear = e.target.value; advMonth = ""; renderDashboard(root); };
   const mo = root.querySelector("#adv-month"); if (mo) mo.onchange = (e) => { advMonth = e.target.value; renderDashboard(root); };
+}
+
+// Conciliación del ahorro: ¿lo que "debería" quedar (ingresos − gastos) es lo que realmente
+// llegó a las cuentas o se usó para pagar deudas? Compara solo desde que hay registros de cuentas.
+function buildConciliacion(s, txs, period, periodLbl) {
+  const accts = s.accounts || [], debts = s.debts || [];
+  const movs = accts.flatMap((a) => (a.movs || []).map((m) => ({ ...m, acct: a })));
+  const abonos = debts.flatMap((d) => (d.abonos || []).map((x) => ({ ...x, debt: d })));
+  const fechas = [...movs.filter((m) => m.kind !== "rendimiento").map((m) => m.date), ...abonos.map((x) => x.date)].filter(Boolean).sort();
+  const head = `<div class="card mb-3"><div class="card-title">🔎 ¿Tu ahorro llegó a las cuentas?</div>`;
+  if (!fechas.length) return `${head}<p class="small muted">Aún no hay aportes en <b>Cuentas</b> ni abonos en <b>Deudas</b> para comparar. Cuando registres aportes ("Actualizar saldo" o "Sumar"), aquí verás si coinciden con tu ahorro.</p></div>`;
+  const desde = fechas[0].slice(0, 7);
+  const pEnd = period.length === 4 ? period + "-12" : period;
+  if (pEnd < desde) return `${head}<p class="small muted">Empezaste a registrar aportes en <b>${escapeHtml(monthLabel(desde))}</b>; para ${escapeHtml(periodLbl)} no hay con qué comparar. Elige un mes desde esa fecha.</p></div>`;
+  // ventana comparable: el período elegido, recortado al mes en que empezaron los registros
+  // en la vista anual se excluye el mes en curso: su ahorro normalmente aún no se ha aportado
+  const cm = curMonth(), esAnual = period.length === 4;
+  const sinMesActual = esAnual && cm.startsWith(period);
+  const inWin = (d) => { const m = (d || "").slice(0, 7); return (d || "").startsWith(period) && m >= desde && !(sinMesActual && m === cm); };
+  const recortado = esAnual && period + "-01" < desde;
+  const mesEnCurso = period === cm;
+  const ing = sum((s.incomes || []).filter((t) => inWin(t.date)), (t) => t.amount);
+  const gas = sum(txs.filter((t) => inWin(t.date)), (t) => t.amount);
+  const ahorro = ing - gas;
+  const mv = movs.filter((m) => inWin(m.date));
+  const aportes = sum(mv.filter((m) => m.kind !== "rendimiento" && m.kind !== "transfer" && m.acct.type !== "Por cobrar"), (m) => +m.amount || 0);
+  const rend = sum(mv.filter((m) => m.kind === "rendimiento"), (m) => +m.amount || 0);
+  const ab = abonos.filter((x) => inWin(x.date));
+  const debe = (x) => x.debt.tipo === "debo" || x.debt.tipo === "tarjeta";
+  const pagosDeuda = sum(ab.filter((x) => debe(x) && x.delta < 0), (x) => -x.delta);   // salió dinero para pagar deudas
+  const nuevaDeuda = sum(ab.filter((x) => debe(x) && x.delta > 0), (x) => x.delta);    // consumos a crédito: gasto que no salió de tu bolsillo
+  const cobros = sum(ab.filter((x) => x.debt.tipo === "me_deben" && x.delta < 0), (x) => -x.delta); // te pagaron: entró dinero que no es ingreso
+  const destino = aportes + pagosDeuda - nuevaDeuda - cobros;
+  const dif = ahorro - destino;
+  const tol = Math.max(50000, Math.abs(ing) * 0.02);
+  const money = (v) => (v < 0 ? "−" : "") + fmt(Math.abs(v));
+  const hayDeudas = debts.some((d) => (d.abonos || []).length);
+  const row = (lbl, val, sub = "", strong = false, col = "") => `<div class="row between" style="padding:7px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0"><div class="small ${strong ? "bold" : ""}">${lbl}</div>${sub ? `<div class="tiny muted">${sub}</div>` : ""}</div>
+      <div class="small ${strong ? "bold" : ""}" style="flex:none;${col ? "color:" + col : ""}">${money(val)}</div></div>`;
+  let veredicto;
+  if (mesEnCurso) veredicto = `<p class="small muted">Revisa esta comparación al cerrar el mes, cuando ya hayas hecho tus aportes.</p>`;
+  else if (Math.abs(dif) <= tol) veredicto = `<p class="small" style="color:var(--green)">✅ <b>Cuadra.</b> Lo que ahorraste según tus registros es prácticamente lo que llegó a tus cuentas${pagosDeuda ? " o pagó deudas" : ""}.</p>`;
+  else if (dif > 0) veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(dif)} por ubicar.</b> Según tus registros ahorraste más de lo que llegó a tus cuentas${hayDeudas ? " o a pagar deudas" : ""}. Puede estar en efectivo o en una cuenta que no registras, haber gastos sin anotar, o un ingreso registrado que aún no llega.</p>`;
+  else veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Aportaste ${fmt(-dif)} más</b> de lo que tus registros dicen que ahorraste. Pudo salir de efectivo o saldo de meses anteriores, o hay un ingreso sin registrar.${esAnual ? "" : " Si un aporte de fin de mes corresponde al mes siguiente, compara por año."}</p>`;
+  return `${head}
+    <p class="tiny muted" style="margin:-4px 0 6px">${escapeHtml(periodLbl)}${recortado ? ` · comparando desde <b>${escapeHtml(monthLabel(desde))}</b>, cuando empezaste a registrar aportes` : ""}${sinMesActual ? ` · sin ${escapeHtml(monthLabel(cm))} (mes en curso)` : ""}.</p>
+    ${mesEnCurso ? `<p class="tiny" style="color:var(--yel);margin:0 0 6px">⏳ Este mes aún no termina: es normal que el ahorro todavía no aparezca en las cuentas.</p>` : ""}
+    ${row("Ahorro según tus registros", ahorro, `Ingresos ${fmt(ing)} − Gastos ${fmt(gas)}`, true)}
+    ${row("Aportes netos a cuentas", aportes, "Sumas/aportes menos retiros · sin rendimientos ni transferencias entre cuentas")}
+    ${pagosDeuda ? row("+ Pagos a deudas", pagosDeuda, "Abonos y pagos de tarjeta: tu ahorro se usó para bajar deuda") : ""}
+    ${nuevaDeuda ? row("− Compras a crédito", -nuevaDeuda, "Consumos de tarjeta/préstamos: gastos que no salieron de tu bolsillo aún") : ""}
+    ${cobros ? row("− Pagos que te hicieron", -cobros, "Dinero que te devolvieron (no es ingreso)") : ""}
+    ${row("= Destino real del ahorro", destino, "", true)}
+    ${row("Diferencia", dif, dif > 0 ? "Ahorro sin ubicar" : dif < 0 ? "Aportado de más" : "", true, mesEnCurso ? "" : Math.abs(dif) <= tol ? "var(--green)" : "var(--yel)")}
+    ${veredicto}
+    ${rend ? `<p class="tiny muted">Aparte, tus cuentas generaron ${fmt(rend)} en rendimientos (no se cuentan arriba porque no vienen de tus ingresos).</p>` : ""}
+  </div>`;
 }
 
 // Diagrama Sankey (SVG inline) en 3 columnas: Ingresos → (Gastos | Ahorro) → categorías.
