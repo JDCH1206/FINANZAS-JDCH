@@ -400,7 +400,13 @@ function renderAvanzado(root, tabs) {
   const exByCat = {};
   txs.filter(inPer).forEach((t) => { exByCat[t.cat] = (exByCat[t.cat] || 0) + (+t.amount || 0); });
   const exY = sum(Object.values(exByCat));
-  const sankey = buildSankey(inY, exByCat, advMonth ? "del mes" : "del año");
+  const abono = aportesNetos(s, inPer);
+  // si los aportes se empezaron a registrar a mitad del período, lo anterior sale como "Sin abonar"
+  const primerAporte = (s.accounts || []).flatMap((a) => a.movs || []).filter((m) => m.kind !== "rendimiento" && m.kind !== "transfer")
+    .map((m) => (m.date || "").slice(0, 7)).filter(Boolean).sort()[0];
+  const notaAbono = abono != null && primerAporte && primerAporte > (period.length === 4 ? period + "-01" : period)
+    ? `<p class="tiny muted">ℹ Los abonos a cuentas se registran desde <b>${escapeHtml(monthLabel(primerAporte))}</b>; lo de meses anteriores aparece como "Sin abonar". Para comparar bien, elige un mes desde esa fecha.</p>` : "";
+  const sankey = buildSankey(inY, exByCat, advMonth ? "del mes" : "del año", abono);
   const concil = buildConciliacion(s, txs, period, periodLbl);
 
   root.innerHTML = tabs + `
@@ -408,8 +414,9 @@ function renderAvanzado(root, tabs) {
       <div class="row between mb-2" style="align-items:center;flex-wrap:wrap;gap:8px"><div class="card-title" style="margin:0">💵 Flujo del dinero</div>
         <div class="row gap-2"><select id="adv-month" class="input" style="width:auto"><option value="">Todo el año</option>${months.map((m) => `<option value="${m}" ${m === advMonth ? "selected" : ""}>${escapeHtml(monthLabel(m))}</option>`).join("")}</select>
         <select id="adv-year" class="input" style="width:auto">${years.map((y) => `<option ${y === advYear ? "selected" : ""}>${y}</option>`).join("")}</select></div></div>
-      <div class="row between tiny muted mb-2"><span>Ingresos ${fmt(inY)}</span><span>Gastos ${fmt(exY)}</span><span style="color:${inY - exY >= 0 ? "var(--green)" : "var(--red)"}">${inY - exY >= 0 ? "Ahorro" : "Déficit"} ${fmt(Math.abs(inY - exY))}</span></div>
+      <div class="row between tiny muted mb-2"><span>Ingresos ${fmt(inY)}</span><span>Gastos ${fmt(exY)}</span><span style="color:${inY - exY >= 0 ? "var(--green)" : "var(--red)"}">${inY - exY >= 0 ? "Sobrante" : "Déficit"} ${fmt(Math.abs(inY - exY))}</span></div>
       ${sankey}
+      ${notaAbono}
       ${inY - exY < 0 ? `<p class="tiny" style="color:var(--red)">⚠ En ${escapeHtml(periodLbl)} gastaste más de lo que ingresó.</p>` : ""}
     </div>
     ${concil}
@@ -429,6 +436,17 @@ function renderAvanzado(root, tabs) {
   const mo = root.querySelector("#adv-month"); if (mo) mo.onchange = (e) => { advMonth = e.target.value; renderDashboard(root); };
 }
 
+// Aportes netos a cuentas (sumas/aportes − retiros) de los movimientos que cumplen `pred`;
+// sin rendimientos, transferencias entre cuentas ni cuentas "Por cobrar".
+// Devuelve null si nunca se ha registrado un aporte hasta ese período (no hay con qué medir).
+function aportesNetos(s, pred) {
+  const movs = (s.accounts || []).filter((a) => a.type !== "Por cobrar")
+    .flatMap((a) => a.movs || []).filter((m) => m.kind !== "rendimiento" && m.kind !== "transfer");
+  const del = movs.filter((m) => pred(m));
+  if (!del.length) return null;
+  return sum(del, (m) => +m.amount || 0);
+}
+
 // Conciliación del ahorro: ¿lo que "debería" quedar (ingresos − gastos) es lo que realmente
 // llegó a las cuentas o se usó para pagar deudas? Compara solo desde que hay registros de cuentas.
 function buildConciliacion(s, txs, period, periodLbl) {
@@ -436,7 +454,7 @@ function buildConciliacion(s, txs, period, periodLbl) {
   const movs = accts.flatMap((a) => (a.movs || []).map((m) => ({ ...m, acct: a })));
   const abonos = debts.flatMap((d) => (d.abonos || []).map((x) => ({ ...x, debt: d })));
   const fechas = [...movs.filter((m) => m.kind !== "rendimiento").map((m) => m.date), ...abonos.map((x) => x.date)].filter(Boolean).sort();
-  const head = `<div class="card mb-3"><div class="card-title">🔎 ¿Tu ahorro llegó a las cuentas?</div>`;
+  const head = `<div class="card mb-3"><div class="card-title">🔎 ¿Tu sobrante llegó a las cuentas?</div>`;
   if (!fechas.length) return `${head}<p class="small muted">Aún no hay aportes en <b>Cuentas</b> ni abonos en <b>Deudas</b> para comparar. Cuando registres aportes ("Actualizar saldo" o "Sumar"), aquí verás si coinciden con tu ahorro.</p></div>`;
   const desde = fechas[0].slice(0, 7);
   const pEnd = period.length === 4 ? period + "-12" : period;
@@ -469,28 +487,28 @@ function buildConciliacion(s, txs, period, periodLbl) {
       <div class="small ${strong ? "bold" : ""}" style="flex:none;${col ? "color:" + col : ""}">${money(val)}</div></div>`;
   let veredicto;
   if (mesEnCurso) veredicto = `<p class="small muted">Revisa esta comparación al cerrar el mes, cuando ya hayas hecho tus aportes.</p>`;
-  else if (Math.abs(dif) <= tol) veredicto = `<p class="small" style="color:var(--green)">✅ <b>Cuadra.</b> Lo que ahorraste según tus registros es prácticamente lo que llegó a tus cuentas${pagosDeuda ? " o pagó deudas" : ""}.</p>`;
-  else if (dif > 0) veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(dif)} por ubicar.</b> Según tus registros ahorraste más de lo que llegó a tus cuentas${hayDeudas ? " o a pagar deudas" : ""}. Puede estar en efectivo o en una cuenta que no registras, haber gastos sin anotar, o un ingreso registrado que aún no llega.</p>`;
-  else veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Aportaste ${fmt(-dif)} más</b> de lo que tus registros dicen que ahorraste. Pudo salir de efectivo o saldo de meses anteriores, o hay un ingreso sin registrar.${esAnual ? "" : " Si un aporte de fin de mes corresponde al mes siguiente, compara por año."}</p>`;
+  else if (Math.abs(dif) <= tol) veredicto = `<p class="small" style="color:var(--green)">✅ <b>Cuadra.</b> Lo que te sobró según tus registros es prácticamente lo que llegó a tus cuentas${pagosDeuda ? " o pagó deudas" : ""}.</p>`;
+  else if (dif > 0) veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(dif)} por abonar.</b> Según tus registros te sobró más de lo que llegó a tus cuentas${hayDeudas ? " o a pagar deudas" : ""}. Puede estar en efectivo o en una cuenta que no registras, haber gastos sin anotar, o un ingreso registrado que aún no llega.</p>`;
+  else veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Aportaste ${fmt(-dif)} más</b> de lo que tus registros dicen que te sobró. Pudo salir de efectivo o saldo de meses anteriores, o hay un ingreso sin registrar.${esAnual ? "" : " Si un aporte de fin de mes corresponde al mes siguiente, compara por año."}</p>`;
   return `${head}
     <p class="tiny muted" style="margin:-4px 0 6px">${escapeHtml(periodLbl)}${recortado ? ` · comparando desde <b>${escapeHtml(monthLabel(desde))}</b>, cuando empezaste a registrar aportes` : ""}${sinMesActual ? ` · sin ${escapeHtml(monthLabel(cm))} (mes en curso)` : ""}.</p>
     ${mesEnCurso ? `<p class="tiny" style="color:var(--yel);margin:0 0 6px">⏳ Este mes aún no termina: es normal que el ahorro todavía no aparezca en las cuentas.</p>` : ""}
-    ${row("Ahorro según tus registros", ahorro, `Ingresos ${fmt(ing)} − Gastos ${fmt(gas)}`, true)}
+    ${row("Sobrante según tus registros", ahorro, `Ingresos ${fmt(ing)} − Gastos ${fmt(gas)}`, true)}
     ${row("Aportes netos a cuentas", aportes, "Sumas/aportes menos retiros · sin rendimientos ni transferencias entre cuentas")}
     ${pagosDeuda ? row("+ Pagos a deudas", pagosDeuda, "Abonos y pagos de tarjeta: tu ahorro se usó para bajar deuda") : ""}
     ${nuevaDeuda ? row("− Compras a crédito", -nuevaDeuda, "Consumos de tarjeta/préstamos: gastos que no salieron de tu bolsillo aún") : ""}
     ${cobros ? row("− Pagos que te hicieron", -cobros, "Dinero que te devolvieron (no es ingreso)") : ""}
-    ${row("= Destino real del ahorro", destino, "", true)}
-    ${row("Diferencia", dif, dif > 0 ? "Ahorro sin ubicar" : dif < 0 ? "Aportado de más" : "", true, mesEnCurso ? "" : Math.abs(dif) <= tol ? "var(--green)" : "var(--yel)")}
+    ${row("= Lo que sí se abonó", destino, "", true)}
+    ${row("Diferencia", dif, dif > 0 ? "Sobrante sin abonar" : dif < 0 ? "Aportado de más" : "", true, mesEnCurso ? "" : Math.abs(dif) <= tol ? "var(--green)" : "var(--yel)")}
     ${veredicto}
     ${rend ? `<p class="tiny muted">Aparte, tus cuentas generaron ${fmt(rend)} en rendimientos (no se cuentan arriba porque no vienen de tus ingresos).</p>` : ""}
   </div>`;
 }
 
-// Diagrama Sankey (SVG inline) en 3 columnas: Ingresos → (Gastos | Ahorro) → categorías.
+// Diagrama Sankey (SVG inline) en 3 columnas: Ingresos → (Gastos | Sobrante) → categorías + (Abono a cuentas | Sin abonar).
 // El color codifica el SIGNIFICADO (dorado ingreso, gris gasto, verde ahorro, rojo déficit);
 // las categorías se identifican con etiqueta directa, no con colores.
-function buildSankey(inY, exByCat, perTxt = "del año") {
+function buildSankey(inY, exByCat, perTxt = "del año", abono = null) {
   const exY = sum(Object.values(exByCat));
   if (!inY && !exY) return `<div class="muted small">Sin datos para este período.</div>`;
   const TOP = 7;
@@ -519,10 +537,10 @@ function buildSankey(inY, exByCat, perTxt = "del año") {
   // columna 1: Gastos y Ahorro
   const hG = exY * sc, hA = ahorro * sc, yA = hG + GAP;
   if (exY) svg += node(X1, 0, hG, C.gasto, `Gastos ${fmt(exY)} · ${pct(exY)}`);
-  if (ahorro) svg += node(X1, yA, hA, C.ahorro, `Ahorro ${fmt(ahorro)} · ${pct(ahorro)}`);
+  if (ahorro) svg += node(X1, yA, hA, C.ahorro, `Sobrante ${fmt(ahorro)} · ${pct(ahorro)}`);
   // cintas columna 0 → 1
   if (exY) svg += ribbon(X0 + NW, 0, X1, 0, Math.min(inY, exY) * sc, C.gasto, 0.28, `Ingresos → Gastos ${fmt(Math.min(inY, exY))}`);
-  if (ahorro) svg += ribbon(X0 + NW, hG, X1, yA, hA, C.ahorro, 0.35, `Ingresos → Ahorro ${fmt(ahorro)}`);
+  if (ahorro) svg += ribbon(X0 + NW, hG, X1, yA, hA, C.ahorro, 0.35, `Ingresos → Sobrante ${fmt(ahorro)}`);
   if (deficit) svg += ribbon(X0 + NW, hIn + GAP, X1, inY * sc, hDef, C.def, 0.35, `Déficit → Gastos ${fmt(deficit)}`);
 
   // columna 2: categorías (con espacio mínimo para su etiqueta de 2 líneas) + Ahorro al final
@@ -540,22 +558,31 @@ function buildSankey(inY, exByCat, perTxt = "del año") {
     labels += label(y2, h, c.label, c.value);
     yOut += h; y2 += Math.max(h + 3, SLOT);
   });
-  if (ahorro) {
-    y2 += GAP;
-    svg += ribbon(X1 + NW, yA, X2, y2, hA, C.ahorro, 0.35, `Ahorro ${fmt(ahorro)}`);
-    svg += node(X2, y2, hA, C.ahorro, `Ahorro ${fmt(ahorro)} · ${pct(ahorro)}`);
-    labels += `<text x="${LX}" y="${y2 + hA / 2 - 2}" font-size="10.5" font-weight="700" fill="var(--green)">Ahorro</text>
-      <text x="${LX}" y="${y2 + hA / 2 + 10}" font-size="9.5" fill="var(--sub)">${fmtShort(ahorro)} · ${pct(ahorro)}</text>`;
-    y2 += Math.max(hA, SLOT);
-  }
+  // el sobrante se divide en lo que sí se abonó a cuentas (ahorro real) y lo que quedó sin abonar
+  const parts = abono == null ? [{ lbl: "Sobrante", v: ahorro, op: 1, tip: "Sin aportes registrados en cuentas para este período" }]
+    : [{ lbl: "Abono a cuentas", v: Math.min(Math.max(abono, 0), ahorro), op: 1, tip: "Ahorro real: lo que llegó a tus cuentas" },
+       { lbl: "Sin abonar", v: ahorro - Math.min(Math.max(abono, 0), ahorro), op: 0.4, tip: "Sobró pero no llegó a ninguna cuenta registrada" }];
+  let yAo = yA;
+  parts.filter((p) => p.v > 0).forEach((p, i) => {
+    const h = p.v * sc;
+    y2 += i === 0 ? GAP : 3;
+    const tip = `${p.lbl}: ${fmt(p.v)} · ${pct(p.v)} — ${p.tip}`;
+    svg += ribbon(X1 + NW, yAo, X2, y2, h, C.ahorro, 0.35 * p.op, tip);
+    svg += `<rect x="${X2}" y="${y2}" width="${NW}" height="${Math.max(2, h)}" rx="2" fill="${C.ahorro}" fill-opacity="${p.op}"><title>${escapeHtml(tip)}</title></rect>`;
+    labels += `<text x="${LX}" y="${y2 + h / 2 - 2}" font-size="10.5" font-weight="700" fill="${p.op === 1 ? "var(--green)" : "var(--ink)"}">${p.lbl}</text>
+      <text x="${LX}" y="${y2 + h / 2 + 10}" font-size="9.5" fill="var(--sub)">${fmtShort(p.v)} · ${pct(p.v)}</text>`;
+    yAo += h; y2 += Math.max(h, SLOT);
+  });
+  const extra = abono != null && abono > ahorro ? abono - Math.max(ahorro, 0) : 0;
   const H = Math.ceil(Math.max(y2, hIn + (deficit ? GAP + hDef : 0), yA + hA) + 4);
   const colHead = (x, t, anchor = "start") => `<text x="${x}" y="-6" font-size="9" fill="var(--sub)" text-anchor="${anchor}" letter-spacing=".04em">${t}</text>`;
   return `<div style="max-width:560px;margin:0 auto">
-    <svg viewBox="0 -16 ${W} ${H + 16}" style="width:100%;height:auto;display:block" role="img" aria-label="Flujo del dinero: ingresos, gastos por categoría y ahorro">
+    <svg viewBox="0 -16 ${W} ${H + 16}" style="width:100%;height:auto;display:block" role="img" aria-label="Flujo del dinero: ingresos, gastos por categoría y sobrante">
       <style>.sk-band{transition:fill-opacity .15s}.sk-band:hover{fill-opacity:.55}</style>
       ${colHead(X0, "INGRESOS")}${colHead(X1, "REPARTO")}${colHead(X2, "EN QUÉ SE FUE")}
       ${svg}${labels}
     </svg>
+    ${extra ? `<p class="tiny" style="color:var(--yel);margin-top:6px">Abonaste ${fmt(extra)} más de lo que sobró: salió de otra fuente (efectivo, saldo anterior o ingresos sin registrar).</p>` : ""}
     <p class="tiny muted" style="margin-top:6px">Porcentajes sobre tus ingresos ${perTxt}${deficit ? " (sobre los gastos, porque hubo déficit)" : ""}. Toca una banda para ver el valor exacto.</p>
   </div>`;
 }

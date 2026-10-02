@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v104.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v105.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v104). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v105). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,13 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v104**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v105**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v105 — Sobrante vs. abono a cuentas en el Flujo del dinero
+- 🏷️ Lo que queda de Ingresos − Gastos ahora se llama **"Sobrante"** (no "Ahorro"), porque en la práctica no todo lo que sobra se ahorra.
+- 🟩 En la columna final el Sobrante se divide en **"Abono a cuentas"** (verde: el ahorro real, aportes netos registrados en Cuentas sin rendimientos ni transferencias) y **"Sin abonar"** (verde tenue: sobró pero no llegó a ninguna cuenta registrada).
+- Si abonaste más de lo que sobró, todo el sobrante aparece como abono y un aviso indica cuánto salió de otra fuente. Si el período no tiene aportes registrados, se muestra solo "Sobrante". Si los aportes se empezaron a registrar a mitad del período, una nota lo aclara.
+- La tarjeta de conciliación pasa a llamarse **"¿Tu sobrante llegó a las cuentas?"** con los mismos términos.
 
 ### 2026-10-02 · caché v104 — "¿Tu ahorro llegó a las cuentas?" (conciliación)
 - 🔎 Nueva tarjeta en **Tablero → Avanzado**, debajo del Flujo del dinero y con el **mismo período** (año o mes). Compara el **ahorro según tus registros** (Ingresos − Gastos) contra los **aportes netos a cuentas** (sumas/aportes menos retiros; sin rendimientos ni transferencias entre cuentas, sin cuentas "Por cobrar").
