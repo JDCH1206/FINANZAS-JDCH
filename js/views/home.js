@@ -198,6 +198,27 @@ function drawSavedFilters(root) {
   };
 }
 
+// Resumen de lo filtrado (ej. una etiqueta): total, cantidad y en qué se fue por categoría.
+// Solo aparece si hay algún filtro activo.
+function filterSummary(f, s) {
+  const activo = query || fMonth || fCat || fMin || fMax || fAcct || fPay || fTag;
+  if (!activo || !f.length) return "";
+  const total = f.reduce((a, t) => a + (+t.amount || 0), 0);
+  const meses = new Set(f.map((t) => (t.date || "").slice(0, 7))).size;
+  const porCat = {};
+  f.forEach((t) => { const k = fCat ? (t.sub || "Sin subcategoría") : (t.cat || "Sin categoría"); porCat[k] = (porCat[k] || 0) + (+t.amount || 0); });
+  const top = Object.entries(porCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const titulo = fTag ? `#${escapeHtml(normTag(fTag))}` : "Filtro actual";
+  return `<div style="padding:12px 14px;border-bottom:1px solid var(--line)">
+    <div class="row between" style="align-items:baseline"><span class="small bold" style="color:var(--gold)">${titulo}</span>
+      <span class="bold">${fmt(total)}</span></div>
+    <div class="tiny muted mb-2">${f.length} gasto${f.length === 1 ? "" : "s"}${meses > 1 ? ` · ${meses} meses · prom ${fmt(total / meses)}/mes` : ""}</div>
+    ${top.map(([k, v]) => `<div class="row between tiny" style="gap:8px;margin-top:4px"><span class="ellipsis" style="min-width:0;flex:1">${escapeHtml(k)}</span>
+      <div style="flex:1.2;height:6px;background:var(--panel-2);border-radius:4px;overflow:hidden"><div style="width:${(v / total) * 100}%;height:100%;background:var(--gold)"></div></div>
+      <span style="width:92px;text-align:right">${fmt(v)}</span></div>`).join("")}
+  </div>`;
+}
+
 function drawList() {
   const s = getState();
   const list = document.getElementById("list");
@@ -207,7 +228,7 @@ function drawList() {
     const sorted = [...f].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     const rows = sorted.slice(0, limit), more = sorted.length > limit;
     if (!rows.length) { list.innerHTML = `<div class="muted small" style="padding:20px">Sin gastos con esos filtros.</div>`; return; }
-    list.innerHTML = rows.map((t) => {
+    list.innerHTML = filterSummary(f, s) + rows.map((t) => {
       const ci = s.cats.findIndex((c) => c.name === t.cat);
       const veh = t.vehicleId ? (s.vehicles || []).find((x) => x.id === t.vehicleId) : null;
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
@@ -518,17 +539,25 @@ export function openSplitModal(prefill = {}) {
   const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
   const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
   const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
-  const partRow = () => `<div class="row gap-2 split-part" style="margin-bottom:6px;align-items:center">
-      <select class="input sp-cat" style="flex:1;min-width:0">${catOpts}</select>
-      <input class="input sp-amt" type="number" placeholder="0" style="width:110px">
-      <button type="button" class="icon-btn sp-del" aria-label="Quitar parte">✕</button></div>`;
+  // cada parte: categoría + subcategoría (dependiente) + monto + detalle opcional
+  const subOpts = (catName) => ((s.cats.find((c) => c.name === catName) || {}).subs || []).map((x) => `<option>${escapeHtml(x)}</option>`).join("");
+  const firstCat = (s.cats[0] || {}).name || "";
+  const partRow = () => `<div class="split-part" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px">
+      <div class="row gap-2" style="align-items:center;margin-bottom:6px">
+        <select class="input sp-cat" style="flex:1;min-width:0">${catOpts}</select>
+        <button type="button" class="icon-btn sp-del" aria-label="Quitar parte">✕</button></div>
+      <div class="row gap-2" style="margin-bottom:6px">
+        <select class="input sp-sub" style="flex:1;min-width:0">${subOpts(firstCat)}</select>
+        <input class="input sp-amt" type="number" inputmode="numeric" placeholder="Monto" style="width:120px"></div>
+      <input class="input sp-note" placeholder="Detalle (opcional): ej. jabón, shampoo"></div>`;
   openModal("Dividir gasto", `
     <p class="tiny muted" style="margin:-4px 0 10px">Un pago repartido en varias categorías (ej. mercado + aseo en una compra). Se crea un gasto por parte, con la misma fecha y descripción.</p>
     <div class="field"><label class="label">Fecha</label><input id="sp-date" class="input" type="date" value="${prefill.date || todayISO()}"></div>
     <div class="field"><label class="label">Descripción</label><input id="sp-desc" class="input" list="sp-desc-list" autocomplete="off" placeholder="Ej: Compra Éxito" value="${escapeHtml(prefill.desc || "")}">${descDatalist("sp-desc-list", s.txs)}</div>
     <div class="field"><label class="label">Medio de pago</label><select id="sp-pay" class="input">${payOpts}</select></div>
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="sp-acct" class="input">${acctOpts}</select></div>
-    <label class="label">Partes (categoría · monto)</label>
+    <div class="field"><label class="label">Etiquetas para todo el recibo (opcional)</label><input id="sp-tags" class="input" list="sp-tags-list" autocomplete="off" placeholder="Ej: exito, viaje (separadas por coma)">${tagsDatalist("sp-tags-list", s.txs)}</div>
+    <label class="label">Partes (categoría › subcategoría · monto)</label>
     <div id="sp-parts">${partRow()}${partRow()}</div>
     <button type="button" id="sp-add" class="btn btn-ghost btn-sm">+ Agregar parte</button>
     <div class="row between mt-2 small" style="padding-top:6px;border-top:1px solid var(--line)"><span class="muted">Total repartido</span><span id="sp-total" class="bold" style="color:var(--gold)">$0</span></div>
@@ -538,6 +567,10 @@ export function openSplitModal(prefill = {}) {
       const recalc = () => { const t = [...b.querySelectorAll(".sp-amt")].reduce((a, i) => a + (+i.value || 0), 0); b.querySelector("#sp-total").textContent = fmt(t); };
       const wire = () => {
         b.querySelectorAll(".sp-amt").forEach((i) => i.oninput = recalc);
+        b.querySelectorAll(".split-part").forEach((p) => {
+          const cat = p.querySelector(".sp-cat"), sub = p.querySelector(".sp-sub");
+          cat.onchange = () => { sub.innerHTML = subOpts(cat.value); };
+        });
         b.querySelectorAll(".sp-del").forEach((x) => x.onclick = () => { if (b.querySelectorAll(".split-part").length > 1) { x.closest(".split-part").remove(); recalc(); } });
       };
       wire();
@@ -547,13 +580,16 @@ export function openSplitModal(prefill = {}) {
         const pay = b.querySelector("#sp-pay").value, acct = b.querySelector("#sp-acct").value || "";
         if (!date || !desc) return toast("Falta fecha o descripción", true);
         const partsData = [...b.querySelectorAll(".split-part")]
-          .map((p) => ({ cat: p.querySelector(".sp-cat").value, amount: +p.querySelector(".sp-amt").value || 0 }))
+          .map((p) => ({ cat: p.querySelector(".sp-cat").value, sub: p.querySelector(".sp-sub").value, note: p.querySelector(".sp-note").value.trim(), amount: +p.querySelector(".sp-amt").value || 0 }))
           .filter((p) => p.amount > 0);
         if (partsData.length < 2) return toast("Necesitas al menos 2 partes con monto", true);
         const splitId = uid(), s2 = getState();
+        const tags = parseTags(b.querySelector("#sp-tags").value);
         const newTxs = partsData.map((p) => {
           const c = s2.cats.find((x) => x.name === p.cat);
-          return { id: uid(), date, desc, amount: p.amount, cat: p.cat, sub: (c && c.subs && c.subs[0]) || "", pay, acct, tags: [], splitId };
+          const sub = p.sub || (c && c.subs && c.subs[0]) || "";
+          // el detalle de la parte va en la descripción para que se vea y se pueda buscar
+          return { id: uid(), date, desc: p.note ? `${desc} · ${p.note}` : desc, amount: p.amount, cat: p.cat, sub, pay, acct, tags, splitId };
         });
         setState({ txs: [...newTxs, ...s2.txs] });
         for (const t of newTxs) await addTx(s2.user.uid, t);

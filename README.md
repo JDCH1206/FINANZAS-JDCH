@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v110.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v111.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v110). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v111). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v110**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v111**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v111 — Dividir gasto con subcategoría + total por etiqueta/filtro
+- ➗ **Dividir gasto**: cada parte ahora tiene **categoría › subcategoría** (antes la subcategoría se ponía sola en la primera de la lista, p. ej. aseo quedaba en "Ropa y calzado"), **monto** y **detalle opcional** (se agrega a la descripción: "Compra Éxito · jabón, shampoo", así se ve y se busca). Nuevo campo de **etiquetas para todo el recibo** (p. ej. `exito`), que se aplica a todas las partes.
+- 🏷️ **Total al filtrar**: en Movimientos, cuando hay un filtro activo (etiqueta, mes, categoría, cuenta, medio de pago, monto o búsqueda) aparece arriba un resumen: **total**, número de gastos, promedio mensual (si abarca varios meses) y **en qué se fue por categoría** (o por subcategoría si ya filtraste una categoría). Ej.: filtrar `#exito` muestra cuánto has gastado en esa tienda y repartido en qué.
 
 ### 2026-10-02 · caché v110 — Gasto hormiga de verdad (no todo lo repetido lo es)
 - 🐜 Antes la lista tomaba cualquier gasto repetido ≥3 veces (salían Arriendo, Gasolina, SOAT, Póliza, Seguridad social, Parqueadero…). Ahora un gasto hormiga debe ser **pequeño** (promedio ≤ $35.000), **frecuente** (≥3 veces) y **prescindible**:
