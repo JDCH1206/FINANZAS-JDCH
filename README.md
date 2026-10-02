@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v109.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v110.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v109). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v110). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,14 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v109**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v110**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v110 — Gasto hormiga de verdad (no todo lo repetido lo es)
+- 🐜 Antes la lista tomaba cualquier gasto repetido ≥3 veces (salían Arriendo, Gasolina, SOAT, Póliza, Seguridad social, Parqueadero…). Ahora un gasto hormiga debe ser **pequeño** (promedio ≤ $35.000), **frecuente** (≥3 veces) y **prescindible**:
+  - Se excluyen subcategorías necesarias o fijas (`HORM_EXCL_SUBS`: arriendo, servicios, mercado, transporte público, parqueadero, combustible, mantenimiento, pólizas, lavado, salud, celular/internet/suscripciones, educación, impuestos, trámites, ajustes, ayudas, regalos, alojamientos, aseo, peluquería).
+  - Se excluyen las comidas principales (almuerzo, desayuno, cena, comida, onces, mercado, compras).
+- ✕ Botón por ítem **"No es gasto hormiga"**: lo saca de la lista y se recuerda (en `profile.hormigaExcl`, sincronizado). Sección plegable "Excluidos a mano" para restaurarlos.
+- 🔗 Las compras se agrupan sin tildes ni plurales ("Empanadas" = "Empanada", "Helados" = "Helado"), también en la lista de posibles recurrentes.
 
 ### 2026-10-02 · caché v109 — Los aportes de fin de mes cuentan para el mes de su salario
 - 📅 Si el salario llega a fin de mes pero se registra el día 1°, el aporte que se hace ese fin de mes sale de **ese** salario. Regla (`fechaAporte`): un aporte hecho en los **últimos 7 días del mes** cuenta para el **mes siguiente** cuando ese mes tiene un ingreso registrado entre el día 1 y el 3. Ej.: el aporte del 28-sep cuenta para octubre.

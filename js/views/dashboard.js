@@ -1,5 +1,6 @@
 // js/views/dashboard.js
-import { getState } from "../state.js";
+import { getState, setState } from "../state.js";
+import { saveConfig, forcePersistLocal } from "../firebase-service.js";
 import { RULE_503020, PALETTE } from "../config.js";
 import { fmt, fmtShort, ym, monthLabel, sum, curMonth, todayISO, escapeHtml } from "../utils.js";
 import { donut, lineTrend, lineTrendPct, categoryBars, groupedBars } from "../components/charts.js";
@@ -357,6 +358,18 @@ function renderCalendar(root, tabs) {
 }
 
 /* ===================== ANÁLISIS AVANZADO (gasto hormiga + recurrentes) ===================== */
+// Gasto hormiga: tope de compra promedio y subcategorías que nunca lo son (necesarias o fijas)
+const HORM_MAX_PROM = 35000;
+const HORM_EXCL_SUBS = new Set(["Arriendo", "Servicios públicos", "Mantenimiento hogar", "Mercado", "Transporte público", "Parqueadero",
+  "Combustible", "Gasolina", "Mantenimiento/reparaciones", "Pólizas/SOAT", "Lavado", "Consultas y exámenes", "Medicamentos",
+  "Lentes y óptica", "Cuidado adulto mayor", "Seguridad social", "Celular", "Internet", "Suscripciones IA", "Streaming",
+  "Otras suscripciones", "ICETEX", "Estudios formales", "Cursos", "Impuestos", "Trámites", "Ajustes", "Ayudas familiares",
+  "Regalos", "Alojamientos", "Aseo personal", "Peluquería"]);
+// comidas principales (almuerzo, desayuno, cena…) son alimentación necesaria, no antojo
+const HORM_COMIDA = /^(almuerzos?|desayunos?|cenas?|comidas?|onces?|mercados?|compras?)\b/;
+// clave para agrupar compras parecidas: sin tildes y sin plural ("Empanadas" = "empanada")
+const _key = (x) => _norm(x).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .split(" ").map((w) => (w.length > 3 ? w.replace(/s$/, "") : w)).join(" ");
 const _norm = (x) => (x || "").trim().toLowerCase().replace(/\s+/g, " ");
 function renderAvanzado(root, tabs) {
   const s = getState();
@@ -364,16 +377,23 @@ function renderAvanzado(root, tabs) {
   // agrupar por descripción normalizada
   const g = {};
   txs.forEach((t) => {
-    const k = _norm(t.desc); if (!k) return;
-    const G = g[k] || (g[k] = { n: 0, tot: 0, orig: {}, months: new Set() });
+    const k = _key(t.desc); if (!k) return;
+    const G = g[k] || (g[k] = { k, n: 0, tot: 0, orig: {}, subs: {}, months: new Set() });
     G.n++; G.tot += (+t.amount || 0); G.orig[t.desc] = (G.orig[t.desc] || 0) + 1; G.months.add((t.date || "").slice(0, 7));
+    G.subs[t.sub || ""] = (G.subs[t.sub || ""] || 0) + 1;
   });
   const name = (G) => Object.entries(G.orig).sort((a, b) => b[1] - a[1])[0][0];
   const groups = Object.values(g);
   const nMonths = new Set(txs.map((t) => (t.date || "").slice(0, 7)).filter(Boolean)).size || 1;
 
-  // gasto hormiga: compras repetidas (>=3 veces), ordenadas por total
-  const horm = groups.filter((G) => G.n >= 3).sort((a, b) => b.tot - a.tot).slice(0, 20);
+  // gasto hormiga: compras PEQUEÑAS, FRECUENTES y PRESCINDIBLES (no todo lo repetido lo es).
+  // Se excluyen gastos necesarios o fijos (arriendo, transporte, combustible, mercado, salud,
+  // suscripciones, pólizas…), las comidas principales y lo que el usuario marque a mano.
+  const excl = new Set((s.profile && s.profile.hormigaExcl) || []);
+  const mainSub = (G) => Object.entries(G.subs).sort((a, b) => b[1] - a[1])[0][0];
+  const esHormiga = (G) => G.n >= 3 && G.tot / G.n <= HORM_MAX_PROM && !HORM_EXCL_SUBS.has(mainSub(G)) && !HORM_COMIDA.test(G.k);
+  const horm = groups.filter((G) => esHormiga(G) && !excl.has(G.k)).sort((a, b) => b.tot - a.tot).slice(0, 20);
+  const hormExcl = groups.filter((G) => excl.has(G.k));
   const hormTot = sum(horm.map((G) => G.tot));
 
   // recurrentes detectados: aparecen en muchos meses distintos (>=5) y aún no están como recurrente
@@ -383,7 +403,8 @@ function renderAvanzado(root, tabs) {
 
   const rowH = (G) => `<div class="tx-row">
     <div class="flex1"><div class="tx-desc">${escapeHtml(name(G))}</div><div class="tx-meta">${G.n} veces · prom ${fmt(G.tot / G.n)}</div></div>
-    <div class="tx-amt">${fmt(G.tot)}</div></div>`;
+    <div class="tx-amt">${fmt(G.tot)}</div>
+    <button class="icon-btn" data-hx="${escapeHtml(G.k)}" title="No es gasto hormiga" aria-label="No es gasto hormiga" style="margin-left:6px;opacity:.6">✕</button></div>`;
   const rowR = (G) => `<div class="tx-row">
     <div class="flex1"><div class="tx-desc">${escapeHtml(name(G))}</div><div class="tx-meta">en ${G.months.size} meses · ${G.n} veces</div></div>
     <div class="tx-amt">${fmt(G.tot / Math.max(1, G.months.size))}<div class="tiny muted">prom/mes</div></div></div>`;
@@ -423,8 +444,10 @@ function renderAvanzado(root, tabs) {
     ${concil}
     <div class="card mb-3">
       <div class="card-title">🐜 Compras repetidas (gasto hormiga)</div>
-      <p class="tiny muted" style="margin:-4px 0 8px">Lo que compras ≥3 veces, ordenado por total. Estas ${horm.length} suman <b>${fmt(hormTot)}</b> (≈ ${fmt(hormTot / (nMonths / 12))}/año).</p>
-      <div style="padding:0" id="adv-horm">${horm.map(rowH).join("") || '<div class="muted small">Sin datos</div>'}</div>
+      <p class="tiny muted" style="margin:-4px 0 8px">Compras <b>pequeñas</b> (promedio ≤ ${fmt(HORM_MAX_PROM)}), <b>frecuentes</b> (≥3 veces) y <b>prescindibles</b>. No incluye gastos necesarios o fijos (arriendo, transporte, parqueadero, combustible, mercado, salud, suscripciones, pólizas) ni comidas principales. Estas ${horm.length} suman <b>${fmt(hormTot)}</b> (≈ ${fmt(hormTot / (nMonths / 12))}/año). Toca ✕ si algo no es hormiga.</p>
+      <div style="padding:0" id="adv-horm">${horm.map(rowH).join("") || '<div class="muted small">Sin gastos hormiga detectados</div>'}</div>
+      ${hormExcl.length ? `<details class="mt-2"><summary class="tiny muted" style="cursor:pointer">Excluidos a mano (${hormExcl.length})</summary>
+        ${hormExcl.map((G) => `<div class="row between small" style="padding:6px 0;border-top:1px solid var(--line)"><span>${escapeHtml(name(G))}</span><button class="btn btn-ghost btn-sm" data-hr="${escapeHtml(G.k)}">Restaurar</button></div>`).join("")}</details>` : ""}
     </div>
     <div class="card mb-3">
       <div class="card-title">🔁 Posibles gastos fijos / recurrentes</div>
@@ -433,6 +456,17 @@ function renderAvanzado(root, tabs) {
     </div>`;
 
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
+  // excluir / restaurar ítems de la lista de gasto hormiga (se guarda en el perfil)
+  const setExcl = async (fn) => {
+    const st = getState();
+    const profile = { ...st.profile, hormigaExcl: fn([...((st.profile && st.profile.hormigaExcl) || [])]) };
+    setState({ profile });
+    renderDashboard(root);
+    await saveConfig(st.user.uid, { profile, cats: st.cats, budgets: st.budgets });
+    forcePersistLocal(st.user.uid);
+  };
+  root.querySelectorAll("[data-hx]").forEach((b) => b.onclick = () => { const k = b.getAttribute("data-hx"); setExcl((a) => [...new Set([...a, k])]); });
+  root.querySelectorAll("[data-hr]").forEach((b) => b.onclick = () => { const k = b.getAttribute("data-hr"); setExcl((a) => a.filter((x) => x !== k)); });
   const yr = root.querySelector("#adv-year"); if (yr) yr.onchange = (e) => { advYear = e.target.value; advMonth = ""; renderDashboard(root); };
   const mo = root.querySelector("#adv-month"); if (mo) mo.onchange = (e) => { advMonth = e.target.value; renderDashboard(root); };
 }
