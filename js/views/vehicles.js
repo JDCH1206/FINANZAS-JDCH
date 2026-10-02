@@ -633,7 +633,7 @@ function drawMaint(root, v) {
   if (items.length) {
     // agrupar por visitaId (factura con varias líneas); los sueltos quedan individuales
     const rowLine = (r) => {
-      const refCant = [r.referencia ? "ref " + escapeHtml(r.referencia) : "", (r.cantidad && r.cantidad !== 1) ? "x" + r.cantidad : ""].filter(Boolean).join(" · ");
+      const refCant = [r.descripcion && r.descripcion !== r.tipo ? escapeHtml(r.descripcion) : "", r.referencia ? "ref " + escapeHtml(r.referencia) : "", (r.cantidad && r.cantidad !== 1) ? "x" + r.cantidad : ""].filter(Boolean).join(" · ");
       return `<div class="tx-row" data-rowm="${r.id}" style="cursor:pointer">
         <div class="flex1"><div class="tx-desc">${badge(r.categoria)} ${escapeHtml(r.tipo)}</div>
           <div class="tx-meta">${r.visitaId ? refCant || "&nbsp;" : `${escapeHtml(r.fecha)} · ${r.odometro != null ? Number(r.odometro).toLocaleString("es-CO") + " km" : "sin odómetro"}${r.taller ? " · " + escapeHtml(r.taller) : ""}`}</div></div>
@@ -743,6 +743,7 @@ export function openVisitModal(v, root, onDone) {
           <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
         </div>
         <input class="input vl-tipo" list="vdl-${clase}" placeholder="Tipo (ej. Cambio de aceite) o escribe uno" style="margin-bottom:6px">
+        <input class="input vl-desc" placeholder="Descripción / detalle (opcional)" style="margin-bottom:6px">
         <div class="row gap-2 vl-parts" style="margin-bottom:6px;display:${clase === "Insumos" ? "flex" : "none"}">
           <input class="input vl-ref" placeholder="Referencia (opc)" style="flex:1;min-width:0">
           <input class="input vl-cant" type="number" inputmode="numeric" value="1" style="width:56px" title="Cantidad">
@@ -780,13 +781,14 @@ export function openVisitModal(v, root, onDone) {
         b.querySelectorAll("#v-list .vl").forEach((row) => {
           const clase = row.querySelector(".vl-clase").value;
           const tipo = row.querySelector(".vl-tipo").value.trim();
+          const desc = row.querySelector(".vl-desc").value.trim();
           const val = +row.querySelector(".vl-val").value || 0;
           if (!tipo || !val) return;
           const isIns = clase === "Insumos";
           const cant = isIns ? (+row.querySelector(".vl-cant").value || 1) : 1;
           const ref = isIns ? row.querySelector(".vl-ref").value.trim() : "";
           const km = row.querySelector(".vl-km").value;
-          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: isIns ? "repuesto" : "actividad", categoria: clase, tipo, descripcion: tipo, referencia: ref, cantidad: cant, valorUnit: cant ? val / cant : val, costo: val, fecha, odometro, taller, repuesto: isIns ? tipo : "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
+          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: isIns ? "repuesto" : "actividad", categoria: clase, tipo, descripcion: desc || tipo, referencia: ref, cantidad: cant, valorUnit: cant ? val / cant : val, costo: val, fecha, odometro, taller, repuesto: isIns ? tipo : "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
         });
         if (!recs.length) return toast("Agrega al menos una línea con tipo y valor", true);
         const total = sum(recs, (r) => +r.costo || 0);

@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v95**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v96**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v96 — Orden de trabajo: descripción por línea (aparte del tipo)
+- ✍️ Cada línea de la orden ahora tiene un campo **Descripción / detalle (opcional)** separado del **Tipo**, igual que en el ítem individual. El Tipo sigue siendo la lista con sugerencias; la descripción guarda el detalle libre (marca, nota). En la bitácora, la descripción se muestra cuando difiere del tipo.
 
 ### 2026-10-02 · caché v95 — Patrimonio: "Por cobrar" ya no cuenta como disponible
 - 🔴 **Fix (auditoría):** las cuentas tipo **"Por cobrar"** se contaban como dinero **disponible/líquido**, inflando "Total disponible" y el patrimonio. Ahora `netWorthNow` las separa: el líquido es solo Ahorro/Corriente/Efectivo/Inversión, y lo "Por cobrar" cuenta como **"te deben"** (igual que las deudas por cobrar del módulo). El patrimonio total no cambia, pero queda bien clasificado. Alineado en **Cuentas**, **Resumen** y **Tablero** (colchón/ahorro). La gráfica de patrimonio sigue siendo continua (usa el patrimonio total, que no varía).
