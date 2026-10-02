@@ -1,4 +1,4 @@
-# Probar la IA en el PC (rama `ia-gemini`)
+# Probar la IA (en el PC con localhost o en la app publicada)
 
 Esta rama **no se publica** en GitHub Pages (solo `main` se publica), así que la app del
 celular no cambia mientras se prueba. Ojo: en el PC entras con **tu misma cuenta**, así que
@@ -11,7 +11,7 @@ los datos son los reales (lo que registres aparece también en el celular).
 4. Al final, AI Logic deja **App Check exigido** (obligatorio desde el 2-nov-2026).
 
 ## 2. Abrir la rama en el PC
-1. En GitHub: rama **`ia-gemini`** → botón **Code → Download ZIP** → descomprimir.
+1. En GitHub: rama **`main`** → botón **Code → Download ZIP** → descomprimir.
 2. Abrir una terminal en esa carpeta y ejecutar:
    `python -m http.server 8000`  (en Windows también puede ser `py -m http.server 8000`)
 3. En **Chrome** abrir **http://localhost:8000** e iniciar sesión.

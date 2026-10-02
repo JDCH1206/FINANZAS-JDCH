@@ -114,7 +114,7 @@ flowchart TD
 
 La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v119**. Cambios por fecha (más reciente primero):
 
-### 2026-10-02 · caché v119 — Más IA: dictado, extractos PDF, preguntas y análisis en el Tablero (rama `ia-gemini`)
+### 2026-10-02 · caché v119 — Más IA: dictado, extractos PDF, preguntas y análisis en el Tablero (integrado a `main`)
 - 🎤 **Movimientos → Dictar o escribir**: dices o escribes "ayer almuerzo 18 mil en efectivo y una coca cola de 4500" y la IA arma los movimientos (varios por frase; fechas relativas; "mil"/"millones"/"palos"; gasto o ingreso; categoría, medio de pago y cuenta solo de tus listas). Voz con el reconocimiento del navegador (español Colombia).
 - 📄 **Movimientos → Importar extracto** (PDF o foto, máx 15 MB): lee extractos del banco/tarjeta y facturas electrónicas; marca **transferencias entre tus cuentas / pagos de tarjeta** y **posibles duplicados** (mismo valor ±1 día) para que no se importen por error. El archivo no se guarda.
 - ✅ Todo pasa por una **pantalla de revisión**: casilla por movimiento, fecha, tipo, descripción, valor, categoría›sub (la que tú sueles usar con esa descripción manda) o tipo de ingreso (deducido: nómina→Salario, intereses→Rendimientos…), medio de pago y cuenta globales. Nada se guarda sin confirmar.
@@ -124,7 +124,7 @@ La app no usa versión numérica formal; la referencia técnica es la constante 
 - ❓ **Avanzado → Pregúntale a tus datos**: preguntas libres ("¿cuánto gasté en domicilios en los últimos 3 meses?"). La IA solo elige **funciones de consulta** (totales, por categoría, por descripción, más grandes, búsqueda, ingresos, resumen mensual, saldos) que **la app calcula** con tus datos; la IA no ve la lista completa de movimientos.
 - ✅ Verificado con Gemini real y datos sintéticos: dictado de 3 movimientos ≈23 s; extracto PDF de 8 líneas ≈24 s (transferencia propia y nómina duplicada detectadas); pregunta con 8 consultas ≈29 s; análisis ≈41 s. Si un modelo devuelve 429 salta al siguiente.
 
-### 2026-10-02 · caché v118 — IA con Gemini (rama `ia-gemini`, en prueba)
+### 2026-10-02 · caché v118 — IA con Gemini (integrado a `main`)
 - 🔧 **Firebase JS SDK 10.12.2 → 12.19.0** (`FB_VER` en `firebase-service.js`; todos los módulos de la misma versión). Necesario para **Firebase AI Logic**. Se verificó que las 21 funciones de Firebase que usa la app existen en 12.19.0 y que la app arranca igual que con 10.12.2.
 - 🤖 Nuevo **`js/ai.js`**: conexión con **Firebase AI Logic (Gemini Developer API, plan gratis)** — la clave de Gemini la guarda Firebase, no la app. **App Check** con reCAPTCHA v3 (obligatorio para AI Logic desde el 2-nov-2026); en el PC (`localhost`) usa el token de depuración. **Cadenas de modelos por tarea** (`vision`, `texto`): si un modelo agota su cupo, no existe o está saturado, salta al siguiente; contador de **uso de hoy** por modelo (reinicio ≈ 2 a. m. Colombia). Respuestas con **esquema JSON** validado por la app.
 - 📸 **Fotos**: botones **Tomar foto** (cámara) y **Cargar foto** (galería); la imagen se reduce en el dispositivo (máx 1600 px, JPEG) y **no se guarda**.
