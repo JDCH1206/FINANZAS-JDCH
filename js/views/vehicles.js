@@ -1,7 +1,7 @@
 // js/views/vehicles.js — Módulo de Vehículos (Fase 1: registro · Fase 2: combustible)
 import { getState, setState } from "../state.js";
-import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, persistMaintLocal, addTx, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
-import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
+import { saveConfig, forcePersistLocal, loadFuel, addFuel, deleteFuel, bulkSetFuel, persistFuelLocal, loadMaint, addMaint, bulkAddMaint, deleteMaint, updateMaint, persistMaintLocal, addTx, deleteTx, bulkUpdateTx, loadOblig, addOblig, bulkAddOblig, deleteOblig, persistObligLocal } from "../firebase-service.js";
+import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT_CATEGORIES, MAINT_TIPOS, suggestMaintTipo, OBLIG_TIPOS, AVISO_DIAS, DEFAULT_PAY_METHODS } from "../config.js";
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend, lineNum, multiLine } from "../components/charts.js";
@@ -585,6 +585,7 @@ function drawMaint(root, v) {
   const badgeCol = { Taller: "var(--blue)", Mantenimiento: "var(--blue)", Insumos: "var(--green)", Insumo: "var(--green)", Accesorio: "#c98bb9", Rutina: "var(--gold)", Otros: "#8aa0a3" };
   const badge = (c) => `<span class="badge" style="background:${badgeCol[c] || "var(--gold)"};color:#10171a">${escapeHtml(c)}</span>`;
   const maintDupes = dupeCount(items);
+  const reorg = items.map((r) => ({ r, to: suggestMaintTipo(r) })).filter((x) => x.to);
 
   root.innerHTML = `
     <div class="row gap-2 mb-3" style="align-items:center">
@@ -603,6 +604,7 @@ function drawMaint(root, v) {
       <div style="font-weight:700">📥 Importar desde Movimientos</div>
       <div class="tiny muted" style="font-weight:400;margin-top:3px">Vincula a esta bitácora gastos de la moto que <b>ya registraste en Movimientos</b>, sin duplicarlos.</div>
     </button>
+    ${reorg.length ? `<button id="reorg-maint" class="btn btn-ghost btn-block mb-2" style="color:var(--gold)">🗂️ Reorganizar tipos (${reorg.length} sugerencia${reorg.length === 1 ? "" : "s"})</button>` : ""}
     ${maintDupes ? `<button id="dedupe-maint" class="btn btn-ghost btn-block mb-3" style="color:var(--red)">🧹 Quitar ${maintDupes} duplicado(s)</button>` : `<div class="mb-1"></div>`}
     <div class="grid-kpi mb-4">
       ${kpi("Gasto total", fmt(totalCost))}
@@ -620,6 +622,8 @@ function drawMaint(root, v) {
   root.querySelector("#add-visit").onclick = () => openVisitModal(v, root);
   root.querySelector("#add-maint").onclick = () => openMaintModal(v, root);
   root.querySelector("#import-maint").onclick = () => openImportMaint(v, root);
+  const reorgBtn = root.querySelector("#reorg-maint");
+  if (reorgBtn) reorgBtn.onclick = () => openReorgMaint(v, root, reorg);
   const dedupeBtn = root.querySelector("#dedupe-maint");
   if (dedupeBtn) dedupeBtn.onclick = () => confirmDialog(`Se encontraron ${maintDupes} registro(s) repetido(s) (mismo gasto importado varias veces). Se quitan los repetidos y se deja uno por gasto. No se borra ningún gasto de Movimientos.`, async () => {
     const { delIds, keepByGasto } = planDedupe(allMaint.filter((r) => r.vehicleId === v.id));
@@ -695,6 +699,37 @@ function drawMaint(root, v) {
 }
 
 // recalcula el total de una visita y actualiza el gasto enlazado en Movimientos
+// Revisa y aplica la reorganización de Tipo/Clasificación sugerida por suggestMaintTipo
+function openReorgMaint(v, root, reorg) {
+  const lbl = (c, t) => `${escapeHtml(c)} · ${escapeHtml(t)}`;
+  openModal("🗂️ Reorganizar tipos", `
+    <p class="small muted mb-3">Se proponen tipos más específicos según la descripción de cada registro (y los nombres antiguos pasan a los actuales). Desmarca lo que no quieras cambiar. <b>No se modifica ningún gasto</b>, solo la bitácora.</p>
+    <label class="row gap-2 small mb-2" style="align-items:center"><input type="checkbox" id="ro-all" checked> <b>Seleccionar todo</b></label>
+    <div style="max-height:55vh;overflow:auto;border-top:1px solid var(--line)">
+      ${reorg.map((x, i) => `<label class="row gap-2" style="align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)">
+        <input type="checkbox" class="ro-chk" data-i="${i}" checked style="margin-top:3px">
+        <div style="min-width:0"><div class="small bold">${escapeHtml(x.r.descripcion || x.r.tipo || "")}</div>
+          <div class="tiny muted">${escapeHtml(x.r.fecha || "")} · ${fmt(+x.r.costo || 0)}</div>
+          <div class="tiny"><span class="muted" style="text-decoration:line-through">${lbl(x.r.categoria || "", x.r.tipo || "")}</span> → <b style="color:var(--gold)">${lbl(x.to.categoria, x.to.tipo)}</b></div></div></label>`).join("")}
+    </div>
+    <button id="ro-ok" class="btn btn-primary btn-block mt-3">Aplicar cambios</button>`, {
+    onMount(b) {
+      const chks = [...b.querySelectorAll(".ro-chk")];
+      b.querySelector("#ro-all").onchange = (e) => chks.forEach((c) => { c.checked = e.target.checked; });
+      submitOnce(b.querySelector("#ro-ok"), async () => {
+        const sel = chks.filter((c) => c.checked).map((c) => reorg[+c.dataset.i]);
+        if (!sel.length) { closeModal(); return; }
+        const uidU = getState().user.uid;
+        const byId = Object.fromEntries(sel.map((x) => [x.r.id, x.to]));
+        allMaint = allMaint.map((r) => (byId[r.id] ? { ...r, ...byId[r.id] } : r));
+        for (const x of sel) await updateMaint(uidU, x.r.id, x.to);
+        persistMaintLocal(uidU, allMaint);
+        closeModal(); drawMaint(root, v); toast(`${sel.length} registro(s) reorganizado(s)`);
+      }, "Aplicando…");
+    },
+  });
+}
+
 async function recalcVisitGasto(visitaId) {
   const recs = allMaint.filter((r) => r.visitaId === visitaId);
   const gastoId = recs[0] && recs[0].gastoId;

@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v98.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v99.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v98). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v99). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,13 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v98**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v99**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v99 — Reorganizar tipos de mantenimiento existentes
+- 🗂️ Nuevo botón **"Reorganizar tipos (N sugerencias)"** en Mantenimiento: propone un Tipo/Clasificación más específico para los registros ya guardados y deja **revisar uno a uno** (con casillas) antes de aplicar. Solo cambia la bitácora; **ningún gasto de Movimientos se toca**.
+- Reglas (`suggestMaintTipo` en `config.js`): (1) nombres antiguos → actuales (`Kit de arrastre` → `Kit de arrastre (cadena)`, `Llantas` → `Llantas (montaje)`, `Reparación` → `Reparación (otra)`…); (2) descripciones que empiezan por "Revisión…/Mantenimiento moto…" → **Revisión / diagnóstico** (son paquetes por km); (3) para tipos genéricos (Reparación/Otro) se busca por palabras clave: tapas/estrellada → Carrocería, grúa → Grúa / asistencia, rines/ruedas → Llantas, tijera → Suspensión, sensor → Sistema eléctrico, productos/lavar → Insumos · Productos de limpieza, protectores → Insumos · Accesorios, cadena → Kit de arrastre.
+- ➕ Tipos nuevos que pedían los datos reales: **Carrocería / tapas**, **Grúa / asistencia** (Taller) y **Productos de limpieza** (Insumos).
+- Con el respaldo del 1-oct: 45 de 56 registros reciben sugerencia y "Reparación" baja de **28 a 6** (quedan solo los realmente genéricos: retenedores, "Arreglo moto", etc.).
 
 ### 2026-10-02 · caché v98 — Listas de Tipo de mantenimiento reorganizadas y ampliadas
 - 🗂️ Las tres listas de **Tipo** (Taller / Rutina / Insumos) se reordenaron **por sistema** (motor → transmisión → frenos/llantas → suspensión/dirección → eléctrico → general) para elegir más rápido.

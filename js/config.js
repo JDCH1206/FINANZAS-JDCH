@@ -70,7 +70,7 @@ export const MAINT_TIPOS = {
     "Kit de arrastre (cadena)", "Clutch / embrague", "Guayas / cables",
     "Frenos (pastillas)", "Líquido de frenos", "Llantas (montaje)", "Rodamientos",
     "Suspensión / dirección", "Sistema eléctrico", "Batería",
-    "Revisión / diagnóstico", "Reparación (otra)", "Otro",
+    "Carrocería / tapas", "Revisión / diagnóstico", "Grúa / asistencia", "Reparación (otra)", "Otro",
   ],
   // Mantenimiento propio en casa, sin mano de obra
   Rutina: [
@@ -83,9 +83,47 @@ export const MAINT_TIPOS = {
     "Aceite (compra)", "Filtro de aceite (compra)", "Filtro de aire (compra)",
     "Bujía (compra)", "Pastillas de freno (compra)", "Kit de arrastre (compra)",
     "Llanta (compra)", "Líquidos (frenos/refrigerante)", "Batería (compra)",
-    "Repuesto (otro)", "Accesorios", "Otro",
+    "Repuesto (otro)", "Accesorios", "Productos de limpieza", "Otro",
   ],
 };
+
+// Nombres de Tipo de versiones anteriores → nombre actual (misma clasificación)
+const MAINT_RENAMES = {
+  "Kit de arrastre": "Kit de arrastre (cadena)", "Llantas": "Llantas (montaje)", "Reparación": "Reparación (otra)",
+  "Nivel de aceite": "Nivel / control de aceite", "Luces": "Luces y señales", "Limpieza": "Limpieza / lavado",
+  "Filtro (compra)": "Filtro de aceite (compra)", "Repuesto (compra)": "Repuesto (otro)", "Llantas (compra)": "Llanta (compra)",
+};
+// Reglas por descripción, solo para tipos genéricos (Reparación/Otro): [regex, categoría, tipo]
+const MAINT_RULES = [
+  [/revisi[oó]n|mantenimiento moto/, "Taller", "Revisión / diagnóstico"],
+  [/lavar|limpieza/, "Insumos", "Productos de limpieza"],
+  [/productos/, "Insumos", "Productos de limpieza"],
+  [/protector|accesori/, "Insumos", "Accesorios"],
+  [/cadena|arrastre/, "Taller", "Kit de arrastre (cadena)"],
+  [/gr[uú]a/, "Taller", "Grúa / asistencia"],
+  [/tapa|estrellad|carenaje|guardabarro/, "Taller", "Carrocería / tapas"],
+  [/rin(es)?\b|rueda|llanta|despinch/, "Taller", "Llantas (montaje)"],
+  [/tijera|suspensi|amortigu|direcci/, "Taller", "Suspensión / dirección"],
+  [/sensor|el[eé]ctric|luz|luces|bater/, "Taller", "Sistema eléctrico"],
+  [/pastilla|freno/, "Taller", "Frenos (pastillas)"],
+  [/embrague|clutch/, "Taller", "Clutch / embrague"],
+  [/guaya|cable/, "Taller", "Guayas / cables"],
+  [/buj[ií]a/, "Taller", "Bujía"],
+];
+// Propone {categoria, tipo} reorganizado para un registro, o null si ya está bien.
+// Las revisiones por kilometraje se agrupan en "Revisión / diagnóstico" aunque
+// tengan otro tipo (son paquetes de varios servicios).
+export function suggestMaintTipo(r) {
+  const cat = r.categoria || "Taller", tipo = r.tipo || "";
+  const d = (r.descripcion || "").toLowerCase();
+  let out = { categoria: cat, tipo: MAINT_RENAMES[tipo] || tipo };
+  if (cat === "Taller" && /^(revisi[oó]n|mantenimiento moto)\b/.test(d)) out = { categoria: "Taller", tipo: "Revisión / diagnóstico" };
+  else if (/^(Reparación|Reparación \(otra\)|Otro)$/.test(tipo)) {
+    const hit = MAINT_RULES.find(([re]) => re.test(d));
+    if (hit) out = { categoria: hit[1], tipo: hit[2] };
+  }
+  return out.categoria === cat && out.tipo === tipo ? null : out;
+}
 export const DEPARTAMENTOS = [
   "Amazonas", "Antioquia", "Arauca", "Atlántico", "Bogotá D.C.", "Bolívar", "Boyacá",
   "Caldas", "Caquetá", "Casanare", "Cauca", "Cesar", "Chocó", "Córdoba", "Cundinamarca",
