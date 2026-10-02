@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v96**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v97**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v97 — Orden de trabajo: campos como el ítem individual + Tipo estricto
+- 🧱 Cada línea de la orden ahora usa **campos con etiqueta y el mismo espaciado** que el ítem individual (Clasificación, Tipo, Descripción, Referencia/Cantidad, Valor, Repetir cada km), en vez de inputs apretados.
+- 🔒 El **Tipo** pasa a ser un **desplegable estricto** (solo se elige de la lista, dependiente de la clasificación); lo específico/libre va en **Descripción**. Si necesitas algo que no está, elige "Otro" y descríbelo.
 
 ### 2026-10-02 · caché v96 — Orden de trabajo: descripción por línea (aparte del tipo)
 - ✍️ Cada línea de la orden ahora tiene un campo **Descripción / detalle (opcional)** separado del **Tipo**, igual que en el ítem individual. El Tipo sigue siendo la lista con sugerencias; la descripción guarda el detalle libre (marca, nota). En la bitácora, la descripción se muestra cuando difiere del tipo.

@@ -716,18 +716,17 @@ export function openVisitModal(v, root, onDone) {
   const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
   const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
   const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
-  // listas de sugerencias de "tipo" por clasificación (las MISMAS del ítem individual → datos consistentes y filtrables)
-  const datalists = MAINT_CATEGORIES.map((c) => `<datalist id="vdl-${c}">${(MAINT_TIPOS[c] || []).map((t) => `<option value="${escapeHtml(t)}"></option>`).join("")}</datalist>`).join("");
+  // mismas listas que el ítem individual (datos consistentes y filtrables)
   const claseOpts = (sel) => MAINT_CATEGORIES.map((c) => `<option ${c === sel ? "selected" : ""}>${c}</option>`).join("");
+  const tipoOpts = (clase) => (MAINT_TIPOS[clase] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join("");
   openModal("Registrar orden de trabajo", `
-    ${datalists}
     <div class="field"><label class="label">Fecha</label><input id="v-fecha" type="date" class="input" value="${todayISO()}"></div>
     <div class="field"><label class="label">Odómetro (km)</label><input id="v-odo" type="number" class="input" value="${v.odometro ?? ""}" placeholder="km del tablero"></div>
     <div class="field"><label class="label">Taller</label><input id="v-taller" class="input" placeholder="Ej: Suzuki Bogotá 57"></div>
     <div class="field"><label class="label">Clasificación por defecto (las líneas nuevas la heredan)</label><select id="v-clase-def" class="input">${claseOpts("Taller")}</select></div>
 
     <div class="card-title" style="font-size:13px;margin-top:6px">Líneas de la orden</div>
-    <p class="tiny muted" style="margin:-4px 0 8px">Cada línea: clasificación (Taller/Rutina/Insumos) + tipo (de la lista o escribe uno). La <b>referencia y cantidad</b> aparecen solo en Insumos. El valor es el <b>total de esa línea con IVA</b>.</p>
+    <p class="tiny muted" style="margin:-4px 0 8px">Cada línea: clasificación (Taller/Rutina/Insumos) + <b>tipo</b> (de la lista). Lo específico va en <b>Descripción</b>. La referencia y cantidad aparecen solo en Insumos. El valor es el <b>total de esa línea con IVA</b>.</p>
     <div id="v-list"></div>
     <button type="button" id="v-add" class="btn btn-ghost btn-sm mb-3">+ Línea</button>
 
@@ -737,32 +736,27 @@ export function openVisitModal(v, root, onDone) {
     <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)"><div class="k-label">Total orden</div><div class="k-val" id="v-total">$0</div></div>
     <button id="v-save" class="btn btn-primary btn-block">Registrar orden</button>`, {
     onMount(b) {
-      const rowHtml = (clase) => `<div class="vl" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">
-        <div class="row gap-2" style="margin-bottom:6px">
-          <select class="input vl-clase" style="flex:1;min-width:0">${claseOpts(clase)}</select>
-          <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button>
-        </div>
-        <input class="input vl-tipo" list="vdl-${clase}" placeholder="Tipo (ej. Cambio de aceite) o escribe uno" style="margin-bottom:6px">
-        <input class="input vl-desc" placeholder="Descripción / detalle (opcional)" style="margin-bottom:6px">
-        <div class="row gap-2 vl-parts" style="margin-bottom:6px;display:${clase === "Insumos" ? "flex" : "none"}">
-          <input class="input vl-ref" placeholder="Referencia (opc)" style="flex:1;min-width:0">
-          <input class="input vl-cant" type="number" inputmode="numeric" value="1" style="width:56px" title="Cantidad">
-        </div>
-        <div class="row gap-2">
-          <input class="input vl-val" type="number" inputmode="numeric" placeholder="valor total línea" style="flex:1;min-width:0">
-          <input class="input vl-km" type="number" inputmode="numeric" placeholder="cada km (opc)" style="flex:1;min-width:0">
-        </div></div>`;
+      const rowHtml = (clase) => `<div class="vl" style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px">
+        <div class="row between mb-2" style="align-items:center"><span class="tiny muted" style="font-weight:700;letter-spacing:.04em">LÍNEA</span>
+          <button type="button" class="icon-btn vl-del" aria-label="Quitar">✕</button></div>
+        <div class="field"><label class="label">Clasificación</label><select class="input vl-clase">${claseOpts(clase)}</select></div>
+        <div class="field"><label class="label">Tipo</label><select class="input vl-tipo">${tipoOpts(clase)}</select></div>
+        <div class="field"><label class="label">Descripción / detalle (opcional)</label><input class="input vl-desc" placeholder="Marca, nota o referencia escrita…"></div>
+        <div class="field vl-parts" style="display:${clase === "Insumos" ? "block" : "none"}"><label class="label">Referencia y cantidad</label>
+          <div class="row gap-2"><input class="input vl-ref" placeholder="Referencia (opc)" style="flex:1;min-width:0"><input class="input vl-cant" type="number" inputmode="numeric" value="1" style="width:72px" title="Cantidad"></div></div>
+        <div class="field"><label class="label">Valor total de la línea (COP)</label><input class="input vl-val" type="number" inputmode="numeric" placeholder="0"></div>
+        <div class="field"><label class="label">Repetir cada (km) — opcional</label><input class="input vl-km" type="number" inputmode="numeric" placeholder="ej: 3000"></div>
+      </div>`;
       const vList = b.querySelector("#v-list");
       const recalc = () => { let t = 0; b.querySelectorAll("#v-list .vl-val").forEach((i) => t += (+i.value || 0)); b.querySelector("#v-total").textContent = fmt(t); };
       const wire = () => {
         b.querySelectorAll("#v-list .vl").forEach((row) => {
           row.querySelector(".vl-del").onclick = () => { row.remove(); recalc(); };
           row.querySelectorAll("input").forEach((i) => i.oninput = recalc);
-          const cl = row.querySelector(".vl-clase");
+          const cl = row.querySelector(".vl-clase"), tip = row.querySelector(".vl-tipo");
           cl.onchange = () => {
-            const val = cl.value;
-            row.querySelector(".vl-tipo").setAttribute("list", "vdl-" + val);
-            row.querySelector(".vl-parts").style.display = val === "Insumos" ? "flex" : "none";
+            tip.innerHTML = tipoOpts(cl.value);
+            row.querySelector(".vl-parts").style.display = cl.value === "Insumos" ? "block" : "none";
             recalc();
           };
         });
