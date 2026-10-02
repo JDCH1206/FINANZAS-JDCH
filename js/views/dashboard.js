@@ -488,8 +488,8 @@ function buildConciliacion(s, txs, period, periodLbl) {
   let veredicto;
   if (mesEnCurso) veredicto = `<p class="small muted">Revisa esta comparación al cerrar el mes, cuando ya hayas hecho tus aportes.</p>`;
   else if (Math.abs(dif) <= tol) veredicto = `<p class="small" style="color:var(--green)">✅ <b>Cuadra.</b> Lo que te sobró según tus registros es prácticamente lo que llegó a tus cuentas${pagosDeuda ? " o pagó deudas" : ""}.</p>`;
-  else if (dif > 0) veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(dif)} por abonar.</b> Según tus registros te sobró más de lo que llegó a tus cuentas${hayDeudas ? " o a pagar deudas" : ""}. Puede estar en efectivo o en una cuenta que no registras, haber gastos sin anotar, o un ingreso registrado que aún no llega.</p>`;
-  else veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Aportaste ${fmt(-dif)} más</b> de lo que tus registros dicen que te sobró. Pudo salir de efectivo o saldo de meses anteriores, o hay un ingreso sin registrar.${esAnual ? "" : " Si un aporte de fin de mes corresponde al mes siguiente, compara por año."}</p>`;
+  else if (dif > 0) veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(dif)} por abonar.</b> Según tus registros te sobró más de lo que llegó a tus cuentas${hayDeudas ? " o a pagar deudas" : ""}. Puede estar en efectivo o en una cuenta que no registras, o haber gastos sin anotar.</p>`;
+  else veredicto = `<p class="small muted">↪ <b>Abonaste ${fmt(-dif)} más</b> de lo que te sobró: es un adelanto del mes siguiente.${esAnual ? "" : " Al ver el año completo se compensa."}</p>`;
   return `${head}
     <p class="tiny muted" style="margin:-4px 0 6px">${escapeHtml(periodLbl)}${recortado ? ` · comparando desde <b>${escapeHtml(monthLabel(desde))}</b>, cuando empezaste a registrar aportes` : ""}${sinMesActual ? ` · sin ${escapeHtml(monthLabel(cm))} (mes en curso)` : ""}.</p>
     ${mesEnCurso ? `<p class="tiny" style="color:var(--yel);margin:0 0 6px">⏳ Este mes aún no termina: es normal que el ahorro todavía no aparezca en las cuentas.</p>` : ""}
@@ -499,7 +499,7 @@ function buildConciliacion(s, txs, period, periodLbl) {
     ${nuevaDeuda ? row("− Compras a crédito", -nuevaDeuda, "Consumos de tarjeta/préstamos: gastos que no salieron de tu bolsillo aún") : ""}
     ${cobros ? row("− Pagos que te hicieron", -cobros, "Dinero que te devolvieron (no es ingreso)") : ""}
     ${row("= Lo que sí se abonó", destino, "", true)}
-    ${row("Diferencia", dif, dif > 0 ? "Sobrante sin abonar" : dif < 0 ? "Aportado de más" : "", true, mesEnCurso ? "" : Math.abs(dif) <= tol ? "var(--green)" : "var(--yel)")}
+    ${row("Diferencia", dif, dif > 0 ? "Sobrante sin abonar" : dif < 0 ? "Adelanto del mes siguiente" : "", true, mesEnCurso || dif < 0 || Math.abs(dif) <= tol ? "" : "var(--yel)")}
     ${veredicto}
     ${rend ? `<p class="tiny muted">Aparte, tus cuentas generaron ${fmt(rend)} en rendimientos (no se cuentan arriba porque no vienen de tus ingresos).</p>` : ""}
   </div>`;
@@ -582,7 +582,7 @@ function buildSankey(inY, exByCat, perTxt = "del año", abono = null) {
       ${colHead(X0, "INGRESOS")}${colHead(X1, "REPARTO")}${colHead(X2, "EN QUÉ SE FUE")}
       ${svg}${labels}
     </svg>
-    ${extra ? `<p class="tiny" style="color:var(--yel);margin-top:6px">Abonaste ${fmt(extra)} más de lo que sobró: salió de otra fuente (efectivo, saldo anterior o ingresos sin registrar).</p>` : ""}
+    ${extra ? `<p class="tiny muted" style="margin-top:6px">↪ Abonaste ${fmt(extra)} más de lo que sobró: adelanto del mes siguiente.</p>` : ""}
     <p class="tiny muted" style="margin-top:6px">Porcentajes sobre tus ingresos ${perTxt}${deficit ? " (sobre los gastos, porque hubo déficit)" : ""}. Toca una banda para ver el valor exacto.</p>
   </div>`;
 }
