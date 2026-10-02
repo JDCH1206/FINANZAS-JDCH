@@ -35,8 +35,8 @@ los datos son los reales (lo que registres aparece también en el celular).
   y en *Uso de hoy*). Las cadenas se cambian en Ajustes → IA → *Modelos*.
 
 ## 5. Para el celular (cuando pase a `main`)
-App Check en la app publicada usa **reCAPTCHA v3**:
-1. Crear una clave en https://www.google.com/recaptcha/admin (tipo **v3**) con el dominio de
-   GitHub Pages (`jdch1206.github.io`).
-2. Firebase → App Check → tu app web → **reCAPTCHA** → pegar la **clave secreta**.
-3. En la app: Ajustes → IA → pegar la **clave de sitio** (la pública) → Guardar.
+App Check en la app publicada usa **Fraud Defense (antes reCAPTCHA Enterprise)**:
+1. La clave de sitio (`6L…`) creada para el dominio `jdch1206.github.io` (sin ruta).
+2. Firebase → App Check → Apps → tu app web → **Fraud Defense** → pegar la **clave de sitio** → Guardar.
+3. En la app: Ajustes → IA → proveedor **Fraud Defense** → pegar la **clave de sitio** → Guardar.
+(La clave secreta no se usa con Fraud Defense.)

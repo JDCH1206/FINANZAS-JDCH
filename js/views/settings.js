@@ -56,7 +56,10 @@ export function renderSettings(root, onSignOut) {
       <div class="card-title">🤖 Inteligencia artificial (Gemini)</div>
       <p class="small muted mb-2">Lee <b>fotos de recibos</b> (Compra con varios productos) y <b>facturas del taller</b> (orden de trabajo) y llena los formularios para que los revises. Usa Firebase AI Logic (plan gratis); la clave de Gemini la guarda Firebase, no la app.</p>
       <label class="row gap-2 small mb-2" style="align-items:center"><input type="checkbox" id="ai-on" ${c.enabled ? "checked" : ""}> <b>Activar IA</b></label>
-      <div class="field"><label class="label">Clave de sitio reCAPTCHA v3 (App Check)</label><input id="ai-key" class="input" placeholder="6Lc…" value="${escapeHtml(c.siteKey)}">
+      <div class="field"><label class="label">App Check: proveedor</label><select id="ai-prov" class="input">
+        <option value="enterprise" ${c.proveedor === "enterprise" ? "selected" : ""}>Fraud Defense (reCAPTCHA Enterprise) — recomendado</option>
+        <option value="v3" ${c.proveedor === "v3" ? "selected" : ""}>reCAPTCHA v3 (clásico)</option></select></div>
+      <div class="field"><label class="label">Clave de sitio (App Check)</label><input id="ai-key" class="input" placeholder="6L…" value="${escapeHtml(c.siteKey)}">
         <div class="tiny muted mt-1">Pública (no es secreta). Protege tu cupo de IA. ${esLocal() ? "<b>Estás en el PC (localhost):</b> se usa el token de depuración; ábrelo con F12 → Consola (\"App Check debug token\") y regístralo en Firebase → App Check → tu app → Administrar tokens de depuración." : ""}</div></div>
       <details class="mb-2"><summary class="tiny muted" style="cursor:pointer">Modelos (cadena: si uno se agota, salta al siguiente)</summary>
         <div class="field mt-2"><label class="label">Fotos (recibos y facturas)</label><input id="ai-ch-vision" class="input" value="${escapeHtml(c.chains.vision.join(", "))}"></div>
@@ -243,7 +246,7 @@ export function renderSettings(root, onSignOut) {
     const leerCadena = (id) => root.querySelector(id).value.split(",").map((x) => x.trim()).filter(Boolean);
     const guardarAI = async (extra = {}) => {
       const st = getState();
-      const ai = { enabled: root.querySelector("#ai-on").checked, siteKey: root.querySelector("#ai-key").value.trim(),
+      const ai = { enabled: root.querySelector("#ai-on").checked, siteKey: root.querySelector("#ai-key").value.trim(), proveedor: root.querySelector("#ai-prov").value,
         chains: { vision: leerCadena("#ai-ch-vision"), texto: leerCadena("#ai-ch-texto") }, ...extra };
       const profile = { ...st.profile, ai };
       setState({ profile });

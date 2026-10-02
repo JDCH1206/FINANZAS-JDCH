@@ -1,6 +1,6 @@
 // js/ai.js — Inteligencia artificial con Firebase AI Logic (Gemini Developer API).
 // La clave de Gemini NUNCA está en la app: la guarda Firebase. Las consultas se protegen
-// con App Check (reCAPTCHA v3; obligatorio para AI Logic desde nov-2026).
+// con App Check (Fraud Defense / reCAPTCHA Enterprise, o v3; obligatorio para AI Logic desde nov-2026).
 // Cada tarea tiene una CADENA de modelos: si uno agota su cupo gratis, no existe o está
 // saturado, se salta al siguiente. Respuestas con formato fijo (JSON) que la app valida.
 // La IA solo PROPONE: todo lo leído se muestra en el formulario para revisarlo antes de guardar.
@@ -23,7 +23,9 @@ export function aiCfg() {
   const p = ((getState().profile || {}).ai) || {};
   const chains = { ...DEFAULT_CHAINS };
   for (const k of Object.keys(DEFAULT_CHAINS)) if (Array.isArray(p.chains && p.chains[k]) && p.chains[k].length) chains[k] = p.chains[k];
-  return { enabled: !!p.enabled, siteKey: (p.siteKey || "").trim(), chains };
+  // proveedor de App Check: "enterprise" = Fraud Defense (antes reCAPTCHA Enterprise, el que hoy ofrece
+  // la consola de Firebase) o "v3" = reCAPTCHA v3 clásico
+  return { enabled: !!p.enabled, siteKey: (p.siteKey || "").trim(), proveedor: p.proveedor === "v3" ? "v3" : "enterprise", chains };
 }
 // la IA solo está disponible en modo nube y si el usuario la activó
 export const aiReady = () => FIREBASE_READY && aiCfg().enabled;
@@ -36,12 +38,13 @@ async function conectar() {
   const app = await getFirebaseApp();
   const [m, ac] = await Promise.all([import(cdn("ai")), import(cdn("app-check"))]);
   if (!appCheckOn) {
-    const { siteKey } = aiCfg();
+    const { siteKey, proveedor } = aiCfg();
     // en el PC (localhost) se usa el token de depuración de App Check: aparece en la
     // consola del navegador (F12) y se registra una vez en Firebase → App Check
     if (esLocal()) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
     if (siteKey || esLocal()) {
-      ac.initializeAppCheck(app, { provider: new ac.ReCaptchaV3Provider(siteKey || "token-de-depuracion-local"), isTokenAutoRefreshEnabled: true });
+      const Prov = proveedor === "v3" ? ac.ReCaptchaV3Provider : ac.ReCaptchaEnterpriseProvider;
+      ac.initializeAppCheck(app, { provider: new Prov(siteKey || "token-de-depuracion-local"), isTokenAutoRefreshEnabled: true });
     }
     appCheckOn = true;
   }
@@ -99,7 +102,7 @@ export async function generar(tarea, partes, esquema) {
     } catch (e) {
       const t = tipoError(e);
       intentos.push({ model, error: t, detalle: String((e && e.message) || e).slice(0, 160) });
-      if (t === "appcheck") throw new Error("App Check rechazó la consulta. " + (esLocal() ? "Registra el token de depuración (consola F12) en Firebase → App Check." : "Revisa la clave de reCAPTCHA en Ajustes → IA."));
+      if (t === "appcheck") throw new Error("App Check rechazó la consulta. " + (esLocal() ? "Registra el token de depuración (consola F12) en Firebase → App Check." : "Revisa la clave de sitio y el proveedor (Fraud Defense / v3) en Ajustes → IA."));
       if (t === "api") throw new Error("Firebase AI Logic no está activado en el proyecto (consola de Firebase → AI Logic).");
       if (t === "cupo") marcar(model, () => ({ agotado: true }));
       if (t === "modelo") marcar(model, () => ({ noExiste: true }));
