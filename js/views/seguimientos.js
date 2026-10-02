@@ -79,11 +79,17 @@ export function seguimientosCard(s) {
       : `<div class="tiny muted">Sin coincidencias. Revisa las palabras clave.</div>`}
     </div>`;
   }).join("") : `<p class="small muted">Elige productos o gastos para seguirlos de forma individual (ej. Coca cola, Cerveza, Café). Se buscan por palabras en la descripción de todo tu historial: no tienes que cambiar cómo registras.</p>`;
+  // sugeridos a un toque, directamente en la tarjeta (los que aún no están agregados)
+  const ya = new Set(segs.map((g) => g.nombre.toLowerCase()));
+  const sug = SEG_SUGERIDOS.filter((x) => !ya.has(x.nombre.toLowerCase()));
+  const sugHtml = sug.length ? `<div style="padding-top:8px;border-top:1px solid var(--line)"><div class="tiny muted mb-1">Sugeridos (toca para agregar)</div>
+    <div class="row gap-1" style="flex-wrap:wrap">${sug.map((x) => `<button type="button" class="chip" data-segsug="${escapeHtml(x.nombre)}">+ ${escapeHtml(x.nombre)}</button>`).join("")}</div></div>` : "";
   return `<div class="card mb-3">
     <div class="row between" style="align-items:center"><div class="card-title" style="margin:0">🎯 Seguimientos</div>
       <button id="seg-add" class="btn btn-ghost btn-sm">+ Agregar</button></div>
     <p class="tiny muted" style="margin:4px 0 4px"><b>Exacto</b>: gastos que son solo ese producto (incluye los productos de una compra con varios productos). <b>Compartido</b>: descripción combinada (ej. "Empanadas y gaseosa"); cuenta la vez, pero el monto incluye otras cosas.</p>
     ${body}
+    ${sugHtml}
   </div>`;
 }
 
@@ -99,6 +105,12 @@ async function saveSegs(segs) {
 export function wireSeguimientos(root, rerender) {
   const add = root.querySelector("#seg-add");
   if (add) add.onclick = () => openSegModal(null, rerender);
+  root.querySelectorAll("[data-segsug]").forEach((b) => b.onclick = async () => {
+    const x = SEG_SUGERIDOS.find((y) => y.nombre === b.getAttribute("data-segsug"));
+    if (!x) return;
+    await saveSegs([...(((getState().profile || {}).seguimientos) || []), { id: uid(), nombre: x.nombre, palabras: [...x.palabras] }]);
+    rerender(); toast(`Seguimiento "${x.nombre}" agregado`);
+  });
   root.querySelectorAll("[data-seg]").forEach((b) => b.onclick = () => {
     const g = ((getState().profile || {}).seguimientos || []).find((x) => x.id === b.getAttribute("data-seg"));
     if (g) openSegModal(g, rerender);
