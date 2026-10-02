@@ -22,10 +22,21 @@ function descDatalist(id, arr) {
 }
 // normaliza una etiqueta: quita el "#" inicial y espacios (así "#viaje" y "viaje" son la misma)
 const normTag = (g) => String(g || "").trim().replace(/^#+/, "").trim();
+// clave para comparar etiquetas sin importar mayúsculas, tildes ni espacios ("Éxito" = "exito")
+const tagKey = (g) => normTag(g).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+// escritura más usada de cada etiqueta (para mostrar una sola y reutilizarla al escribir)
+function tagCanon(arr) {
+  const cnt = {};
+  for (const t of (arr || [])) for (const g of (t.tags || [])) { const v = normTag(g); if (!v) continue; const k = tagKey(v); (cnt[k] = cnt[k] || {})[v] = (cnt[k][v] || 0) + 1; }
+  const out = {};
+  for (const [k, v] of Object.entries(cnt)) out[k] = Object.entries(v).sort((a, b) => b[1] - a[1])[0][0];
+  return out;
+}
 // etiquetas ya usadas (desde memoria) para sugerir al escribir y para el filtro (normalizadas y sin duplicados)
 function allTags(arr) {
   const set = new Set();
-  for (const t of (arr || [])) for (const g of (t.tags || [])) { const v = normTag(g); if (v) set.add(v); }
+  const canon = tagCanon(arr);
+  for (const t of (arr || [])) for (const g of (t.tags || [])) { const v = normTag(g); if (v) set.add(canon[tagKey(v)] || v); }
   return [...set].sort((a, b) => a.localeCompare(b));
 }
 function tagsDatalist(id, arr) {
@@ -33,7 +44,11 @@ function tagsDatalist(id, arr) {
 }
 // convierte el texto del campo de etiquetas en un arreglo limpio (sin "#", duplicados ni vacíos)
 function parseTags(str) {
-  return [...new Set((str || "").split(",").map(normTag).filter(Boolean))];
+  // si la etiqueta ya existe escrita de otra forma, se reutiliza esa escritura
+  const canon = tagCanon(getState().txs);
+  const out = [], seen = new Set();
+  for (const g of (str || "").split(",").map(normTag).filter(Boolean)) { const k = tagKey(g); if (seen.has(k)) continue; seen.add(k); out.push(canon[k] || g); }
+  return out;
 }
 
 // filtros guardados: combinaciones con nombre, por dispositivo (localStorage; no toca la nube)
@@ -51,7 +66,7 @@ function applyFilters(arr, isGasto) {
   if (isGasto && fCat) f = f.filter((t) => t.cat === fCat);
   if (isGasto && fAcct) f = f.filter((t) => (t.acct || "") === fAcct);
   if (isGasto && fPay) f = f.filter((t) => (t.pay || "") === fPay);
-  if (isGasto && fTag) { const ft = normTag(fTag); f = f.filter((t) => (t.tags || []).some((g) => normTag(g) === ft)); }
+  if (isGasto && fTag) { const ft = tagKey(fTag); f = f.filter((t) => (t.tags || []).some((g) => tagKey(g) === ft)); }
   if (fMin !== "") f = f.filter((t) => (+t.amount || 0) >= +fMin);
   if (fMax !== "") f = f.filter((t) => (+t.amount || 0) <= +fMax);
   return f;

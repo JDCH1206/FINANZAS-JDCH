@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v115.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v116.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v115). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v116). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v115**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v116**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v116 — Etiquetas sin distinguir mayúsculas ni tildes
+- 🏷️ "Éxito", "exito", "EXITO" y "#Éxito" ahora son **la misma etiqueta**: el filtro las encuentra todas, la lista de etiquetas muestra una sola (la escritura más usada) y al escribir una etiqueta que ya existe con otra forma se **reutiliza la escritura existente** (formulario de gasto y Compra con varios productos). Antes cada variante era una etiqueta distinta.
+- Recordatorio: la herramienta **Unificar descripciones** cubre también los productos de una Compra con varios productos (cada uno es un gasto con su propia descripción); las etiquetas no lo necesitan porque ya se reconocen como iguales.
 
 ### 2026-10-02 · caché v115 — Unificar descripciones (recomendación, no imposición)
 - 🧹 Nueva tarjeta **Ajustes → Limpieza de datos → Unificar descripciones (N sugerencias)** (módulo `js/views/unificar.js`). Detecta gastos que son lo mismo escrito de varias formas (mayúsculas, tildes, signos, plural simple, espacios: "Almuerzo/Almuerzos/almuerzo", "Coca cola/Cocacola/Coca Cola", "Empanadas/Empanada"…) y muestra cada grupo con sus variantes y cuántos gastos tiene cada una.
