@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v101.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v102.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v101). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v102). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,13 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v101**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v102**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v102 — Rediseño del "Flujo del dinero" (Sankey)
+- 🎨 Antes: 12 categorías con colores de una paleta que se repetían o parecían (Salud y Ahorro con el mismo verde) y una leyenda aparte que había que descifrar.
+- ✅ Ahora: **3 columnas** que cuentan la historia → **Ingresos → Reparto (Gastos | Ahorro) → En qué se fue**. El **color codifica el significado**, no la categoría: dorado = ingreso, gris = gasto, verde = ahorro, rojo = déficit (cuando se gastó más de lo que entró).
+- 🏷️ Cada categoría lleva **etiqueta directa** (nombre, valor y % de los ingresos) junto a su barra; sin leyenda. Se muestran las **7 más grandes** y el resto se agrupa en "Otras (n)" (al tocarla se ve el detalle).
+- 👆 Tocar/pasar sobre una banda muestra el valor exacto; la banda se resalta.
 
 ### 2026-10-02 · caché v101 — Fix: "Quitar duplicados" marcaba líneas de órdenes de trabajo
 - 🐛 El detector de duplicados de Mantenimiento contaba como repetidos los registros con el mismo `gastoId`. Las líneas de una **orden de trabajo** comparten `gastoId` a propósito (varias líneas → un solo gasto), así que una orden de 6 líneas aparecía como "5 duplicados" y el botón las habría **borrado**. Ahora `dupeCount`/`planDedupe` ignoran los registros con `visitaId`.

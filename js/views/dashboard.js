@@ -394,10 +394,7 @@ function renderAvanzado(root, tabs) {
   const exByCat = {};
   txs.filter((t) => (t.date || "").slice(0, 4) === advYear).forEach((t) => { exByCat[t.cat] = (exByCat[t.cat] || 0) + (+t.amount || 0); });
   const exY = sum(Object.values(exByCat));
-  const flows = Object.entries(exByCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
-    .map(([n, v], i) => ({ label: n, value: v, color: PALETTE[i % PALETTE.length] }));
-  if (inY - exY > 0) flows.push({ label: "Ahorro", value: inY - exY, color: "#7fbf7f" });
-  const sankey = buildSankey(flows);
+  const sankey = buildSankey(inY, exByCat);
 
   root.innerHTML = tabs + `
     <div class="card mb-3">
@@ -422,30 +419,77 @@ function renderAvanzado(root, tabs) {
   const yr = root.querySelector("#adv-year"); if (yr) yr.onchange = (e) => { advYear = e.target.value; renderDashboard(root); };
 }
 
-// Diagrama Sankey (SVG inline): nodo Ingresos (izq) → categorías + Ahorro (der), con cintas proporcionales.
-function buildSankey(flows) {
-  const total = sum(flows.map((f) => f.value));
-  if (!total) return `<div class="muted small">Sin datos para este año.</div>`;
-  const W = 320, H = Math.max(200, flows.length * 30), lx = 20, rx = 300, pad = 2;
-  const usable = H - pad * (flows.length - 1);
-  const sc = usable / total;
-  let yR = 0, yL = 0, bands = "", rnodes = "", leg = "";
-  flows.forEach((f, i) => {
-    const h = f.value * sc;
-    const y0R = yR, y1R = yR + h; yR += h + pad;
-    const y0L = yL, y1L = yL + h; yL += h; // izquierda sin pad (continuo)
-    bands += `<path d="M${lx},${y0L} C${(lx + rx) / 2},${y0L} ${(lx + rx) / 2},${y0R} ${rx},${y0R} L${rx},${y1R} C${(lx + rx) / 2},${y1R} ${(lx + rx) / 2},${y1L} ${lx},${y1L} Z" fill="${f.color}" opacity="0.4"></path>`;
-    rnodes += `<rect x="${rx}" y="${y0R}" width="14" height="${Math.max(1, h)}" rx="2" fill="${f.color}"></rect>`;
-    const pct = (f.value / total) * 100;
-    leg += `<div class="row gap-1" style="align-items:center;font-size:11px"><span style="width:9px;height:9px;border-radius:2px;background:${f.color};flex:none"></span><span class="ellipsis">${escapeHtml(f.label)} · ${fmt(f.value)} · ${pct.toFixed(0)}%</span></div>`;
+// Diagrama Sankey (SVG inline) en 3 columnas: Ingresos → (Gastos | Ahorro) → categorías.
+// El color codifica el SIGNIFICADO (dorado ingreso, gris gasto, verde ahorro, rojo déficit);
+// las categorías se identifican con etiqueta directa, no con colores.
+function buildSankey(inY, exByCat) {
+  const exY = sum(Object.values(exByCat));
+  if (!inY && !exY) return `<div class="muted small">Sin datos para este año.</div>`;
+  const TOP = 7;
+  const sorted = Object.entries(exByCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const cats = sorted.slice(0, TOP).map(([label, value]) => ({ label, value }));
+  const rest = sorted.slice(TOP);
+  if (rest.length) cats.push({ label: `Otras (${rest.length})`, value: sum(rest.map((r) => r[1])), title: rest.map((r) => `${r[0]} ${fmtShort(r[1])}`).join(" · ") });
+  const ahorro = Math.max(0, inY - exY), deficit = Math.max(0, exY - inY);
+  const base = Math.max(inY, exY); // % sobre ingresos (o sobre gastos si hubo déficit)
+  const pct = (v) => `${Math.round((v / base) * 100)}%`;
+
+  const W = 340, NW = 10, X0 = 0, X1 = 92, X2 = 184, LX = X2 + NW + 6;
+  const PLOT = 230, sc = PLOT / base, SLOT = 31, GAP = 8;
+  const GRAY = "var(--sub)", C = { in: "var(--gold)", gasto: GRAY, ahorro: "var(--green)", def: "var(--red)" };
+  const ribbon = (xa, ya0, xb, yb0, h, col, op, tip) => {
+    const m = (xa + xb) / 2;
+    return `<path class="sk-band" d="M${xa},${ya0} C${m},${ya0} ${m},${yb0} ${xb},${yb0} L${xb},${yb0 + h} C${m},${yb0 + h} ${m},${ya0 + h} ${xa},${ya0 + h} Z" fill="${col}" fill-opacity="${op}"><title>${escapeHtml(tip)}</title></path>`;
+  };
+  const node = (x, y, h, col, tip) => `<rect x="${x}" y="${y}" width="${NW}" height="${Math.max(2, h)}" rx="2" fill="${col}"><title>${escapeHtml(tip)}</title></rect>`;
+  let svg = "";
+
+  // columna 0: Ingresos (+ Déficit si se gastó más de lo que entró)
+  const hIn = inY * sc, hDef = deficit * sc;
+  svg += node(X0, 0, hIn, C.in, `Ingresos ${fmt(inY)}`);
+  if (deficit) svg += node(X0, hIn + GAP, hDef, C.def, `Déficit (salió de ahorros/deuda) ${fmt(deficit)}`);
+  // columna 1: Gastos y Ahorro
+  const hG = exY * sc, hA = ahorro * sc, yA = hG + GAP;
+  if (exY) svg += node(X1, 0, hG, C.gasto, `Gastos ${fmt(exY)} · ${pct(exY)}`);
+  if (ahorro) svg += node(X1, yA, hA, C.ahorro, `Ahorro ${fmt(ahorro)} · ${pct(ahorro)}`);
+  // cintas columna 0 → 1
+  if (exY) svg += ribbon(X0 + NW, 0, X1, 0, Math.min(inY, exY) * sc, C.gasto, 0.28, `Ingresos → Gastos ${fmt(Math.min(inY, exY))}`);
+  if (ahorro) svg += ribbon(X0 + NW, hG, X1, yA, hA, C.ahorro, 0.35, `Ingresos → Ahorro ${fmt(ahorro)}`);
+  if (deficit) svg += ribbon(X0 + NW, hIn + GAP, X1, inY * sc, hDef, C.def, 0.35, `Déficit → Gastos ${fmt(deficit)}`);
+
+  // columna 2: categorías (con espacio mínimo para su etiqueta de 2 líneas) + Ahorro al final
+  let yOut = 0, y2 = 0, labels = "";
+  const label = (y, h, name, val, col) => {
+    const cy = y + h / 2;
+    return `<text x="${LX}" y="${cy - 2}" font-size="10.5" font-weight="600" fill="var(--ink)">${escapeHtml(name)}</text>
+      <text x="${LX}" y="${cy + 10}" font-size="9.5" fill="var(--sub)">${fmtShort(val)} · ${pct(val)}</text>`;
+  };
+  cats.forEach((c) => {
+    const h = c.value * sc;
+    const tip = `${c.label}: ${fmt(c.value)} · ${pct(c.value)} de los ingresos${c.title ? " — " + c.title : ""}`;
+    svg += ribbon(X1 + NW, yOut, X2, y2, h, C.gasto, 0.22, tip);
+    svg += node(X2, y2, h, C.gasto, tip);
+    labels += label(y2, h, c.label, c.value);
+    yOut += h; y2 += Math.max(h + 3, SLOT);
   });
-  const leftH = Math.min(usable, total * sc);
-  return `<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">
-      ${bands}
-      <rect x="6" y="0" width="14" height="${leftH}" rx="2" fill="var(--gold)"></rect>
-      ${rnodes}
-    </svg></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:6px">${leg}</div>`;
+  if (ahorro) {
+    y2 += GAP;
+    svg += ribbon(X1 + NW, yA, X2, y2, hA, C.ahorro, 0.35, `Ahorro ${fmt(ahorro)}`);
+    svg += node(X2, y2, hA, C.ahorro, `Ahorro ${fmt(ahorro)} · ${pct(ahorro)}`);
+    labels += `<text x="${LX}" y="${y2 + hA / 2 - 2}" font-size="10.5" font-weight="700" fill="var(--green)">Ahorro</text>
+      <text x="${LX}" y="${y2 + hA / 2 + 10}" font-size="9.5" fill="var(--sub)">${fmtShort(ahorro)} · ${pct(ahorro)}</text>`;
+    y2 += Math.max(hA, SLOT);
+  }
+  const H = Math.ceil(Math.max(y2, hIn + (deficit ? GAP + hDef : 0), yA + hA) + 4);
+  const colHead = (x, t, anchor = "start") => `<text x="${x}" y="-6" font-size="9" fill="var(--sub)" text-anchor="${anchor}" letter-spacing=".04em">${t}</text>`;
+  return `<div style="max-width:560px;margin:0 auto">
+    <svg viewBox="0 -16 ${W} ${H + 16}" style="width:100%;height:auto;display:block" role="img" aria-label="Flujo del dinero: ingresos, gastos por categoría y ahorro">
+      <style>.sk-band{transition:fill-opacity .15s}.sk-band:hover{fill-opacity:.55}</style>
+      ${colHead(X0, "INGRESOS")}${colHead(X1, "REPARTO")}${colHead(X2, "EN QUÉ SE FUE")}
+      ${svg}${labels}
+    </svg>
+    <p class="tiny muted" style="margin-top:6px">Porcentajes sobre tus ingresos del año${deficit ? " (sobre los gastos, porque hubo déficit)" : ""}. Toca una banda para ver el valor exacto.</p>
+  </div>`;
 }
 
 function openDayModal(mes, day) {
