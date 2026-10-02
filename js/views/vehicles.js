@@ -1015,13 +1015,14 @@ const isVehCat = (n) => /moto|carro|veh[ií]culo|autom[oó]vil|\bauto\b/i.test(n
 // cuántos registros sobran por compartir el mismo gastoId (duplicados de importación)
 function dupeCount(items) {
   const c = {};
-  items.forEach((r) => { if (r.gastoId) c[r.gastoId] = (c[r.gastoId] || 0) + 1; });
+  // las líneas de una orden de trabajo (visitaId) comparten gastoId a propósito: no son duplicados
+  items.forEach((r) => { if (r.gastoId && !r.visitaId) c[r.gastoId] = (c[r.gastoId] || 0) + 1; });
   return Object.values(c).reduce((s, n) => s + (n > 1 ? n - 1 : 0), 0);
 }
 // devuelve { delIds, keepByGasto } para quitar repetidos dejando uno por gastoId
 function planDedupe(items) {
   const byG = {};
-  items.forEach((r) => { if (r.gastoId) (byG[r.gastoId] = byG[r.gastoId] || []).push(r); });
+  items.forEach((r) => { if (r.gastoId && !r.visitaId) (byG[r.gastoId] = byG[r.gastoId] || []).push(r); });
   const delIds = [], keepByGasto = {};
   Object.entries(byG).forEach(([g, grp]) => { if (grp.length > 1) { keepByGasto[g] = grp[0].id; grp.slice(1).forEach((r) => delIds.push(r.id)); } });
   return { delIds, keepByGasto };
