@@ -17,7 +17,9 @@ export function renderSummary(root) {
   const totalExp = sum(s.txs, (t) => t.amount);
   const ahorroFlujo = totalInc - totalExp;
   const tasa = totalInc ? (ahorroFlujo / totalInc) * 100 : 0;
-  const disponible = sum(s.accounts || [], (a) => a.balance);
+  // "Disponible" = solo líquido; las cuentas "Por cobrar" no son dinero disponible
+  const liqAccts = (s.accounts || []).filter((a) => a.type !== "Por cobrar");
+  const disponible = sum(liqAccts, (a) => +a.balance || 0);
   const gap = ahorroFlujo - disponible;                       // flujo no reflejado en cuentas
   const gapPct = ahorroFlujo ? (gap / ahorroFlujo) * 100 : 0;
   const lastBk = localStorage.getItem("fz_last_backup");
@@ -100,8 +102,8 @@ export function renderSummary(root) {
         }).join("")}
       </div>
 
-      ${(s.accounts || []).length ? `<div class="card"><div class="card-title">Distribución del ahorro</div>
-        ${s.accounts.map((a) => lineKV(a.name + ` · ${a.type}`, fmt(a.balance))).join("")}
+      ${liqAccts.length ? `<div class="card"><div class="card-title">Distribución del ahorro</div>
+        ${liqAccts.map((a) => lineKV(a.name + ` · ${a.type}`, fmt(a.balance))).join("")}
         ${lineKV("Total", fmt(disponible), "var(--gold)")}</div>` : ""}
 
       <div class="card">

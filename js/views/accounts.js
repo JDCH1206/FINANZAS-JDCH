@@ -6,13 +6,16 @@ import { ACCOUNT_TYPES, PALETTE } from "../config.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend } from "../components/charts.js";
 
-// Patrimonio actual = saldo de cuentas + lo que te deben − lo que debes (deudas/tarjetas)
+// Patrimonio actual = líquido en cuentas + lo que te deben − lo que debes.
+// Las cuentas tipo "Por cobrar" NO son líquido: cuentan como "te deben", no como disponible.
 export function netWorthNow(s) {
-  const disponible = sum(s.accounts || [], (a) => +a.balance || 0);
+  const accts = s.accounts || [];
+  const disponible = sum(accts.filter((a) => a.type !== "Por cobrar"), (a) => +a.balance || 0);
+  const porCobrarAcct = sum(accts.filter((a) => a.type === "Por cobrar"), (a) => +a.balance || 0);
   const debts = s.debts || [];
   const deudas = sum(debts.filter((d) => d.tipo === "debo" || d.tipo === "tarjeta"), (d) => +d.saldo || 0);
-  const meDeben = sum(debts.filter((d) => d.tipo === "me_deben"), (d) => +d.saldo || 0);
-  return { disponible, deudas, meDeben, patrimonio: disponible + meDeben - deudas };
+  const meDeben = sum(debts.filter((d) => d.tipo === "me_deben"), (d) => +d.saldo || 0) + porCobrarAcct;
+  return { disponible, porCobrar: porCobrarAcct, deudas, meDeben, patrimonio: disponible + meDeben - deudas };
 }
 
 // guarda (o reemplaza) la foto del patrimonio del mes actual
@@ -103,7 +106,9 @@ function savingsSeries(accts, scope) {
 export function renderAccounts(root) {
   const s = getState();
   const accts = s.accounts || [];
-  const total = sum(accts, (a) => a.balance);
+  const total = sum(accts, (a) => a.balance);                                   // todas (para distribución)
+  const disponibleLiq = sum(accts.filter((a) => a.type !== "Por cobrar"), (a) => +a.balance || 0); // líquido
+  const porCobrar = sum(accts.filter((a) => a.type === "Por cobrar"), (a) => +a.balance || 0);
   const today = todayISO();
   const pend = accts.filter((a) => acctNeedsUpdate(a, today));
   const rendGlobal = sum(accts, (a) => rendTotal(a));
@@ -124,8 +129,9 @@ export function renderAccounts(root) {
     <p class="page-sub">Dónde está tu dinero y cómo se distribuye</p>
 
     <div class="kpi mb-3" style="background:linear-gradient(135deg,#1d272c,#161e22)">
-      <div class="k-label">Total disponible</div>
-      <div class="k-val">${fmt(total)}</div>
+      <div class="k-label">Total disponible${porCobrar ? " (líquido)" : ""}</div>
+      <div class="k-val">${fmt(disponibleLiq)}</div>
+      ${porCobrar ? `<div class="tiny muted" style="margin-top:4px">+ ${fmt(porCobrar)} por cobrar (no líquido)</div>` : ""}
       ${rendGlobal ? `<div class="tiny" style="color:var(--green);margin-top:4px">↑ ${fmt(rendGlobal)} registrado en rendimientos</div>` : ""}
     </div>
 

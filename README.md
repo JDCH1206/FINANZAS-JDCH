@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v94**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v95**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v95 — Patrimonio: "Por cobrar" ya no cuenta como disponible
+- 🔴 **Fix (auditoría):** las cuentas tipo **"Por cobrar"** se contaban como dinero **disponible/líquido**, inflando "Total disponible" y el patrimonio. Ahora `netWorthNow` las separa: el líquido es solo Ahorro/Corriente/Efectivo/Inversión, y lo "Por cobrar" cuenta como **"te deben"** (igual que las deudas por cobrar del módulo). El patrimonio total no cambia, pero queda bien clasificado. Alineado en **Cuentas**, **Resumen** y **Tablero** (colchón/ahorro). La gráfica de patrimonio sigue siendo continua (usa el patrimonio total, que no varía).
 
 ### 2026-10-01 · caché v94 — Sankey de flujo + precio de gasolina por tipo
 - 💵 **Diagrama Sankey** (SVG propio) en Tablero → Avanzado: muestra el **flujo del año** Ingresos → categorías de gasto (+ Ahorro), con cintas proporcionales y selector de año. `buildSankey`.

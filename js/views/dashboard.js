@@ -97,7 +97,7 @@ export function renderDashboard(root) {
   const totalInc = sum(incFiltered, (t) => t.amount);
   const ahorro = totalInc - total;
   const tasa = totalInc ? (ahorro / totalInc) * 100 : 0;
-  const disponible = sum(s.accounts || [], (a) => a.balance); // ahorro real = plata en cuentas
+  const disponible = sum((s.accounts || []).filter((a) => a.type !== "Por cobrar"), (a) => +a.balance || 0); // ahorro líquido (excluye "Por cobrar")
   const runway = avg ? disponible / avg : 0;                   // meses que cubren tus cuentas
 
   // gasto diario promedio (sobre el lapso de fechas del periodo) y gasto hormiga
