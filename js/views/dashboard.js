@@ -492,7 +492,7 @@ function fechaAporte(s, d) {
 // Aportes netos a cuentas (sumas/aportes − retiros) de los movimientos que cumplen `pred`;
 // sin rendimientos, transferencias entre cuentas ni cuentas "Por cobrar".
 // Devuelve null si nunca se ha registrado un aporte hasta ese período (no hay con qué medir).
-function aportesNetos(s, pred) {
+export function aportesNetos(s, pred) {
   const movs = (s.accounts || []).filter((a) => a.type !== "Por cobrar")
     .flatMap((a) => a.movs || []).filter((m) => m.kind !== "rendimiento" && m.kind !== "transfer")
     .map((m) => ({ ...m, date: fechaAporte(s, m.date) }));
@@ -607,7 +607,7 @@ function acumulado(s, txs, period, cm, sinMesActual, mesEnCurso, row, tol) {
 // Diagrama Sankey (SVG inline) en 3 columnas: Ingresos → (Gastos | Sobrante) → categorías + (Abono a cuentas | Sin abonar).
 // El color codifica el SIGNIFICADO (dorado ingreso, gris gasto, verde ahorro, rojo déficit);
 // las categorías se identifican con etiqueta directa, no con colores.
-function buildSankey(inY, exByCat, perTxt = "del año", abono = null) {
+export function buildSankey(inY, exByCat, perTxt = "del año", abono = null, { impreso = false } = {}) {
   const exY = sum(Object.values(exByCat));
   if (!inY && !exY) return `<div class="muted small">Sin datos para este período.</div>`;
   const TOP = 7;
@@ -681,8 +681,8 @@ function buildSankey(inY, exByCat, perTxt = "del año", abono = null) {
       ${colHead(X0, "INGRESOS")}${colHead(X1, "REPARTO")}${colHead(X2, "EN QUÉ SE FUE")}
       ${svg}${labels}
     </svg>
-    ${extra ? `<p class="tiny muted" style="margin-top:6px">↪ Abonaste ${fmt(extra)} más de lo que sobró: adelanto del mes siguiente.</p>` : ""}
-    <p class="tiny muted" style="margin-top:6px">Porcentajes sobre tus ingresos ${perTxt}${deficit ? " (sobre los gastos, porque hubo déficit)" : ""}. Toca una banda para ver el valor exacto.</p>
+    ${extra ? `<p class="tiny muted" style="margin-top:6px">↪ Abonaste ${fmt(extra)} más de lo que sobró: se cubrió con saldo que ya tenías.</p>` : ""}
+    <p class="tiny muted" style="margin-top:6px">Porcentajes sobre tus ingresos ${perTxt}${deficit ? " (sobre los gastos, porque hubo déficit)" : ""}.${impreso ? "" : " Toca una banda para ver el valor exacto."}</p>
   </div>`;
 }
 

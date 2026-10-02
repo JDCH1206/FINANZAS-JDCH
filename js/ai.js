@@ -229,7 +229,7 @@ ${IVA_TXT}`;
 export async function analizarMes(datos) {
   const prompt = `Eres un asesor de finanzas personales en Colombia: directo, concreto y amable, en español.
 Analiza el mes ${datos.mes} con estos datos YA CALCULADOS por la app (pesos colombianos). NO recalcules ni inventes cifras: usa solo las que aparecen.
-Compara contra el mes anterior y contra el promedio de los últimos 12 meses, revisa la regla 50/30/20 (necesidades/deseos/deuda-inversión) y los gastos más grandes y repetidos.
+Compara contra el mes anterior, contra el MISMO MES DEL AÑO ANTERIOR (si hay datos) y contra el promedio de los últimos 12 meses, revisa la regla 50/30/20 (necesidades/deseos/deuda-inversión) y los gastos más grandes y repetidos.
 Para el ahorro/inversión usa "ahorroEnCuentas" (aportes reales a cuentas y rendimientos): si hay aportes, el usuario SÍ está ahorrando aunque "deudaInversion" esté en 0.
 Escribe: "resumen" (2-3 frases), entre 3 y 5 "hallazgos" (titulo corto + detalle de 1-2 frases con cifras; tipo "bien", "alerta" o "info") y 2-3 "recomendaciones" accionables y específicas para el próximo mes (nada genérico).
 DATOS:

@@ -8,6 +8,7 @@ import { uid, normDate, escapeHtml, fmt, ym, monthLabel, curMonth, sum, todayISO
 import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview } from "../components/modals.js";
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 import { gruposVariantes, openUnificarDescripciones } from "./unificar.js";
+import { buildSankey, aportesNetos } from "./dashboard.js";
 import { aiCfg, aiReady, DEFAULT_CHAINS, usoHoy, reiniciarUso, probarConexion, esLocal, analizarMes } from "../ai.js";
 
 export function renderSettings(root, onSignOut) {
@@ -480,7 +481,7 @@ export function renderSettings(root, onSignOut) {
 function ensurePrintStyle() {
   if (document.getElementById("print-style")) return;
   const st = document.createElement("style"); st.id = "print-style";
-  st.textContent = `#print-area{display:none}
+  st.textContent = `#print-area{display:none;--ink:#1a1a1a;--sub:#666;--gold:#9a6a1a;--green:#2f7d46;--red:#b34a30;--line:#ddd;--panel-2:#eee}
     @media print{ html,body{background:#fff!important} body>#app,#fab,.toast,.modal-bg,#install-bar,#offline-bar{display:none!important}
     #print-area{display:block!important} }`;
   document.head.appendChild(st);
@@ -533,8 +534,9 @@ export function datosMes(s, mes) {
   const ult12 = []; let k = mes; for (let i = 0; i < 12; i++) { k = prev(k); ult12.push(k); }
   const gastosDe = (m) => s.txs.filter((t) => ym(t.date) === m), ingDe = (m) => s.incomes.filter((t) => ym(t.date) === m);
   const porCat = (arr) => { const o = {}; arr.forEach((t) => { o[t.cat] = (o[t.cat] || 0) + (+t.amount || 0); }); return o; };
-  const ex = gastosDe(mes), exAnt = gastosDe(mAnt);
-  const cat = porCat(ex), catAnt = porCat(exAnt);
+  const mAnio = `${+mes.slice(0, 4) - 1}-${mes.slice(5, 7)}`;
+  const ex = gastosDe(mes), exAnt = gastosDe(mAnt), exAnio = gastosDe(mAnio);
+  const cat = porCat(ex), catAnt = porCat(exAnt), catAnio = porCat(exAnio);
   const prom = {}; ult12.forEach((m) => { const o = porCat(gastosDe(m)); Object.entries(o).forEach(([c, v]) => { prom[c] = (prom[c] || 0) + v / 12; }); });
   const typeMap = Object.fromEntries(s.cats.map((c) => [c.name, c.type]));
   const b503 = { Necesidad: 0, Deseo: 0, Deuda: 0 }; ex.forEach((t) => { const ty = typeMap[t.cat]; if (ty) b503[ty] += +t.amount || 0; });
@@ -544,9 +546,10 @@ export function datosMes(s, mes) {
   return {
     mes: monthLabel(mes), ingresos: r(ing), gastos: r(gas), balance: r(ing - gas), tasaAhorroPct: ing ? r(((ing - gas) / ing) * 100) : null,
     mesAnterior: { mes: monthLabel(mAnt), ingresos: r(sum(ingDe(mAnt), (t) => t.amount)), gastos: r(sum(exAnt, (t) => t.amount)) },
+    mismoMesAnioAnterior: { mes: monthLabel(mAnio), ingresos: r(sum(ingDe(mAnio), (t) => t.amount)), gastos: r(sum(exAnio, (t) => t.amount)), hayDatos: exAnio.length > 0 },
     promedio12MesesGastos: r(ult12.reduce((a, m) => a + sum(gastosDe(m), (t) => t.amount), 0) / 12),
     regla503020: { necesidades: r(b503.Necesidad), deseos: r(b503.Deseo), deudaInversion: r(b503.Deuda), referenciaPct: RULE_503020 },
-    porCategoria: Object.keys({ ...cat, ...catAnt }).map((c) => ({ categoria: c, mes: r(cat[c]), mesAnterior: r(catAnt[c]), promedio12m: r(prom[c]) })).sort((a, b) => b.mes - a.mes),
+    porCategoria: Object.keys({ ...cat, ...catAnt }).map((c) => ({ categoria: c, mes: r(cat[c]), mesAnterior: r(catAnt[c]), mismoMesAnioAnterior: r(catAnio[c]), promedio12m: r(prom[c]) })).sort((a, b) => b.mes - a.mes),
     gastosMasGrandes: [...ex].sort((a, b) => (+b.amount || 0) - (+a.amount || 0)).slice(0, 8).map((t) => ({ descripcion: t.desc, categoria: t.cat, valor: r(t.amount) })),
     masRepetidos: Object.values(grupos).filter((g) => g.veces >= 2).sort((a, b) => b.total - a.total).slice(0, 8).map((g) => ({ ...g, total: r(g.total) })),
     numeroDeGastos: ex.length,
@@ -568,27 +571,130 @@ export function datosMes(s, mes) {
 }
 
 export function buildReportHTML(s, mes, analisis) {
-  const inMes = s.incomes.filter((t) => ym(t.date) === mes);
-  const exMes = s.txs.filter((t) => ym(t.date) === mes);
-  const ing = sum(inMes, (t) => t.amount), gas = sum(exMes, (t) => t.amount), bal = ing - gas;
-  const tasa = ing ? (bal / ing) * 100 : 0;
+  const prevMes = (m) => { const [y, mo] = m.split("-").map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`; };
+  const mAnt = prevMes(mes), mAnio = `${+mes.slice(0, 4) - 1}-${mes.slice(5, 7)}`;
+  const ult12 = []; { let k = mes; for (let i = 0; i < 12; i++) { k = prevMes(k); ult12.push(k); } }
+  const gastosDe = (m) => s.txs.filter((t) => ym(t.date) === m);
+  const ingDe = (m) => s.incomes.filter((t) => ym(t.date) === m);
+  const porCat = (arr) => { const o = {}; arr.forEach((t) => { o[t.cat] = (o[t.cat] || 0) + (+t.amount || 0); }); return o; };
+  const resumen = (m) => {
+    const ex = gastosDe(m), i = sum(ingDe(m), (t) => t.amount), g = sum(ex, (t) => t.amount);
+    const [Y, M] = m.split("-").map(Number), dias = new Date(Y, M, 0).getDate();
+    return { ing: i, gas: g, bal: i - g, tasa: i ? ((i - g) / i) * 100 : null, n: ex.length, diario: g / dias, hay: ex.length > 0 || i > 0 };
+  };
+  const R = resumen(mes), RA = resumen(mAnt), RY = resumen(mAnio);
+  const exMes = gastosDe(mes);
+  const { ing, gas, bal } = R;
+  const tasa = R.tasa || 0;
 
   const typeMap = Object.fromEntries(s.cats.map((c) => [c.name, c.type]));
   const buck = { Necesidad: 0, Deseo: 0, Deuda: 0 };
   exMes.forEach((t) => { const ty = typeMap[t.cat]; if (ty) buck[ty] += (+t.amount || 0); });
 
-  const byCat = {};
-  exMes.forEach((t) => { byCat[t.cat] = (byCat[t.cat] || 0) + (+t.amount || 0); });
+  const byCat = porCat(exMes), catAnt = porCat(gastosDe(mAnt)), catAnio = porCat(gastosDe(mAnio));
+  const prom12 = {}; ult12.forEach((m) => Object.entries(porCat(gastosDe(m))).forEach(([c, v]) => { prom12[c] = (prom12[c] || 0) + v / 12; }));
   const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
   const accts = s.accounts || [];
-  const disp = sum(accts, (a) => a.balance);
+  const liq = accts.filter((a) => a.type !== "Por cobrar");
+  const disp = sum(liq, (a) => a.balance);
 
   const c = { ink: "#1a1a1a", sub: "#666", line: "#ddd", gold: "#9a6a1a", green: "#2f7d46", red: "#b34a30" };
+  const sec = (titulo, html) => `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:20px"><h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">${titulo}</h3>${html}</div>`;
   const row = (k, v, col) => `<tr><td style="padding:6px 0;border-top:1px solid ${c.line};color:${c.sub}">${escapeHtml(k)}</td><td style="padding:6px 0;border-top:1px solid ${c.line};text-align:right;font-weight:600;color:${col || c.ink}">${v}</td></tr>`;
+  const td = (v, extra = "") => `<td style="padding:5px 4px;border-top:1px solid ${c.line};${extra}">${v}</td>`;
+  const th = (v, al = "right") => `<th style="padding:5px 4px;text-align:${al};font-weight:600;color:${c.sub};font-size:11px">${v}</th>`;
+  // variación porcentual; para gastos subir es malo (rojo), para ingresos/ahorro subir es bueno (verde)
+  const delta = (a, b, bueno = "baja") => {
+    if (!b) return `<span style="color:${c.sub}">—</span>`;
+    const p = ((a - b) / Math.abs(b)) * 100;
+    if (Math.abs(p) < 0.5) return `<span style="color:${c.sub}">=</span>`;
+    const ok = bueno === "baja" ? p < 0 : p > 0;
+    return `<span style="color:${ok ? c.green : c.red}">${p > 0 ? "▲" : "▼"} ${Math.abs(p) > 999 ? ">999" : Math.abs(p).toFixed(0)}%</span>`;
+  };
+  const pct = (v) => (v == null ? "—" : `${v.toFixed(0)}%`);
   const lbl503 = { Necesidad: "Necesidades", Deseo: "Deseos", Deuda: "Deuda/Inversión" };
 
-  return `<div style="max-width:720px;margin:0 auto;padding:28px 30px;font-family:Georgia,'Times New Roman',serif;color:${c.ink};background:#fff">
+  // ---- 1. Comparativo: este mes vs mes anterior vs mismo mes del año anterior ----
+  const comp = [
+    ["Ingresos", R.ing, RA.ing, RY.ing, "sube", fmt],
+    ["Gastos", R.gas, RA.gas, RY.gas, "baja", fmt],
+    ["Balance (sobrante)", R.bal, RA.bal, RY.bal, "sube", fmt],
+    ["Tasa de ahorro", R.tasa, RA.tasa, RY.tasa, "sube", pct],
+    ["N.º de gastos", R.n, RA.n, RY.n, "baja", (v) => String(v)],
+    ["Gasto promedio por día", R.diario, RA.diario, RY.diario, "baja", fmt],
+  ];
+  const compHTML = `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <tr>${th("", "left")}${th(escapeHtml(monthLabel(mes)))}${th(escapeHtml(monthLabel(mAnt)))}${th("Δ")}${th(escapeHtml(monthLabel(mAnio)))}${th("Δ")}</tr>
+    ${comp.map(([k, a, b, y, bueno, f]) => `<tr>${td(escapeHtml(k), `color:${c.sub}`)}${td(`<b>${f(a)}</b>`, "text-align:right")}${td(RA.hay ? f(b) : "—", "text-align:right")}${td(RA.hay && a != null && b != null ? (k === "Tasa de ahorro" ? `<span style="color:${a >= b ? c.green : c.red}">${a >= b ? "▲" : "▼"} ${Math.abs(a - b).toFixed(0)} pts</span>` : delta(a, b, bueno)) : "—", "text-align:right")}${td(RY.hay ? f(y) : "—", "text-align:right")}${td(RY.hay && a != null && y != null ? (k === "Tasa de ahorro" ? `<span style="color:${a >= y ? c.green : c.red}">${a >= y ? "▲" : "▼"} ${Math.abs(a - y).toFixed(0)} pts</span>` : delta(a, y, bueno)) : "—", "text-align:right")}</tr>`).join("")}
+  </table>${!RY.hay ? `<div style="font-size:11px;color:${c.sub};margin-top:4px">Sin registros de ${escapeHtml(monthLabel(mAnio))} para comparar con el año anterior.</div>` : ""}`;
+
+  // ---- 2. Flujo del dinero (mismo diagrama de cintas del Tablero) ----
+  const abono = aportesNetos(s, (t) => (t.date || "").startsWith(mes));
+  const sankeyHTML = buildSankey(ing, byCat, "del mes", abono, { impreso: true });
+
+  // ---- 3. Categorías con variaciones ----
+  const catsHTML = topCats.length ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr>${th("Categoría", "left")}${th(escapeHtml(monthLabel(mes)))}${th("% del gasto")}${th("vs " + escapeHtml(monthLabel(mAnt)))}${th("vs " + escapeHtml(monthLabel(mAnio)))}${th("Prom. 12m")}</tr>
+    ${topCats.map(([n, v]) => `<tr>${td(escapeHtml(n))}${td(`<b>${fmt(v)}</b>`, "text-align:right")}${td(gas ? ((v / gas) * 100).toFixed(0) + "%" : "—", "text-align:right")}${td(delta(v, catAnt[n] || 0), "text-align:right")}${td(delta(v, catAnio[n] || 0), "text-align:right")}${td(fmt(prom12[n] || 0), `text-align:right;color:${c.sub}`)}</tr>`).join("")}
+  </table>` : `<div style="color:${c.sub};font-size:13px">Sin gastos este mes</div>`;
+
+  // ---- 4. Presupuesto vs real ----
+  const bud = (s.budgets || {})[mes] || {};
+  const tope = (n) => (+bud[n] || 0) || ((+bud[n + "__pct"] || 0) / 100) * ((s.profile && s.profile.income) || 0);
+  const presu = s.cats.map((x) => ({ n: x.name, tope: tope(x.name), real: byCat[x.name] || 0 })).filter((x) => x.tope > 0).sort((a, b) => (b.real / b.tope) - (a.real / a.tope));
+  const presuHTML = presu.length ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr>${th("Categoría", "left")}${th("Presupuesto")}${th("Real")}${th("Ejecución", "left")}</tr>
+    ${presu.map((x) => { const p = (x.real / x.tope) * 100, col = p > 110 ? c.red : p > 100 ? "#c08a1a" : c.green;
+      return `<tr>${td(escapeHtml(x.n))}${td(fmt(x.tope), "text-align:right")}${td(`<b>${fmt(x.real)}</b>`, "text-align:right")}${td(`<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:7px;background:#eee;border-radius:4px;overflow:hidden"><div style="width:${Math.min(100, p)}%;height:100%;background:${col}"></div></div><span style="color:${col};font-weight:600;min-width:38px;text-align:right">${p.toFixed(0)}%</span></div>`, "width:38%")}</tr>`; }).join("")}
+    <tr>${td("<b>Total</b>")}${td(fmt(sum(presu, (x) => x.tope)), "text-align:right")}${td(`<b>${fmt(sum(presu, (x) => x.real))}</b>`, "text-align:right")}${td("")}</tr>
+  </table>` : "";
+
+  // ---- 5. Mapa de calor por día + gasto por día de la semana ----
+  const [Y, M] = mes.split("-").map(Number), dim = new Date(Y, M, 0).getDate(), firstDow = (new Date(Y, M - 1, 1).getDay() + 6) % 7;
+  const byDay = {}; exMes.forEach((t) => { const d = +(t.date || "").slice(8, 10); if (d) byDay[d] = (byDay[d] || 0) + (+t.amount || 0); });
+  const maxDay = Math.max(1, ...Object.values(byDay));
+  const celdas = [];
+  for (let i = 0; i < firstDow; i++) celdas.push(`<div></div>`);
+  for (let d = 1; d <= dim; d++) {
+    const v = byDay[d] || 0, a = v ? (0.12 + 0.7 * (v / maxDay)).toFixed(2) : 0;
+    celdas.push(`<div style="border:1px solid ${c.line};border-radius:5px;min-height:34px;padding:2px 4px;background:rgba(154,106,26,${a});font-size:9.5px;display:flex;flex-direction:column;justify-content:space-between"><span style="color:${c.sub}">${d}</span>${v ? `<b style="color:${c.ink}">${fmtShortR(v)}</b>` : ""}</div>`);
+  }
+  const dowNom = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"], dow = [0, 0, 0, 0, 0, 0, 0];
+  Object.entries(byDay).forEach(([d, v]) => { dow[(new Date(Y, M - 1, +d).getDay() + 6) % 7] += v; });
+  const maxDow = Math.max(1, ...dow);
+  const diaTop = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
+  const calHTML = `<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">
+    <div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">${["L", "M", "M", "J", "V", "S", "D"].map((x) => `<div style="text-align:center;font-size:10px;color:${c.sub}">${x}</div>`).join("")}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${celdas.join("")}</div></div>
+    <div style="font-size:11.5px">
+      <div style="color:${c.sub};margin-bottom:4px">Gasto por día de la semana</div>
+      ${dow.map((v, i) => `<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><span style="width:28px;color:${c.sub}">${dowNom[i]}</span><div style="flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden"><div style="width:${(v / maxDow) * 100}%;height:100%;background:${c.gold}"></div></div><span style="min-width:58px;text-align:right">${fmtShortR(v)}</span></div>`).join("")}
+      <div style="margin-top:8px;color:${c.sub}">${Object.keys(byDay).length} de ${dim} días con gasto${diaTop ? ` · día de mayor gasto: <b style="color:${c.ink}">${diaTop[0]} (${fmt(diaTop[1])})</b>` : ""}</div>
+    </div></div>`;
+
+  // ---- 6. Gastos más grandes y más repetidos ----
+  const grandes = [...exMes].sort((a, b) => (+b.amount || 0) - (+a.amount || 0)).slice(0, 6);
+  const grupos = {}; exMes.forEach((t) => { const d = (t.desc || "").trim(); if (!d) return; const g = grupos[d] || (grupos[d] = { d, n: 0, tot: 0 }); g.n++; g.tot += +t.amount || 0; });
+  const repetidos = Object.values(grupos).filter((g) => g.n >= 2).sort((a, b) => b.tot - a.tot).slice(0, 6);
+  const listaHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:12px">
+    <div><div style="color:${c.sub};margin-bottom:4px">Más grandes</div><table style="width:100%;border-collapse:collapse">${grandes.map((t) => `<tr>${td(`${escapeHtml(t.desc || "")}<div style="font-size:10px;color:${c.sub}">${escapeHtml(t.date || "")} · ${escapeHtml(t.cat || "")}</div>`)}${td(`<b>${fmt(t.amount)}</b>`, "text-align:right;vertical-align:top")}</tr>`).join("") || td("—")}</table></div>
+    <div><div style="color:${c.sub};margin-bottom:4px">Más repetidos</div><table style="width:100%;border-collapse:collapse">${repetidos.map((g) => `<tr>${td(`${escapeHtml(g.d)}<div style="font-size:10px;color:${c.sub}">${g.n} veces · prom ${fmt(g.tot / g.n)}</div>`)}${td(`<b>${fmt(g.tot)}</b>`, "text-align:right;vertical-align:top")}</tr>`).join("") || td("—")}</table></div></div>`;
+
+  // ---- 7. Ahorro real y patrimonio ----
+  const movs = liq.flatMap((a) => a.movs || []);
+  const rend = sum(movs.filter((m) => m.kind === "rendimiento" && ym(m.date) === mes), (m) => m.amount);
+  const snaps = (s.snapshots || []).slice().sort((a, b) => a.ym.localeCompare(b.ym));
+  const snapM = snaps.find((x) => x.ym === mes), snapA = snaps.find((x) => x.ym === mAnt);
+  const ahorroHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    ${row("Sobrante del mes (ingresos − gastos)", fmt(bal), bal >= 0 ? c.green : c.red)}
+    ${abono != null ? row("Abonado a cuentas (aportes netos)", fmt(abono), c.green) : ""}
+    ${rend ? row("Rendimientos de las cuentas", fmt(rend), c.green) : ""}
+    ${snapM ? row(`Patrimonio al cierre de ${monthLabel(mes)}`, fmt(snapM.patrimonio), c.gold) : ""}
+    ${snapM && snapA ? row(`Cambio vs cierre de ${monthLabel(mAnt)}`, `${snapM.patrimonio - snapA.patrimonio >= 0 ? "+" : "−"}${fmt(Math.abs(snapM.patrimonio - snapA.patrimonio))}`, snapM.patrimonio >= snapA.patrimonio ? c.green : c.red) : ""}
+  </table>`;
+
+  return `<div style="max-width:760px;margin:0 auto;padding:28px 30px;font-family:Georgia,'Times New Roman',serif;color:${c.ink};background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid ${c.gold};padding-bottom:10px;margin-bottom:18px">
       <div><div style="font-size:22px;font-weight:700">Finanzas JDCH</div>
         <div style="color:${c.sub};font-size:13px">Reporte de ${escapeHtml(monthLabel(mes))}</div></div>
@@ -596,11 +702,11 @@ export function buildReportHTML(s, mes, analisis) {
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
-      ${[["Ingresos", fmt(ing), c.green], ["Gastos", fmt(gas), c.red], ["Balance", fmt(bal), bal >= 0 ? c.green : c.red], ["Tasa ahorro", (ing ? tasa.toFixed(0) : "—") + "%", c.ink]]
-        .map(([k, v, col]) => `<div style="border:1px solid ${c.line};border-radius:8px;padding:10px"><div style="font-size:11px;color:${c.sub};text-transform:uppercase;letter-spacing:.04em">${k}</div><div style="font-size:17px;font-weight:700;color:${col}">${v}</div></div>`).join("")}
+      ${[["Ingresos", fmt(ing), c.green, delta(ing, RA.ing, "sube")], ["Gastos", fmt(gas), c.red, delta(gas, RA.gas, "baja")], ["Balance", fmt(bal), bal >= 0 ? c.green : c.red, delta(bal, RA.bal, "sube")], ["Tasa ahorro", (ing ? tasa.toFixed(0) : "—") + "%", c.ink, ""]]
+        .map(([k, v, col, d]) => `<div style="border:1px solid ${c.line};border-radius:8px;padding:10px"><div style="font-size:11px;color:${c.sub};text-transform:uppercase;letter-spacing:.04em">${k}</div><div style="font-size:17px;font-weight:700;color:${col}">${v}</div>${d && RA.hay ? `<div style="font-size:10.5px;margin-top:2px">${d} <span style="color:${c.sub}">vs mes ant.</span></div>` : ""}</div>`).join("")}
     </div>
 
-    ${analisis ? `<div style="border:1px solid ${c.gold};border-radius:8px;padding:12px 14px;margin-bottom:20px">
+    ${analisis ? `<div style="border:1px solid ${c.gold};border-radius:8px;padding:12px 14px;margin-bottom:20px;break-inside:avoid;page-break-inside:avoid">
       <h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">✨ Análisis del mes</h3>
       ${analisis.resumen ? `<p style="font-size:13px;margin:0 0 8px;line-height:1.45">${escapeHtml(analisis.resumen)}</p>` : ""}
       ${analisis.hallazgos.map((h) => `<div style="font-size:12.5px;margin:6px 0;line-height:1.4"><b>${h.tipo === "bien" ? "✅" : h.tipo === "alerta" ? "⚠️" : "ℹ️"} ${escapeHtml(h.titulo)}.</b> ${escapeHtml(h.detalle || "")}</div>`).join("")}
@@ -608,25 +714,26 @@ export function buildReportHTML(s, mes, analisis) {
       <div style="font-size:10.5px;color:${c.sub};margin-top:8px">Redactado con IA (${escapeHtml(analisis.model)}) a partir de las cifras calculadas por la app. Revísalo; no es asesoría financiera.</div>
     </div>` : ""}
 
-    <h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">Regla 50/30/20</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
-      ${["Necesidad", "Deseo", "Deuda"].map((bk) => { const pct = gas ? (buck[bk] / gas) * 100 : 0; return row(`${lbl503[bk]} (ref ${RULE_503020[bk]}%)`, `${fmt(buck[bk])} · ${pct.toFixed(0)}%`); }).join("")}
-    </table>
-
-    <h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">Top categorías del mes</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
-      ${topCats.length ? topCats.map(([n, v]) => row(n, `${fmt(v)} · ${gas ? ((v / gas) * 100).toFixed(0) : 0}%`)).join("") : `<tr><td style="padding:6px 0;color:${c.sub}">Sin gastos este mes</td></tr>`}
-    </table>
-
-    ${accts.length ? `<h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">Cuentas (saldo actual)</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
+    ${sec("Comparativo", compHTML)}
+    ${sec("Flujo del dinero", `<div style="max-width:520px;margin:0 auto">${sankeyHTML}</div>`)}
+    ${sec("Gasto por categoría", catsHTML)}
+    ${presuHTML ? sec("Presupuesto vs real", presuHTML) : ""}
+    ${sec("Gasto por día", calHTML)}
+    ${sec("Gastos destacados", listaHTML)}
+    ${sec("Regla 50/30/20", `<table style="width:100%;border-collapse:collapse;font-size:13px">
+      ${["Necesidad", "Deseo", "Deuda"].map((bk) => { const p = gas ? (buck[bk] / gas) * 100 : 0; return row(`${lbl503[bk]} (ref ${RULE_503020[bk]}%)`, `${fmt(buck[bk])} · ${p.toFixed(0)}%`); }).join("")}
+    </table><div style="font-size:11px;color:${c.sub};margin-top:4px">La regla se calcula sobre los gastos; el ahorro (aportes a cuentas) se muestra abajo.</div>`)}
+    ${sec("Ahorro y patrimonio", ahorroHTML)}
+    ${accts.length ? sec("Cuentas (saldo actual)", `<table style="width:100%;border-collapse:collapse;font-size:13px">
       ${accts.map((a) => row(`${a.name} · ${a.type}`, fmt(a.balance))).join("")}
       ${row("Total disponible", fmt(disp), c.gold)}
-    </table>` : ""}
+    </table>`) : ""}
 
     <div style="margin-top:24px;color:${c.sub};font-size:11px;border-top:1px solid ${c.line};padding-top:8px">Generado por Finanzas JDCH · guía general, no asesoría financiera.</div>
   </div>`;
 }
+// formato corto para celdas pequeñas ($1,2M / $350k)
+function fmtShortR(n) { n = +n || 0; return Math.abs(n) >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : Math.abs(n) >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n); }
 
 /* ===================== GASTOS RECURRENTES ===================== */
 async function saveRec() {
