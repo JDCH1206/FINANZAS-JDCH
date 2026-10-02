@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v108.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v109.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v108). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v109). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,12 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v108**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v109**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v109 — Los aportes de fin de mes cuentan para el mes de su salario
+- 📅 Si el salario llega a fin de mes pero se registra el día 1°, el aporte que se hace ese fin de mes sale de **ese** salario. Regla (`fechaAporte`): un aporte hecho en los **últimos 7 días del mes** cuenta para el **mes siguiente** cuando ese mes tiene un ingreso registrado entre el día 1 y el 3. Ej.: el aporte del 28-sep cuenta para octubre.
+- Aplica al Flujo del dinero (Abono a cuentas), a la conciliación por período (la fila de aportes indica qué fechas se movieron) y al corte acumulado (en un corte pasado, ese aporte se trata como posterior al corte).
+- ✏️ "Abonado de más" ya no se llama "adelanto del mes siguiente": se cubrió con saldo que ya tenías. El aviso de faltante ya no supone que falta abonar el mes en curso; apunta a la cuenta de nómina no registrada (y sugiere registrarla en Cuentas para que cuadre).
 
 ### 2026-10-02 · caché v108 — Comparación acumulada al día (igual al Balance del Resumen)
 - 📈 Si el período incluye el mes en curso, "Lo que tienen tus cuentas vs. lo que deberían" se calcula **hasta hoy** con **todos** los registros, de modo que el "Sobrante acumulado" es el mismo número que **Balance (ingresos − gastos)** del Resumen. Deberías tener = ese Balance + rendimientos registrados; se compara contra el saldo disponible de las cuentas.

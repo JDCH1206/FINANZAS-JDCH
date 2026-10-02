@@ -403,7 +403,7 @@ function renderAvanzado(root, tabs) {
   const abono = aportesNetos(s, inPer);
   // si los aportes se empezaron a registrar a mitad del período, lo anterior sale como "Sin abonar"
   const primerAporte = (s.accounts || []).flatMap((a) => a.movs || []).filter((m) => m.kind !== "rendimiento" && m.kind !== "transfer")
-    .map((m) => (m.date || "").slice(0, 7)).filter(Boolean).sort()[0];
+    .map((m) => (fechaAporte(s, m.date) || "").slice(0, 7)).filter(Boolean).sort()[0];
   const notaAbono = abono != null && primerAporte && primerAporte > (period.length === 4 ? period + "-01" : period)
     ? `<p class="tiny muted">ℹ Los abonos a cuentas se registran desde <b>${escapeHtml(monthLabel(primerAporte))}</b>; lo anterior ya está dentro del saldo inicial de tus cuentas. Abajo verás cuánto crecieron vs. cuánto deberían tener.</p>` : "";
   const antesDeRegistrar = abono != null && primerAporte && primerAporte > (period.length === 4 ? period + "-01" : period);
@@ -437,12 +437,28 @@ function renderAvanzado(root, tabs) {
   const mo = root.querySelector("#adv-month"); if (mo) mo.onchange = (e) => { advMonth = e.target.value; renderDashboard(root); };
 }
 
+const fmtDate2 = (d) => { const [, m, day] = (d || "").split("-"); return d ? `${+day}/${+m}` : ""; };
+
+// Mes al que pertenece un aporte: si se hizo en los últimos 7 días del mes y el mes siguiente
+// tiene un ingreso registrado entre el día 1 y el 3 (salario que llega a fin de mes pero se
+// registra el 1°), el aporte sale de ese salario → cuenta para el mes siguiente.
+function fechaAporte(s, d) {
+  if (!d) return d;
+  const [y, m, day] = d.split("-").map(Number);
+  const finMes = new Date(y, m, 0).getDate();
+  if (day < finMes - 6) return d;
+  const sig = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+  const hayIngreso = (s.incomes || []).some((t) => (t.date || "").startsWith(sig) && +(t.date || "").slice(8, 10) <= 3);
+  return hayIngreso ? sig + "-01" : d;
+}
+
 // Aportes netos a cuentas (sumas/aportes − retiros) de los movimientos que cumplen `pred`;
 // sin rendimientos, transferencias entre cuentas ni cuentas "Por cobrar".
 // Devuelve null si nunca se ha registrado un aporte hasta ese período (no hay con qué medir).
 function aportesNetos(s, pred) {
   const movs = (s.accounts || []).filter((a) => a.type !== "Por cobrar")
-    .flatMap((a) => a.movs || []).filter((m) => m.kind !== "rendimiento" && m.kind !== "transfer");
+    .flatMap((a) => a.movs || []).filter((m) => m.kind !== "rendimiento" && m.kind !== "transfer")
+    .map((m) => ({ ...m, date: fechaAporte(s, m.date) }));
   const del = movs.filter((m) => pred(m));
   if (!del.length) return null;
   return sum(del, (m) => +m.amount || 0);
@@ -452,7 +468,9 @@ function aportesNetos(s, pred) {
 // llegó a las cuentas o se usó para pagar deudas? Compara solo desde que hay registros de cuentas.
 function buildConciliacion(s, txs, period, periodLbl) {
   const accts = s.accounts || [], debts = s.debts || [];
-  const movs = accts.flatMap((a) => (a.movs || []).map((m) => ({ ...m, acct: a })));
+  // los aportes se ubican en el mes del salario del que salieron (ver fechaAporte)
+  const movs = accts.flatMap((a) => (a.movs || []).map((m) => ({ ...m, acct: a, real: m.date,
+    date: m.kind === "rendimiento" || m.kind === "transfer" ? m.date : fechaAporte(s, m.date) })));
   const abonos = debts.flatMap((d) => (d.abonos || []).map((x) => ({ ...x, debt: d })));
   const fechas = [...movs.filter((m) => m.kind !== "rendimiento").map((m) => m.date), ...abonos.map((x) => x.date)].filter(Boolean).sort();
   const head = `<div class="card mb-3"><div class="card-title">🔎 ¿Tu sobrante llegó a las cuentas?</div>`;
@@ -481,6 +499,7 @@ function buildConciliacion(s, txs, period, periodLbl) {
   const destino = aportes + pagosDeuda - nuevaDeuda - cobros;
   const dif = ahorro - destino;
   const tol = Math.max(50000, Math.abs(ing) * 0.02);
+  const movidos = mv.filter((m) => m.date !== m.real && m.kind !== "rendimiento");
   const money = (v) => (v < 0 ? "−" : "") + fmt(Math.abs(v));
   const hayDeudas = debts.some((d) => (d.abonos || []).length);
   const row = (lbl, val, sub = "", strong = false, col = "") => `<div class="row between" style="padding:7px 0;border-top:1px solid var(--line)">
@@ -490,17 +509,17 @@ function buildConciliacion(s, txs, period, periodLbl) {
   if (mesEnCurso) veredicto = `<p class="small muted">Revisa esta comparación al cerrar el mes, cuando ya hayas hecho tus aportes.</p>`;
   else if (Math.abs(dif) <= tol) veredicto = `<p class="small" style="color:var(--green)">✅ <b>Cuadra.</b> Lo que te sobró según tus registros es prácticamente lo que llegó a tus cuentas${pagosDeuda ? " o pagó deudas" : ""}.</p>`;
   else if (dif > 0) veredicto = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(dif)} por abonar.</b> Según tus registros te sobró más de lo que llegó a tus cuentas${hayDeudas ? " o a pagar deudas" : ""}. Puede estar en efectivo o en una cuenta que no registras, o haber gastos sin anotar.</p>`;
-  else veredicto = `<p class="small muted">↪ <b>Abonaste ${fmt(-dif)} más</b> de lo que te sobró: es un adelanto del mes siguiente.${esAnual ? "" : " Al ver el año completo se compensa."}</p>`;
+  else veredicto = `<p class="small muted">↪ <b>Abonaste ${fmt(-dif)} más</b> de lo que te sobró en el período: se cubrió con saldo que ya tenías (lo que quedaba de meses anteriores en tu cuenta de nómina o efectivo).</p>`;
   return `${head}
     <p class="tiny muted" style="margin:-4px 0 6px">${escapeHtml(periodLbl)}${recortado ? ` · comparando desde <b>${escapeHtml(monthLabel(desde))}</b>, cuando empezaste a registrar aportes` : ""}${sinMesActual ? ` · sin ${escapeHtml(monthLabel(cm))} (mes en curso)` : ""}.</p>
     ${mesEnCurso ? `<p class="tiny" style="color:var(--yel);margin:0 0 6px">⏳ Este mes aún no termina: es normal que el ahorro todavía no aparezca en las cuentas.</p>` : ""}
     ${row("Sobrante según tus registros", ahorro, `Ingresos ${fmt(ing)} − Gastos ${fmt(gas)}`, true)}
-    ${row("Aportes netos a cuentas", aportes, "Sumas/aportes menos retiros · sin rendimientos ni transferencias entre cuentas")}
+    ${row("Aportes netos a cuentas", aportes, "Sumas/aportes menos retiros · sin rendimientos ni transferencias entre cuentas" + (movidos.length ? ` · incluye ${movidos.map((m) => fmtDate2(m.real)).join(", ")} (fin de mes → salario de este mes)` : ""))}
     ${pagosDeuda ? row("+ Pagos a deudas", pagosDeuda, "Abonos y pagos de tarjeta: tu ahorro se usó para bajar deuda") : ""}
     ${nuevaDeuda ? row("− Compras a crédito", -nuevaDeuda, "Consumos de tarjeta/préstamos: gastos que no salieron de tu bolsillo aún") : ""}
     ${cobros ? row("− Pagos que te hicieron", -cobros, "Dinero que te devolvieron (no es ingreso)") : ""}
     ${row("= Lo que sí se abonó", destino, "", true)}
-    ${row("Diferencia", dif, dif > 0 ? "Sobrante sin abonar" : dif < 0 ? "Adelanto del mes siguiente" : "", true, mesEnCurso || dif < 0 || Math.abs(dif) <= tol ? "" : "var(--yel)")}
+    ${row("Diferencia", dif, dif > 0 ? "Sobrante sin abonar" : dif < 0 ? "Abonado de más" : "", true, mesEnCurso || dif < 0 || Math.abs(dif) <= tol ? "" : "var(--yel)")}
     ${veredicto}
     ${rend ? `<p class="tiny muted">Aparte, tus cuentas generaron ${fmt(rend)} en rendimientos (no se cuentan arriba porque no vienen de tus ingresos).</p>` : ""}
     ${acumulado(s, txs, period, cm, sinMesActual, mesEnCurso, row, tol)}
@@ -527,14 +546,17 @@ function acumulado(s, txs, period, cm, sinMesActual, mesEnCurso, row, tol) {
   const sobranteAcum = sum((s.incomes || []).filter(incl), (t) => t.amount) - sum(txs.filter(incl), (t) => t.amount);
   const rendAcum = sum(movs.filter((m) => m.kind === "rendimiento" && hasta(m.date)), (m) => +m.amount || 0);
   const deberia = sobranteAcum + rendAcum;
-  const tienes = sum(accts, (a) => +a.balance || 0) - sum(movs.filter((m) => m.date > corte), (m) => +m.amount || 0);
+  // se descuentan los movimientos posteriores al corte; un aporte de fin de mes que sale del salario
+  // del mes siguiente (fechaAporte) también se considera posterior
+  const fechaMov = (m) => (m.kind === "rendimiento" || m.kind === "transfer" ? m.date : fechaAporte(s, m.date));
+  const tienes = sum(accts, (a) => +a.balance || 0) - sum(movs.filter((m) => fechaMov(m) > corte), (m) => +m.amount || 0);
   const dif = tienes - deberia;
   const inicio = [...(s.incomes || []), ...txs].map((t) => t.date).filter(Boolean).sort()[0] || "";
   const corteLbl = alDia ? "hoy" : monthLabel(corte.slice(0, 7));
   let msg;
   if (Math.abs(dif) <= tol) msg = `<p class="small" style="color:var(--green)">✅ <b>Cuadra.</b> Tus cuentas tienen lo que explican tus registros.</p>`;
   else if (dif > 0) msg = `<p class="small muted">Tus cuentas tienen <b>${fmt(dif)} más</b> de lo que explican tus registros: rendimientos de antes de registrarlos en la app o dinero que ya tenías antes de ${escapeHtml(monthLabel(inicio.slice(0, 7)))}.</p>`;
-  else msg = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(-dif)}.</b> Según tus registros deberías tener más en tus cuentas${alDia ? ` (incluye lo que te ha sobrado en ${escapeHtml(monthLabel(cm))}, que quizá aún no abonas)` : ""}. El resto puede ser efectivo, una cuenta que no registras o gastos sin anotar.</p>`;
+  else msg = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(-dif)}.</b> Según tus registros deberías tener más en tus cuentas. Lo más probable: lo que queda del salario en tu cuenta de nómina, que no está registrada en Cuentas. También puede ser efectivo o gastos sin anotar. Si registras esa cuenta en <b>Cuentas</b>, esta comparación cuadrará.</p>`;
   return `<div class="card-title" style="margin-top:14px">📈 Lo que tienen tus cuentas vs. lo que deberían</div>
     <p class="tiny muted" style="margin:-4px 0 6px">Acumulado de todo tu historial hasta ${escapeHtml(corteLbl)}. El saldo de las cuentas incluye lo ahorrado antes de registrar aportes, por eso se compara contra todo el sobrante.</p>
     ${row("Sobrante acumulado", sobranteAcum, `Ingresos − Gastos desde ${escapeHtml(monthLabel(inicio.slice(0, 7)))}${alDia ? " (= Balance del Resumen)" : ""}`)}
