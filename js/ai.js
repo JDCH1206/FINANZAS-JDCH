@@ -12,10 +12,11 @@ import { MAINT_CATEGORIES, MAINT_TIPOS } from "./config.js";
 const cdn = (m) => `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-${m}.js`;
 
 // Cadenas por defecto (se pueden cambiar en Ajustes → IA). Los nombres siguen el formato de
-// Google ("gemini-3.8-flash"); si alguno no existe en tu cuenta, se salta solo.
+// Google ("gemini-3.8-flash"); verificados con el proyecto el 2-oct-2026. Si alguno deja de
+// existir, se salta solo.
 export const DEFAULT_CHAINS = {
-  vision: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
-  texto: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash"],
+  vision: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+  texto: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3-flash-preview"],
 };
 export const esLocal = () => /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 
@@ -41,7 +42,7 @@ async function conectar() {
     const { siteKey, proveedor } = aiCfg();
     // en el PC (localhost) se usa el token de depuración de App Check: aparece en la
     // consola del navegador (F12) y se registra una vez en Firebase → App Check
-    if (esLocal()) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    if (esLocal() && !self.FIREBASE_APPCHECK_DEBUG_TOKEN) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
     if (siteKey || esLocal()) {
       const Prov = proveedor === "v3" ? ac.ReCaptchaV3Provider : ac.ReCaptchaEnterpriseProvider;
       ac.initializeAppCheck(app, { provider: new Prov(siteKey || "token-de-depuracion-local"), isTokenAutoRefreshEnabled: true });
@@ -85,7 +86,7 @@ const conTiempo = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout
  * @param {(S)=>object} [esquema]  constructor de esquema con los helpers Schema del SDK
  * @returns {{data:any, model:string, intentos:Array}}
  */
-export async function generar(tarea, partes, esquema) {
+export async function generar(tarea, partes, esquema, { pensarPoco = false } = {}) {
   const { ai: inst, aiMod: m } = await conectar();
   const cadena = aiCfg().chains[tarea] || DEFAULT_CHAINS[tarea];
   const uso = usoHoy(), intentos = [];
@@ -93,9 +94,17 @@ export async function generar(tarea, partes, esquema) {
     const u = uso[model] || {};
     if (u.agotado || u.noExiste) { intentos.push({ model, error: u.agotado ? "cupo agotado hoy" : "no disponible" }); continue; }
     try {
-      const generationConfig = esquema ? { responseMimeType: "application/json", responseSchema: esquema(m.Schema) } : undefined;
-      const gm = m.getGenerativeModel(inst, { model, generationConfig });
-      const res = await conTiempo(gm.generateContent(partes), 90000);
+      // leer documentos no necesita razonamiento largo: nivel BAJO = respuestas más rápidas.
+      // Si el modelo no acepta esa opción, se reintenta el mismo modelo sin ella.
+      const pedir = async (conPensar) => {
+        const generationConfig = { ...(esquema ? { responseMimeType: "application/json", responseSchema: esquema(m.Schema) } : {}),
+          ...(conPensar ? { thinkingConfig: { thinkingLevel: "LOW" } } : {}) };
+        const gm = m.getGenerativeModel(inst, { model, generationConfig });
+        return conTiempo(gm.generateContent(partes), 90000);
+      };
+      let res;
+      try { res = await pedir(pensarPoco); }
+      catch (e1) { if (pensarPoco && /thinking/i.test(String(e1 && e1.message))) res = await pedir(false); else throw e1; }
       const txt = res.response.text();
       marcar(model, (x) => ({ n: (x.n || 0) + 1 }));
       return { data: esquema ? JSON.parse(txt) : txt, model, intentos };
@@ -171,13 +180,13 @@ Si algo no se lee, déjalo vacío o en 0. No inventes productos.`;
         categoria: S.enumString({ enum: cats.map((c) => c.name) }), subcategoria: S.string(),
       } }) }),
     },
-  }));
+  }), { pensarPoco: true });
   const d = r.data || {};
   let items = (d.items || []).filter((x) => x && x.producto && +x.valor > 0)
     .map((x) => ({ producto: String(x.producto).trim(), cantidad: +x.cantidad > 0 ? +x.cantidad : 1, valor: Math.round(+x.valor), categoria: x.categoria, subcategoria: x.subcategoria }));
   const ajuste = (+d.ivaAparte || 0) - (+d.descuentoAparte || 0);
   if (ajuste && items.length) { const v = repartir(items.map((x) => x.valor), ajuste); items = items.map((x, i) => ({ ...x, valor: v[i] })); }
-  return { tienda: (d.tienda || "").trim(), fecha: fechaOk(d.fecha), total: Math.round(+d.total || 0), items, ivaRepartido: Math.round(+d.ivaAparte || 0), descRepartido: Math.round(+d.descuentoAparte || 0), model: r.model };
+  return { tienda: (d.tienda || "").trim(), fecha: fechaOk(d.fecha), total: Math.round(+d.total || 0), items, ivaRepartido: Math.round(+d.ivaAparte || 0), descRepartido: Math.round(+d.descuentoAparte || 0), model: r.model, intentos: r.intentos };
 }
 
 /* ---------- Leer factura del taller (orden de trabajo) ---------- */
@@ -196,7 +205,7 @@ ${IVA_TXT}`;
         referencia: S.string(), cantidad: S.number(), valor: S.number(),
       } }) }),
     },
-  }));
+  }), { pensarPoco: true });
   const d = r.data || {};
   let lineas = (d.lineas || []).filter((x) => x && +x.valor > 0).map((x) => {
     const clase = MAINT_CATEGORIES.includes(x.clasificacion) ? x.clasificacion : "Taller";
@@ -208,7 +217,7 @@ ${IVA_TXT}`;
   });
   const ajuste = (+d.ivaAparte || 0) - (+d.descuentoAparte || 0);
   if (ajuste && lineas.length) { const v = repartir(lineas.map((x) => x.valor), ajuste); lineas = lineas.map((x, i) => ({ ...x, valor: v[i] })); }
-  return { taller: (d.taller || "").trim(), fecha: fechaOk(d.fecha), total: Math.round(+d.total || 0), lineas, ivaRepartido: Math.round(+d.ivaAparte || 0), descRepartido: Math.round(+d.descuentoAparte || 0), model: r.model };
+  return { taller: (d.taller || "").trim(), fecha: fechaOk(d.fecha), total: Math.round(+d.total || 0), lineas, ivaRepartido: Math.round(+d.ivaAparte || 0), descRepartido: Math.round(+d.descuentoAparte || 0), model: r.model, intentos: r.intentos };
 }
 
 // prueba rápida de conexión (Ajustes → IA)
