@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v111.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v112.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v111). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v112). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v111**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v112**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v112 — Seguimientos por producto + unificar escritura
+- 🎯 Nueva tarjeta **Seguimientos** en **Tablero → Avanzado** (módulo `js/views/seguimientos.js`). Eliges productos o gastos (Coca cola, Gaseosa, Cerveza, Café…) con sus **palabras clave**; la app los busca en la descripción de **todo el historial** (sin importar mayúsculas, tildes ni plurales), así que no hay que cambiar la forma de registrar. Por cada uno muestra: veces, frecuencia y gasto por mes, última compra, **Exacto** (gastos que son solo ese producto, o una parte propia de un gasto dividido) vs **Compartido** (descripciones combinadas como "Empanadas y gaseosa": cuenta la vez, pero el monto incluye otras cosas), **precio típico por año** (mediana de las compras exactas) y barras de los últimos 12 meses. Se guardan en `profile.seguimientos` (sincronizado). Incluye sugeridos.
+- ✏️ **Unificar escritura** (menú ⋯ de cada seguimiento): reescribe en los gastos todas las variantes del nombre ("coca cola", "Coca Cola", "Cocacola", "coca-cola" → "Coca cola"), cambiando solo esa palabra dentro de la descripción, con vista previa. Opcionalmente mueve a una subcategoría elegida los gastos que son **exactamente** ese producto (p. ej. Coca cola → Alimentación › Snacks y bebidas).
 
 ### 2026-10-02 · caché v111 — Dividir gasto con subcategoría + total por etiqueta/filtro
 - ➗ **Dividir gasto**: cada parte ahora tiene **categoría › subcategoría** (antes la subcategoría se ponía sola en la primera de la lista, p. ej. aseo quedaba en "Ropa y calzado"), **monto** y **detalle opcional** (se agrega a la descripción: "Compra Éxito · jabón, shampoo", así se ve y se busca). Nuevo campo de **etiquetas para todo el recibo** (p. ej. `exito`), que se aplica a todas las partes.

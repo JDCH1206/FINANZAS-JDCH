@@ -5,6 +5,7 @@ import { RULE_503020, PALETTE } from "../config.js";
 import { fmt, fmtShort, ym, monthLabel, sum, curMonth, todayISO, escapeHtml } from "../utils.js";
 import { donut, lineTrend, lineTrendPct, categoryBars, groupedBars } from "../components/charts.js";
 import { openModal } from "../components/modals.js";
+import { seguimientosCard, wireSeguimientos } from "./seguimientos.js";
 
 // desplaza una clave "YYYY-MM" en delta meses
 function ymAdd(key, delta) {
@@ -449,6 +450,7 @@ function renderAvanzado(root, tabs) {
       ${hormExcl.length ? `<details class="mt-2"><summary class="tiny muted" style="cursor:pointer">Excluidos a mano (${hormExcl.length})</summary>
         ${hormExcl.map((G) => `<div class="row between small" style="padding:6px 0;border-top:1px solid var(--line)"><span>${escapeHtml(name(G))}</span><button class="btn btn-ghost btn-sm" data-hr="${escapeHtml(G.k)}">Restaurar</button></div>`).join("")}</details>` : ""}
     </div>
+    ${seguimientosCard(s)}
     <div class="card mb-3">
       <div class="card-title">🔁 Posibles gastos fijos / recurrentes</div>
       <p class="tiny muted" style="margin:-4px 0 8px">Aparecen casi todos los meses. Puedes volverlos recurrentes en <b>Ajustes → Gastos recurrentes</b> para que la app te los recuerde.</p>
@@ -456,6 +458,7 @@ function renderAvanzado(root, tabs) {
     </div>`;
 
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
+  wireSeguimientos(root, () => renderDashboard(root));
   // excluir / restaurar ítems de la lista de gasto hormiga (se guarda en el perfil)
   const setExcl = async (fn) => {
     const st = getState();
