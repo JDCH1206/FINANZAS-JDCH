@@ -8,7 +8,7 @@ import { uid, normDate, escapeHtml, fmt, ym, monthLabel, curMonth, sum, todayISO
 import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview } from "../components/modals.js";
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 import { gruposVariantes, openUnificarDescripciones } from "./unificar.js";
-import { aiCfg, DEFAULT_CHAINS, usoHoy, reiniciarUso, probarConexion, esLocal } from "../ai.js";
+import { aiCfg, aiReady, DEFAULT_CHAINS, usoHoy, reiniciarUso, probarConexion, esLocal, analizarMes } from "../ai.js";
 
 export function renderSettings(root, onSignOut) {
   const s = getState();
@@ -54,7 +54,7 @@ export function renderSettings(root, onSignOut) {
     ${isCloud() ? (() => { const c = aiCfg(); const uso = usoHoy(); const usados = Object.entries(uso);
       return `<div class="card mb-3">
       <div class="card-title">🤖 Inteligencia artificial (Gemini)</div>
-      <p class="small muted mb-2">Lee <b>fotos de recibos</b> (Compra con varios productos) y <b>facturas del taller</b> (orden de trabajo) y llena los formularios para que los revises. Usa Firebase AI Logic (plan gratis); la clave de Gemini la guarda Firebase, no la app.</p>
+      <p class="small muted mb-2">Lee <b>fotos de recibos</b> (Compra con varios productos) y <b>facturas del taller</b> (orden de trabajo) y llena los formularios para que los revises. También agrega un <b>análisis del mes</b> al reporte PDF. Usa Firebase AI Logic (plan gratis); la clave de Gemini la guarda Firebase, no la app.</p>
       <label class="row gap-2 small mb-2" style="align-items:center"><input type="checkbox" id="ai-on" ${c.enabled ? "checked" : ""}> <b>Activar IA</b></label>
       <div class="field"><label class="label">App Check: proveedor</label><select id="ai-prov" class="input">
         <option value="enterprise" ${c.proveedor === "enterprise" ? "selected" : ""}>Fraud Defense (reCAPTCHA Enterprise) — recomendado</option>
@@ -64,6 +64,7 @@ export function renderSettings(root, onSignOut) {
       <details class="mb-2"><summary class="tiny muted" style="cursor:pointer">Modelos (cadena: si uno se agota, salta al siguiente)</summary>
         <div class="field mt-2"><label class="label">Fotos (recibos y facturas)</label><input id="ai-ch-vision" class="input" value="${escapeHtml(c.chains.vision.join(", "))}"></div>
         <div class="field"><label class="label">Texto</label><input id="ai-ch-texto" class="input" value="${escapeHtml(c.chains.texto.join(", "))}"></div>
+        <div class="field"><label class="label">Análisis (reporte mensual)</label><input id="ai-ch-analisis" class="input" value="${escapeHtml(c.chains.analisis.join(", "))}"></div>
         <button id="ai-ch-reset" class="btn btn-ghost btn-sm">Restaurar modelos por defecto</button></details>
       <div class="row gap-2 wrap"><button id="ai-save" class="btn btn-primary btn-sm">Guardar</button><button id="ai-test" class="btn btn-ghost btn-sm">🔌 Probar conexión</button></div>
       <div id="ai-test-res" class="tiny mt-2"></div>
@@ -247,14 +248,14 @@ export function renderSettings(root, onSignOut) {
     const guardarAI = async (extra = {}) => {
       const st = getState();
       const ai = { enabled: root.querySelector("#ai-on").checked, siteKey: root.querySelector("#ai-key").value.trim(), proveedor: root.querySelector("#ai-prov").value,
-        chains: { vision: leerCadena("#ai-ch-vision"), texto: leerCadena("#ai-ch-texto") }, ...extra };
+        chains: { vision: leerCadena("#ai-ch-vision"), texto: leerCadena("#ai-ch-texto"), analisis: leerCadena("#ai-ch-analisis") }, ...extra };
       const profile = { ...st.profile, ai };
       setState({ profile });
       await saveConfig(st.user.uid, { profile, cats: st.cats, budgets: st.budgets });
       forcePersistLocal(st.user.uid);
     };
     submitOnce(aiSave, async () => { await guardarAI(); toast("IA: ajustes guardados"); renderSettings(root, onSignOut); });
-    root.querySelector("#ai-ch-reset").onclick = () => { root.querySelector("#ai-ch-vision").value = DEFAULT_CHAINS.vision.join(", "); root.querySelector("#ai-ch-texto").value = DEFAULT_CHAINS.texto.join(", "); };
+    root.querySelector("#ai-ch-reset").onclick = () => { root.querySelector("#ai-ch-vision").value = DEFAULT_CHAINS.vision.join(", "); root.querySelector("#ai-ch-texto").value = DEFAULT_CHAINS.texto.join(", "); root.querySelector("#ai-ch-analisis").value = DEFAULT_CHAINS.analisis.join(", "); };
     const ur = root.querySelector("#ai-uso-reset"); if (ur) ur.onclick = (e) => { e.preventDefault(); reiniciarUso(); renderSettings(root, onSignOut); };
     submitOnce(root.querySelector("#ai-test"), async () => {
       const out = root.querySelector("#ai-test-res");
@@ -492,27 +493,81 @@ function openReportModal() {
   openModal("Reporte mensual", `
     <div class="field"><label class="label">Mes</label>
       <select id="rep-mes" class="input">${allMonths.map((m) => `<option value="${m}">${monthLabel(m)}</option>`).join("")}</select></div>
+    ${aiReady() ? `<label class="row gap-2 small mb-2" style="align-items:center"><input type="checkbox" id="rep-ai" checked> ✨ Incluir análisis del mes con IA</label>` : ""}
     <p class="tiny muted mb-3">Se abrirá el diálogo de impresión: elige <b>"Guardar como PDF"</b> como destino para archivarlo o compartirlo.</p>
+    <div id="rep-st" class="tiny mb-2"></div>
     <button id="rep-go" class="btn btn-primary btn-block">Generar</button>`, {
     onMount(b) {
-      b.querySelector("#rep-go").onclick = () => {
+      submitOnce(b.querySelector("#rep-go"), async () => {
         const mes = b.querySelector("#rep-mes").value;
+        const conIA = b.querySelector("#rep-ai") && b.querySelector("#rep-ai").checked;
+        let analisis = null;
+        if (conIA) {
+          const st = b.querySelector("#rep-st");
+          st.textContent = "⏳ Analizando el mes con IA… (puede tardar unos segundos)"; st.style.color = "";
+          try { analisis = await analizarMes(datosMes(getState(), mes)); }
+          catch (e) {
+            st.innerHTML = `⚠ No se pudo generar el análisis: ${escapeHtml(e.message || String(e))}. Vuelve a tocar Generar o desmarca la IA.`;
+            st.style.color = "var(--red)"; return;
+          }
+        }
         closeModal();
-        printReport(mes);
-      };
+        printReport(mes, analisis);
+      }, "Generando…");
     },
   });
 }
 
-function printReport(mes) {
+function printReport(mes, analisis) {
   ensurePrintStyle();
   let pa = document.getElementById("print-area");
   if (!pa) { pa = document.createElement("div"); pa.id = "print-area"; document.body.appendChild(pa); }
-  pa.innerHTML = buildReportHTML(getState(), mes);
+  pa.innerHTML = buildReportHTML(getState(), mes, analisis);
   window.print();
 }
 
-function buildReportHTML(s, mes) {
+// Cifras del mes que se envían a la IA para el análisis (todo calculado aquí, exacto)
+export function datosMes(s, mes) {
+  const prev = (m) => { const [y, mo] = m.split("-").map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`; };
+  const mAnt = prev(mes);
+  const ult12 = []; let k = mes; for (let i = 0; i < 12; i++) { k = prev(k); ult12.push(k); }
+  const gastosDe = (m) => s.txs.filter((t) => ym(t.date) === m), ingDe = (m) => s.incomes.filter((t) => ym(t.date) === m);
+  const porCat = (arr) => { const o = {}; arr.forEach((t) => { o[t.cat] = (o[t.cat] || 0) + (+t.amount || 0); }); return o; };
+  const ex = gastosDe(mes), exAnt = gastosDe(mAnt);
+  const cat = porCat(ex), catAnt = porCat(exAnt);
+  const prom = {}; ult12.forEach((m) => { const o = porCat(gastosDe(m)); Object.entries(o).forEach(([c, v]) => { prom[c] = (prom[c] || 0) + v / 12; }); });
+  const typeMap = Object.fromEntries(s.cats.map((c) => [c.name, c.type]));
+  const b503 = { Necesidad: 0, Deseo: 0, Deuda: 0 }; ex.forEach((t) => { const ty = typeMap[t.cat]; if (ty) b503[ty] += +t.amount || 0; });
+  const grupos = {}; ex.forEach((t) => { const d = (t.desc || "").trim(); const g = grupos[d] || (grupos[d] = { descripcion: d, veces: 0, total: 0 }); g.veces++; g.total += +t.amount || 0; });
+  const ing = sum(ingDe(mes), (t) => t.amount), gas = sum(ex, (t) => t.amount);
+  const r = (n) => Math.round(n || 0);
+  return {
+    mes: monthLabel(mes), ingresos: r(ing), gastos: r(gas), balance: r(ing - gas), tasaAhorroPct: ing ? r(((ing - gas) / ing) * 100) : null,
+    mesAnterior: { mes: monthLabel(mAnt), ingresos: r(sum(ingDe(mAnt), (t) => t.amount)), gastos: r(sum(exAnt, (t) => t.amount)) },
+    promedio12MesesGastos: r(ult12.reduce((a, m) => a + sum(gastosDe(m), (t) => t.amount), 0) / 12),
+    regla503020: { necesidades: r(b503.Necesidad), deseos: r(b503.Deseo), deudaInversion: r(b503.Deuda), referenciaPct: RULE_503020 },
+    porCategoria: Object.keys({ ...cat, ...catAnt }).map((c) => ({ categoria: c, mes: r(cat[c]), mesAnterior: r(catAnt[c]), promedio12m: r(prom[c]) })).sort((a, b) => b.mes - a.mes),
+    gastosMasGrandes: [...ex].sort((a, b) => (+b.amount || 0) - (+a.amount || 0)).slice(0, 8).map((t) => ({ descripcion: t.desc, categoria: t.cat, valor: r(t.amount) })),
+    masRepetidos: Object.values(grupos).filter((g) => g.veces >= 2).sort((a, b) => b.total - a.total).slice(0, 8).map((g) => ({ ...g, total: r(g.total) })),
+    numeroDeGastos: ex.length,
+    // el ahorro NO es gasto: va como aportes a cuentas (un aporte de los últimos 7 días del mes cuenta
+    // para el mes siguiente si ese mes tiene un ingreso entre el día 1 y 3, igual que en la conciliación)
+    ahorroEnCuentas: (() => {
+      const mesDeAporte = (d) => {
+        const [y, mo, day] = d.split("-").map(Number); const fin = new Date(y, mo, 0).getDate();
+        const sig = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, "0")}`;
+        return day >= fin - 6 && s.incomes.some((t) => (t.date || "").startsWith(sig) && +(t.date || "").slice(8, 10) <= 3) ? sig : d.slice(0, 7);
+      };
+      const movs = (s.accounts || []).filter((a) => a.type !== "Por cobrar").flatMap((a) => a.movs || []);
+      const aportes = movs.filter((m) => m.date && m.kind !== "rendimiento" && m.kind !== "transfer" && mesDeAporte(m.date) === mes);
+      const rend = movs.filter((m) => m.kind === "rendimiento" && ym(m.date) === mes);
+      return { aportesNetos: r(sum(aportes, (m) => m.amount)), rendimientos: r(sum(rend, (m) => m.amount)),
+        nota: "Los aportes a cuentas de ahorro/inversión son el ahorro real del mes; no aparecen como gasto, por eso 'deudaInversion' de la regla 50/30/20 puede verse en 0." };
+    })(),
+  };
+}
+
+export function buildReportHTML(s, mes, analisis) {
   const inMes = s.incomes.filter((t) => ym(t.date) === mes);
   const exMes = s.txs.filter((t) => ym(t.date) === mes);
   const ing = sum(inMes, (t) => t.amount), gas = sum(exMes, (t) => t.amount), bal = ing - gas;
@@ -544,6 +599,14 @@ function buildReportHTML(s, mes) {
       ${[["Ingresos", fmt(ing), c.green], ["Gastos", fmt(gas), c.red], ["Balance", fmt(bal), bal >= 0 ? c.green : c.red], ["Tasa ahorro", (ing ? tasa.toFixed(0) : "—") + "%", c.ink]]
         .map(([k, v, col]) => `<div style="border:1px solid ${c.line};border-radius:8px;padding:10px"><div style="font-size:11px;color:${c.sub};text-transform:uppercase;letter-spacing:.04em">${k}</div><div style="font-size:17px;font-weight:700;color:${col}">${v}</div></div>`).join("")}
     </div>
+
+    ${analisis ? `<div style="border:1px solid ${c.gold};border-radius:8px;padding:12px 14px;margin-bottom:20px">
+      <h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">✨ Análisis del mes</h3>
+      ${analisis.resumen ? `<p style="font-size:13px;margin:0 0 8px;line-height:1.45">${escapeHtml(analisis.resumen)}</p>` : ""}
+      ${analisis.hallazgos.map((h) => `<div style="font-size:12.5px;margin:6px 0;line-height:1.4"><b>${h.tipo === "bien" ? "✅" : h.tipo === "alerta" ? "⚠️" : "ℹ️"} ${escapeHtml(h.titulo)}.</b> ${escapeHtml(h.detalle || "")}</div>`).join("")}
+      ${analisis.recomendaciones.length ? `<div style="font-size:12.5px;margin-top:8px"><b>Recomendaciones para el próximo mes</b><ol style="margin:4px 0 0 18px;padding:0">${analisis.recomendaciones.map((x) => `<li style="margin:3px 0">${escapeHtml(x)}</li>`).join("")}</ol></div>` : ""}
+      <div style="font-size:10.5px;color:${c.sub};margin-top:8px">Redactado con IA (${escapeHtml(analisis.model)}) a partir de las cifras calculadas por la app. Revísalo; no es asesoría financiera.</div>
+    </div>` : ""}
 
     <h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">Regla 50/30/20</h3>
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">

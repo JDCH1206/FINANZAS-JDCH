@@ -17,6 +17,7 @@ const cdn = (m) => `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-${m}.j
 export const DEFAULT_CHAINS = {
   vision: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
   texto: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3-flash-preview"],
+  analisis: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.5-flash-lite"],
 };
 export const esLocal = () => /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 
@@ -90,7 +91,9 @@ export async function generar(tarea, partes, esquema, { pensarPoco = false } = {
   const { ai: inst, aiMod: m } = await conectar();
   const cadena = aiCfg().chains[tarea] || DEFAULT_CHAINS[tarea];
   const uso = usoHoy(), intentos = [];
-  for (const model of cadena) {
+  let reintentoAC = false; // un rechazo de App Check puede ser una falla momentánea de red: se reintenta 1 vez
+  for (let i = 0; i < cadena.length; i++) {
+    const model = cadena[i];
     const u = uso[model] || {};
     if (u.agotado || u.noExiste) { intentos.push({ model, error: u.agotado ? "cupo agotado hoy" : "no disponible" }); continue; }
     try {
@@ -111,6 +114,7 @@ export async function generar(tarea, partes, esquema, { pensarPoco = false } = {
     } catch (e) {
       const t = tipoError(e);
       intentos.push({ model, error: t, detalle: String((e && e.message) || e).slice(0, 160) });
+      if (t === "appcheck" && !reintentoAC) { reintentoAC = true; intentos.pop(); await new Promise((r) => setTimeout(r, 1500)); i--; continue; }
       if (t === "appcheck") throw new Error("App Check rechazó la consulta. " + (esLocal() ? "Registra el token de depuración (consola F12) en Firebase → App Check." : "Revisa la clave de sitio y el proveedor (Fraud Defense / v3) en Ajustes → IA."));
       if (t === "api") throw new Error("Firebase AI Logic no está activado en el proyecto (consola de Firebase → AI Logic).");
       if (t === "cupo") marcar(model, () => ({ agotado: true }));
@@ -218,6 +222,27 @@ ${IVA_TXT}`;
   const ajuste = (+d.ivaAparte || 0) - (+d.descuentoAparte || 0);
   if (ajuste && lineas.length) { const v = repartir(lineas.map((x) => x.valor), ajuste); lineas = lineas.map((x, i) => ({ ...x, valor: v[i] })); }
   return { taller: (d.taller || "").trim(), fecha: fechaOk(d.fecha), total: Math.round(+d.total || 0), lineas, ivaRepartido: Math.round(+d.ivaAparte || 0), descRepartido: Math.round(+d.descuentoAparte || 0), model: r.model, intentos: r.intentos };
+}
+
+/* ---------- Análisis del mes para el reporte PDF ---------- */
+// `datos` lo calcula la app (cifras exactas); la IA solo interpreta y redacta, sin recalcular.
+export async function analizarMes(datos) {
+  const prompt = `Eres un asesor de finanzas personales en Colombia: directo, concreto y amable, en español.
+Analiza el mes ${datos.mes} con estos datos YA CALCULADOS por la app (pesos colombianos). NO recalcules ni inventes cifras: usa solo las que aparecen.
+Compara contra el mes anterior y contra el promedio de los últimos 12 meses, revisa la regla 50/30/20 (necesidades/deseos/deuda-inversión) y los gastos más grandes y repetidos.
+Para el ahorro/inversión usa "ahorroEnCuentas" (aportes reales a cuentas y rendimientos): si hay aportes, el usuario SÍ está ahorrando aunque "deudaInversion" esté en 0.
+Escribe: "resumen" (2-3 frases), entre 3 y 5 "hallazgos" (titulo corto + detalle de 1-2 frases con cifras; tipo "bien", "alerta" o "info") y 2-3 "recomendaciones" accionables y específicas para el próximo mes (nada genérico).
+DATOS:
+${JSON.stringify(datos)}`;
+  const r = await generar("analisis", [prompt], (S) => S.object({
+    properties: {
+      resumen: S.string(),
+      hallazgos: S.array({ items: S.object({ properties: { titulo: S.string(), detalle: S.string(), tipo: S.enumString({ enum: ["bien", "alerta", "info"] }) } }) }),
+      recomendaciones: S.array({ items: S.string() }),
+    },
+  }));
+  const d = r.data || {};
+  return { resumen: d.resumen || "", hallazgos: (d.hallazgos || []).filter((h) => h && h.titulo), recomendaciones: (d.recomendaciones || []).filter(Boolean), model: r.model };
 }
 
 // prueba rápida de conexión (Ajustes → IA)

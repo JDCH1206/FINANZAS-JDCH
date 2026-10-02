@@ -31,6 +31,8 @@ los datos son los reales (lo que registres aparece también en el celular).
   foto de un recibo → revisa productos, cantidades, valores y categorías → *Guardar compra*.
 - **Vehículos → tu moto → Mantenimiento → 🧾 Registrar orden de trabajo → ✨ Leer factura del
   taller con IA**: foto de la factura → revisa las líneas → *Registrar orden*.
+- **Ajustes → Reporte mensual (PDF) → ✨ Incluir análisis del mes con IA → Generar**: el PDF
+  trae un resumen, hallazgos y recomendaciones redactados con IA a partir de tus cifras.
 - Si un modelo no existe o agota su cupo, la app salta al siguiente (se ve en *Probar conexión*
   y en *Uso de hoy*). Las cadenas se cambian en Ajustes → IA → *Modelos*.
 
