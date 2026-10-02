@@ -515,26 +515,29 @@ function acumulado(s, txs, period, cm, sinMesActual, mesEnCurso, row, tol) {
   const accts = (s.accounts || []).filter((a) => a.type !== "Por cobrar");
   const movs = accts.flatMap((a) => a.movs || []);
   if (!accts.length || !movs.length) return "";
-  // fecha de corte: fin del período (sin el mes en curso en la vista anual; hoy si es el mes actual)
-  const prevMonth = (m) => { const [y, mo] = m.split("-").map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`; };
-  const corte = mesEnCurso ? todayISO() : sinMesActual ? prevMonth(cm) + "-31" : (period.length === 4 ? period + "-12" : period) + "-31";
+  // fecha de corte: hoy si el período incluye el mes en curso (igual que el Balance del Resumen);
+  // si no, el fin del período
+  const alDia = mesEnCurso || sinMesActual;
+  const corte = alDia ? todayISO() : (period.length === 4 ? period + "-12" : period) + "-31";
   const primerMov = movs.map((m) => m.date).filter(Boolean).sort()[0];
   if (!primerMov || corte < primerMov) return ""; // las cuentas aún no existían en la app
   const hasta = (d) => d && d <= corte;
-  const sobranteAcum = sum((s.incomes || []).filter((t) => hasta(t.date)), (t) => t.amount) - sum(txs.filter((t) => hasta(t.date)), (t) => t.amount);
+  // al día: todos los registros, igual que el "Balance (ingresos − gastos)" del Resumen
+  const incl = (t) => alDia || hasta(t.date);
+  const sobranteAcum = sum((s.incomes || []).filter(incl), (t) => t.amount) - sum(txs.filter(incl), (t) => t.amount);
   const rendAcum = sum(movs.filter((m) => m.kind === "rendimiento" && hasta(m.date)), (m) => +m.amount || 0);
   const deberia = sobranteAcum + rendAcum;
   const tienes = sum(accts, (a) => +a.balance || 0) - sum(movs.filter((m) => m.date > corte), (m) => +m.amount || 0);
   const dif = tienes - deberia;
   const inicio = [...(s.incomes || []), ...txs].map((t) => t.date).filter(Boolean).sort()[0] || "";
-  const corteLbl = mesEnCurso ? "hoy" : monthLabel(corte.slice(0, 7));
+  const corteLbl = alDia ? "hoy" : monthLabel(corte.slice(0, 7));
   let msg;
   if (Math.abs(dif) <= tol) msg = `<p class="small" style="color:var(--green)">✅ <b>Cuadra.</b> Tus cuentas tienen lo que explican tus registros.</p>`;
   else if (dif > 0) msg = `<p class="small muted">Tus cuentas tienen <b>${fmt(dif)} más</b> de lo que explican tus registros: rendimientos de antes de registrarlos en la app o dinero que ya tenías antes de ${escapeHtml(monthLabel(inicio.slice(0, 7)))}.</p>`;
-  else msg = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(-dif)}.</b> Según tus registros deberías tener más en tus cuentas: puede haber gastos sin anotar, efectivo o una cuenta que no registras.</p>`;
+  else msg = `<p class="small" style="color:var(--yel)">⚠ <b>Faltan ${fmt(-dif)}.</b> Según tus registros deberías tener más en tus cuentas${alDia ? ` (incluye lo que te ha sobrado en ${escapeHtml(monthLabel(cm))}, que quizá aún no abonas)` : ""}. El resto puede ser efectivo, una cuenta que no registras o gastos sin anotar.</p>`;
   return `<div class="card-title" style="margin-top:14px">📈 Lo que tienen tus cuentas vs. lo que deberían</div>
     <p class="tiny muted" style="margin:-4px 0 6px">Acumulado de todo tu historial hasta ${escapeHtml(corteLbl)}. El saldo de las cuentas incluye lo ahorrado antes de registrar aportes, por eso se compara contra todo el sobrante.</p>
-    ${row("Sobrante acumulado", sobranteAcum, `Ingresos − Gastos desde ${escapeHtml(monthLabel(inicio.slice(0, 7)))}`)}
+    ${row("Sobrante acumulado", sobranteAcum, `Ingresos − Gastos desde ${escapeHtml(monthLabel(inicio.slice(0, 7)))}${alDia ? " (= Balance del Resumen)" : ""}`)}
     ${rendAcum ? row("+ Rendimientos registrados", rendAcum) : ""}
     ${row("= Deberías tener", deberia, "", true)}
     ${row("Tienes en cuentas", tienes, "Saldo de cuentas líquidas a la fecha de corte", true)}
