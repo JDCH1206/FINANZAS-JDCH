@@ -5,6 +5,7 @@ import { fmt, uid, todayISO, escapeHtml, ym, monthLabel, curMonth, fmtDate } fro
 import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIES, MAINT_TIPOS } from "../config.js";
 import { openModal, closeModal, toast, toastUndo, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { openVisitModal } from "./vehicles.js";
+import { aiReady, botonesFoto, enlazarFoto, leerRecibo } from "../ai.js";
 
 let query = "";
 let tabKind = "gasto";
@@ -677,6 +678,7 @@ export function openSplitModal(prefill = {}) {
         <select class="input sp-sub" style="flex:1;min-width:0">${subOpts(cat, sub)}</select></div></div>`;
   openModal("Compra con varios productos", `
     <p class="tiny muted" style="margin:-4px 0 10px">Para un recibo con varios productos (ej. mercado). Cada producto queda como un gasto propio con su nombre, para seguirlo de forma individual; todos quedan unidos como una sola compra (÷) y con la tienda como etiqueta.</p>
+    ${aiReady() ? botonesFoto("sp-ai", "Leer recibo con IA") : ""}
     <div class="field"><label class="label">Fecha</label><input id="sp-date" class="input" type="date" value="${prefill.date || todayISO()}"></div>
     <div class="field"><label class="label">Tienda / lugar</label><input id="sp-desc" class="input" list="sp-desc-list" autocomplete="off" placeholder="Ej: Éxito" value="${escapeHtml(prefill.desc || "")}">${descDatalist("sp-desc-list", s.txs)}
       <div class="tiny muted mt-1">Se guarda como etiqueta de todos los productos (filtra por ella para ver el recibo completo).</div></div>
@@ -712,6 +714,33 @@ export function openSplitModal(prefill = {}) {
       };
       wire();
       b.querySelector("#sp-recibo").oninput = recalc;
+      // ✨ IA: tomar/cargar foto del recibo → llena tienda, fecha, total y productos (para revisar)
+      enlazarFoto(b, "sp-ai", async (file, st) => {
+        st.textContent = "⏳ Leyendo el recibo… (puede tardar unos segundos)"; st.style.color = "";
+        try {
+          const r = await leerRecibo(file, s.cats);
+          if (!r.items.length) { st.textContent = "No se encontraron productos en la foto. Intenta con una foto más nítida."; st.style.color = "var(--yel)"; return; }
+          if (r.tienda) b.querySelector("#sp-desc").value = r.tienda;
+          if (r.fecha) b.querySelector("#sp-date").value = r.fecha;
+          if (r.total) b.querySelector("#sp-recibo").value = r.total;
+          parts.innerHTML = "";
+          for (const it of r.items) {
+            // la categoría con la que TÚ sueles registrar ese producto tiene prioridad sobre la de la IA
+            const l = learned(it.producto);
+            const cat = l && s.cats.some((c) => c.name === l.c) ? l.c : (s.cats.some((c) => c.name === it.categoria) ? it.categoria : firstCat);
+            const subs = (s.cats.find((c) => c.name === cat) || {}).subs || [];
+            const sub = l && l.c === cat && subs.includes(l.sub) ? l.sub : (subs.includes(it.subcategoria) ? it.subcategoria : subs[0] || "");
+            parts.insertAdjacentHTML("beforeend", itemRow(cat, sub));
+            const row = parts.lastElementChild;
+            row.querySelector(".sp-prod").value = it.producto;
+            row.querySelector(".sp-qty").value = it.cantidad;
+            row.querySelector(".sp-amt").value = it.valor;
+          }
+          wire(); recalc();
+          const extra = [r.ivaRepartido ? `IVA ${fmt(r.ivaRepartido)} repartido en los productos` : "", r.descRepartido ? `descuento ${fmt(r.descRepartido)} repartido` : ""].filter(Boolean).join(" · ");
+          st.innerHTML = `✓ ${r.items.length} producto(s) leídos (${escapeHtml(r.model)}). ${extra ? escapeHtml(extra) + ". " : ""}<b>Revisa antes de guardar.</b>`; st.style.color = "var(--green)";
+        } catch (e) { st.textContent = "⚠ " + (e.message || e); st.style.color = "var(--red)"; }
+      });
       b.querySelector("#sp-add").onclick = () => {
         // el nuevo producto arranca con la categoría del último (suele ser la misma sección)
         const last = [...b.querySelectorAll(".split-part")].pop();

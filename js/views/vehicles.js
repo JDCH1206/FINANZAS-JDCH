@@ -5,6 +5,7 @@ import { VEHICLE_TYPES, FUEL_TYPES, SERVICE_TYPES, DEPARTAMENTOS, PALETTE, MAINT
 import { uid, escapeHtml, fmt, todayISO, ym, monthLabel, sum, curMonth, isoLocal } from "../utils.js";
 import { openModal, closeModal, toast, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { donut, lineTrend, lineNum, multiLine } from "../components/charts.js";
+import { aiReady, botonesFoto, enlazarFoto, leerFacturaTaller } from "../ai.js";
 
 const icon = (t) => (t === "Moto" ? "🏍️" : "🚗");
 let activeFuelVid = null;   // si está fijo, mostramos la bitácora de ese vehículo
@@ -757,6 +758,7 @@ export function openVisitModal(v, root, onDone) {
   const claseOpts = (sel) => MAINT_CATEGORIES.map((c) => `<option ${c === sel ? "selected" : ""}>${c}</option>`).join("");
   const tipoOpts = (clase) => (MAINT_TIPOS[clase] || []).map((t) => `<option>${escapeHtml(t)}</option>`).join("");
   openModal("Registrar orden de trabajo", `
+    ${aiReady() ? botonesFoto("v-ai", "Leer factura del taller con IA") : ""}
     <div class="field"><label class="label">Fecha</label><input id="v-fecha" type="date" class="input" value="${todayISO()}"></div>
     <div class="field"><label class="label">Odómetro (km)</label><input id="v-odo" type="number" class="input" value="${v.odometro ?? ""}" placeholder="km del tablero"></div>
     <div class="field"><label class="label">Taller</label><input id="v-taller" class="input" placeholder="Ej: Suzuki Bogotá 57"></div>
@@ -801,6 +803,33 @@ export function openVisitModal(v, root, onDone) {
       const addRow = () => { vList.insertAdjacentHTML("beforeend", rowHtml(b.querySelector("#v-clase-def").value)); wire(); };
       addRow(); recalc();
       b.querySelector("#v-add").onclick = addRow;
+      // ✨ IA: tomar/cargar foto de la factura → llena taller, fecha y líneas (para revisar)
+      enlazarFoto(b, "v-ai", async (file, st) => {
+        st.textContent = "⏳ Leyendo la factura… (puede tardar unos segundos)"; st.style.color = "";
+        try {
+          const r = await leerFacturaTaller(file);
+          if (!r.lineas.length) { st.textContent = "No se encontraron líneas en la foto. Intenta con una foto más nítida."; st.style.color = "var(--yel)"; return; }
+          if (r.taller) b.querySelector("#v-taller").value = r.taller;
+          if (r.fecha) b.querySelector("#v-fecha").value = r.fecha;
+          vList.innerHTML = "";
+          for (const ln of r.lineas) {
+            vList.insertAdjacentHTML("beforeend", rowHtml(ln.clase));
+            const row = vList.lastElementChild;
+            row.querySelector(".vl-tipo").value = ln.tipo;
+            row.querySelector(".vl-desc").value = ln.descripcion;
+            row.querySelector(".vl-ref").value = ln.referencia;
+            row.querySelector(".vl-cant").value = ln.cantidad;
+            row.querySelector(".vl-val").value = ln.valor;
+          }
+          wire(); recalc();
+          const suma = r.lineas.reduce((a, x) => a + x.valor, 0);
+          const cuadra = !r.total || Math.abs(r.total - suma) < 1;
+          const extra = [r.ivaRepartido ? `IVA ${fmt(r.ivaRepartido)} repartido en las líneas` : "", r.descRepartido ? `descuento ${fmt(r.descRepartido)} repartido` : ""].filter(Boolean).join(" · ");
+          st.innerHTML = `✓ ${r.lineas.length} línea(s) leídas (${escapeHtml(r.model)}). ${extra ? escapeHtml(extra) + ". " : ""}`
+            + (cuadra ? `<b>Revisa antes de guardar.</b>` : `<b style="color:var(--yel)">La suma (${fmt(suma)}) no coincide con el total de la factura (${fmt(r.total)}): revisa.</b>`);
+          st.style.color = "var(--green)";
+        } catch (e) { st.textContent = "⚠ " + (e.message || e); st.style.color = "var(--red)"; }
+      });
 
       submitOnce(b.querySelector("#v-save"), async () => {
         const fecha = b.querySelector("#v-fecha").value, odo = b.querySelector("#v-odo").value;

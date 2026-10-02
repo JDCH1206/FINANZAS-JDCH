@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v117.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v118.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v117). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v118). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,16 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v117**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v118**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v118 — IA con Gemini (rama `ia-gemini`, en prueba)
+- 🔧 **Firebase JS SDK 10.12.2 → 12.19.0** (`FB_VER` en `firebase-service.js`; todos los módulos de la misma versión). Necesario para **Firebase AI Logic**. Se verificó que las 21 funciones de Firebase que usa la app existen en 12.19.0 y que la app arranca igual que con 10.12.2.
+- 🤖 Nuevo **`js/ai.js`**: conexión con **Firebase AI Logic (Gemini Developer API, plan gratis)** — la clave de Gemini la guarda Firebase, no la app. **App Check** con reCAPTCHA v3 (obligatorio para AI Logic desde el 2-nov-2026); en el PC (`localhost`) usa el token de depuración. **Cadenas de modelos por tarea** (`vision`, `texto`): si un modelo agota su cupo, no existe o está saturado, salta al siguiente; contador de **uso de hoy** por modelo (reinicio ≈ 2 a. m. Colombia). Respuestas con **esquema JSON** validado por la app.
+- 📸 **Fotos**: botones **Tomar foto** (cámara) y **Cargar foto** (galería); la imagen se reduce en el dispositivo (máx 1600 px, JPEG) y **no se guarda**.
+- 🧾 **Leer recibo con IA** (Compra con varios productos): llena tienda, fecha, total y productos (nombre, cantidad, valor, categoría › subcategoría). La categoría con la que **tú** sueles registrar un producto tiene prioridad sobre la de la IA. IVA o descuento que la factura muestra solo al final se **reparten** proporcionalmente en las líneas; la verificación contra el total del recibo ya existente avisa si no cuadra.
+- 🔧 **Leer factura del taller con IA** (orden de trabajo): llena taller, fecha y líneas (clasificación, **tipo estricto** de la lista —si no encaja va como "Otro" con el texto en la descripción—, descripción, referencia, cantidad, valor) y avisa si la suma no coincide con el total.
+- ⚙️ **Ajustes → 🤖 Inteligencia artificial**: activar/desactivar (apagada por defecto), clave de sitio reCAPTCHA, cadenas de modelos, **Probar conexión** y uso de hoy. Configuración en `profile.ai` (sincronizada).
+- 📄 Guía de prueba en **`PRUEBA-IA.md`** (activar AI Logic, abrir la rama en el PC, registrar el token de depuración de App Check, probar).
 
 ### 2026-10-02 · caché v117 — Compras agrupadas en la lista + recibo completo
 - 🧾 En **Movimientos**, los productos de una **Compra con varios productos** se muestran como **una sola fila**: "🧾 Éxito · 3 productos · $28.500", con fecha, número de categorías, medio de pago y los primeros productos.

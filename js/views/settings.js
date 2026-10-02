@@ -8,6 +8,7 @@ import { uid, normDate, escapeHtml, fmt, ym, monthLabel, curMonth, sum, todayISO
 import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview } from "../components/modals.js";
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 import { gruposVariantes, openUnificarDescripciones } from "./unificar.js";
+import { aiCfg, DEFAULT_CHAINS, usoHoy, reiniciarUso, probarConexion, esLocal } from "../ai.js";
 
 export function renderSettings(root, onSignOut) {
   const s = getState();
@@ -49,6 +50,22 @@ export function renderSettings(root, onSignOut) {
       <p class="small muted mb-3">Detecta gastos que son lo mismo escrito de varias formas (ej. "Almuerzo", "Almuerzos", "almuerzo") y te <b>recomienda</b> unificarlos. Tú eliges cuáles y cómo dejarlos.</p>
       <button id="unif-btn" class="btn btn-ghost btn-sm">🧹 Unificar descripciones${(() => { const n = gruposVariantes(getState()).length; return n ? ` (${n} sugerencias)` : ""; })()}</button>
     </div>
+
+    ${isCloud() ? (() => { const c = aiCfg(); const uso = usoHoy(); const usados = Object.entries(uso);
+      return `<div class="card mb-3">
+      <div class="card-title">🤖 Inteligencia artificial (Gemini)</div>
+      <p class="small muted mb-2">Lee <b>fotos de recibos</b> (Compra con varios productos) y <b>facturas del taller</b> (orden de trabajo) y llena los formularios para que los revises. Usa Firebase AI Logic (plan gratis); la clave de Gemini la guarda Firebase, no la app.</p>
+      <label class="row gap-2 small mb-2" style="align-items:center"><input type="checkbox" id="ai-on" ${c.enabled ? "checked" : ""}> <b>Activar IA</b></label>
+      <div class="field"><label class="label">Clave de sitio reCAPTCHA v3 (App Check)</label><input id="ai-key" class="input" placeholder="6Lc…" value="${escapeHtml(c.siteKey)}">
+        <div class="tiny muted mt-1">Pública (no es secreta). Protege tu cupo de IA. ${esLocal() ? "<b>Estás en el PC (localhost):</b> se usa el token de depuración; ábrelo con F12 → Consola (\"App Check debug token\") y regístralo en Firebase → App Check → tu app → Administrar tokens de depuración." : ""}</div></div>
+      <details class="mb-2"><summary class="tiny muted" style="cursor:pointer">Modelos (cadena: si uno se agota, salta al siguiente)</summary>
+        <div class="field mt-2"><label class="label">Fotos (recibos y facturas)</label><input id="ai-ch-vision" class="input" value="${escapeHtml(c.chains.vision.join(", "))}"></div>
+        <div class="field"><label class="label">Texto</label><input id="ai-ch-texto" class="input" value="${escapeHtml(c.chains.texto.join(", "))}"></div>
+        <button id="ai-ch-reset" class="btn btn-ghost btn-sm">Restaurar modelos por defecto</button></details>
+      <div class="row gap-2 wrap"><button id="ai-save" class="btn btn-primary btn-sm">Guardar</button><button id="ai-test" class="btn btn-ghost btn-sm">🔌 Probar conexión</button></div>
+      <div id="ai-test-res" class="tiny mt-2"></div>
+      <div class="tiny muted mt-2">Uso de hoy: ${usados.length ? usados.map(([m, u]) => `${escapeHtml(m)} ${u.n || 0}${u.agotado ? " (agotado)" : ""}${u.noExiste ? " (no disponible)" : ""}`).join(" · ") : "sin consultas"}${usados.length ? ` · <a href="#" id="ai-uso-reset">reiniciar contador</a>` : ""}</div>
+    </div>`; })() : ""}
 
     <div class="card mb-3">
       <div class="card-title">Reporte mensual (PDF)</div>
@@ -220,6 +237,36 @@ export function renderSettings(root, onSignOut) {
   };
 
   // backup json — incluye TODO: config, gastos, ingresos, combustible, mantenimiento y obligaciones
+  // ---- Inteligencia artificial ----
+  const aiSave = root.querySelector("#ai-save");
+  if (aiSave) {
+    const leerCadena = (id) => root.querySelector(id).value.split(",").map((x) => x.trim()).filter(Boolean);
+    const guardarAI = async (extra = {}) => {
+      const st = getState();
+      const ai = { enabled: root.querySelector("#ai-on").checked, siteKey: root.querySelector("#ai-key").value.trim(),
+        chains: { vision: leerCadena("#ai-ch-vision"), texto: leerCadena("#ai-ch-texto") }, ...extra };
+      const profile = { ...st.profile, ai };
+      setState({ profile });
+      await saveConfig(st.user.uid, { profile, cats: st.cats, budgets: st.budgets });
+      forcePersistLocal(st.user.uid);
+    };
+    submitOnce(aiSave, async () => { await guardarAI(); toast("IA: ajustes guardados"); renderSettings(root, onSignOut); });
+    root.querySelector("#ai-ch-reset").onclick = () => { root.querySelector("#ai-ch-vision").value = DEFAULT_CHAINS.vision.join(", "); root.querySelector("#ai-ch-texto").value = DEFAULT_CHAINS.texto.join(", "); };
+    const ur = root.querySelector("#ai-uso-reset"); if (ur) ur.onclick = (e) => { e.preventDefault(); reiniciarUso(); renderSettings(root, onSignOut); };
+    submitOnce(root.querySelector("#ai-test"), async () => {
+      const out = root.querySelector("#ai-test-res");
+      await guardarAI();
+      out.textContent = "Probando…"; out.style.color = "";
+      try {
+        const r = await probarConexion();
+        const saltos = r.intentos.length ? ` · se saltaron: ${r.intentos.map((x) => `${x.model} (${x.error})`).join(", ")}` : "";
+        out.textContent = `✅ Conectado. Respondió ${r.model}: "${String(r.data).trim().slice(0, 40)}"${saltos}`; out.style.color = "var(--green)";
+      } catch (e) {
+        const det = e.intentos ? " · " + e.intentos.map((x) => `${x.model}: ${x.error}${x.detalle ? " — " + x.detalle : ""}`).join(" | ") : "";
+        out.textContent = "⚠ " + (e.message || e) + det; out.style.color = "var(--red)";
+      }
+    }, "Probando…");
+  }
   root.querySelector("#unif-btn").onclick = () => openUnificarDescripciones(() => renderSettings(root, onSignOut));
   root.querySelector("#exp-json").onclick = async () => {
     const btn = root.querySelector("#exp-json"); const orig = btn.textContent;

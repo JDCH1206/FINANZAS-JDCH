@@ -8,12 +8,17 @@ import { DEFAULT_CATS } from "./config.js";
 let fb = null;     // { auth, db, authMod, fsMod }
 let fbApp = null;  // instancia de la app (se reutiliza; initializeApp no se puede llamar dos veces)
 
+// Versión del SDK de Firebase (CDN). Todos los módulos (app, auth, firestore, ai, app-check)
+// deben ser de la MISMA versión. 12.x es necesaria para Firebase AI Logic (módulo de IA).
+export const FB_VER = "12.19.0";
+const fbCdn = (m) => `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-${m}.js`;
+
 /* ---------- Inicialización dinámica de Firebase ---------- */
 async function initFirebase() {
   if (fb) return fb;
-  const appMod = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
-  const authMod = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
-  const fsMod = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+  const appMod = await import(fbCdn("app"));
+  const authMod = await import(fbCdn("auth"));
+  const fsMod = await import(fbCdn("firestore"));
   fbApp = fbApp || appMod.initializeApp(firebaseConfig);
   const auth = authMod.getAuth(fbApp);
   // Firestore con CACHÉ LOCAL persistente (IndexedDB): tras la 1ª carga solo baja lo
@@ -33,6 +38,8 @@ async function initFirebase() {
 }
 
 export const isCloud = () => FIREBASE_READY;
+// instancia de la app de Firebase (la usa el módulo de IA)
+export async function getFirebaseApp() { await initFirebase(); return fbApp; }
 
 /* ============================================================
    API pública: onAuth, signUp, signIn, signOut, load, save
