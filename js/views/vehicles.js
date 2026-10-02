@@ -703,7 +703,7 @@ function drawMaint(root, v) {
 function openReorgMaint(v, root, reorg) {
   const lbl = (c, t) => `${escapeHtml(c)} · ${escapeHtml(t)}`;
   openModal("🗂️ Reorganizar tipos", `
-    <p class="small muted mb-3">Se proponen tipos más específicos según la descripción de cada registro (y los nombres antiguos pasan a los actuales). Desmarca lo que no quieras cambiar. <b>No se modifica ningún gasto</b>, solo la bitácora.</p>
+    <p class="small muted mb-3">Se proponen tipos más específicos según la descripción de cada registro (y los nombres antiguos pasan a los actuales). Desmarca lo que no quieras cambiar (se dejará como está y no se volverá a sugerir). <b>No se modifica ningún gasto</b>, solo la bitácora.</p>
     <label class="row gap-2 small mb-2" style="align-items:center"><input type="checkbox" id="ro-all" checked> <b>Seleccionar todo</b></label>
     <div style="max-height:55vh;overflow:auto;border-top:1px solid var(--line)">
       ${reorg.map((x, i) => `<label class="row gap-2" style="align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)">
@@ -717,14 +717,16 @@ function openReorgMaint(v, root, reorg) {
       const chks = [...b.querySelectorAll(".ro-chk")];
       b.querySelector("#ro-all").onchange = (e) => chks.forEach((c) => { c.checked = e.target.checked; });
       submitOnce(b.querySelector("#ro-ok"), async () => {
-        const sel = chks.filter((c) => c.checked).map((c) => reorg[+c.dataset.i]);
-        if (!sel.length) { closeModal(); return; }
+        // marcados: se aplica el cambio; desmarcados: se recuerdan como revisados
+        // (reorgOk) para que el botón desaparezca y no vuelva a sugerirlos
         const uidU = getState().user.uid;
-        const byId = Object.fromEntries(sel.map((x) => [x.r.id, x.to]));
-        allMaint = allMaint.map((r) => (byId[r.id] ? { ...r, ...byId[r.id] } : r));
-        for (const x of sel) await updateMaint(uidU, x.r.id, x.to);
+        const changes = {};
+        chks.forEach((c) => { const x = reorg[+c.dataset.i]; changes[x.r.id] = c.checked ? { ...x.to, reorgOk: true } : { reorgOk: true }; });
+        allMaint = allMaint.map((r) => (changes[r.id] ? { ...r, ...changes[r.id] } : r));
+        for (const [id, f] of Object.entries(changes)) await updateMaint(uidU, id, f);
         persistMaintLocal(uidU, allMaint);
-        closeModal(); drawMaint(root, v); toast(`${sel.length} registro(s) reorganizado(s)`);
+        const n = chks.filter((c) => c.checked).length;
+        closeModal(); drawMaint(root, v); toast(`${n} registro(s) reorganizado(s)`);
       }, "Aplicando…");
     },
   });
@@ -817,7 +819,7 @@ export function openVisitModal(v, root, onDone) {
           const cant = isIns ? (+row.querySelector(".vl-cant").value || 1) : 1;
           const ref = isIns ? row.querySelector(".vl-ref").value.trim() : "";
           const km = row.querySelector(".vl-km").value;
-          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: isIns ? "repuesto" : "actividad", categoria: clase, tipo, descripcion: desc || tipo, referencia: ref, cantidad: cant, valorUnit: cant ? val / cant : val, costo: val, fecha, odometro, taller, repuesto: isIns ? tipo : "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null });
+          recs.push({ id: uid(), vehicleId: v.id, visitaId, gastoId, claseLinea: isIns ? "repuesto" : "actividad", categoria: clase, tipo, descripcion: desc || tipo, referencia: ref, cantidad: cant, valorUnit: cant ? val / cant : val, costo: val, fecha, odometro, taller, repuesto: isIns ? tipo : "", proximoKm: null, recurrenteKm: km === "" ? null : +km, proximaFecha: "", recurrenteDias: null, reorgOk: true });
         });
         if (!recs.length) return toast("Agrega al menos una línea con tipo y valor", true);
         const total = sum(recs, (r) => +r.costo || 0);
@@ -890,6 +892,7 @@ function openMaintModal(v, root, existing) {
           descripcion: b.querySelector("#ma-desc").value.trim(), repuesto: b.querySelector("#ma-rep").value.trim(),
           taller: b.querySelector("#ma-taller").value.trim(), costo: num("ma-costo") || 0,
           proximoKm: num("ma-pkm"), recurrenteKm: num("ma-rkm"), proximaFecha: b.querySelector("#ma-pfecha").value || "", recurrenteDias: num("ma-rdias"),
+          reorgOk: true, // tipo elegido a mano: no sugerir reorganización
         };
         if (existing && existing.gastoId) rec.gastoId = existing.gastoId; // conserva el vínculo con el gasto
         // conserva los campos propios de una línea de visita (no los pide este formulario)

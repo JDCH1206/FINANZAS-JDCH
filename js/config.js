@@ -114,6 +114,7 @@ const MAINT_RULES = [
 // Las revisiones por kilometraje se agrupan en "Revisión / diagnóstico" aunque
 // tengan otro tipo (son paquetes de varios servicios).
 export function suggestMaintTipo(r) {
+  if (r.reorgOk) return null; // ya revisado por el usuario: no volver a sugerir
   const cat = r.categoria || "Taller", tipo = r.tipo || "";
   const d = (r.descripcion || "").toLowerCase();
   let out = { categoria: cat, tipo: MAINT_RENAMES[tipo] || tipo };

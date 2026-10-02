@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v99.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v100.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v99). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v100). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,12 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v99**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v100**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v100 — "Reorganizar tipos" desaparece tras revisarlo
+- ✅ Al aplicar, los registros **desmarcados** también quedan como revisados (campo `reorgOk: true`), así que no se vuelven a sugerir y el botón **desaparece** cuando no queda nada pendiente.
+- ✅ Todo registro creado o editado a mano (ítem individual u orden de trabajo) nace con `reorgOk: true`: el botón **solo aparece con datos antiguos** o importados desde Movimientos (clasificados automáticamente). Un usuario nuevo nunca lo ve.
+- Costo para la app: ninguno visible. Es una función pequeña que solo se calcula al abrir Mantenimiento y no cambia datos sin confirmación.
 
 ### 2026-10-02 · caché v99 — Reorganizar tipos de mantenimiento existentes
 - 🗂️ Nuevo botón **"Reorganizar tipos (N sugerencias)"** en Mantenimiento: propone un Tipo/Clasificación más específico para los registros ya guardados y deja **revisar uno a uno** (con casillas) antes de aplicar. Solo cambia la bitácora; **ningún gasto de Movimientos se toca**.
