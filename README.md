@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v112.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v113.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v112). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v113). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,14 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v112**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v113**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v113 — "Compra con varios productos" (seguimiento por ítem)
+- 🧾 "Dividir gasto" pasa a ser **Compra con varios productos**: para un recibo grande (ej. mercado) se carga cada **producto** con su **nombre, cantidad, valor, categoría y subcategoría**. Cada producto se guarda como un **gasto propio con su nombre** ("Coca cola", no "Compra Éxito"), así entra en búsquedas, **Seguimientos**, gasto hormiga y recurrentes igual que una compra suelta. Todos quedan unidos como una sola compra (`splitId`, símbolo ÷) y llevan la **tienda como etiqueta** (filtrar por ella muestra el recibo completo con su total).
+- 🧠 Al escribir un producto ya conocido, propone la **categoría/subcategoría con la que sueles registrarlo** (aprendido del historial). Un producto nuevo arranca con la categoría del anterior.
+- ✅ Campo opcional **Total del recibo** para verificar: avisa si faltan o sobran pesos.
+- 🔢 Nuevo campo `qty` (cantidad) en los gastos: se muestra como "x6" en la lista y **Seguimientos** calcula el precio típico **por unidad**.
+- 🐛 Al editar un gasto que hacía parte de una compra dividida se perdía su vínculo (÷); ahora se conservan `splitId` y `qty`.
 
 ### 2026-10-02 · caché v112 — Seguimientos por producto + unificar escritura
 - 🎯 Nueva tarjeta **Seguimientos** en **Tablero → Avanzado** (módulo `js/views/seguimientos.js`). Eliges productos o gastos (Coca cola, Gaseosa, Cerveza, Café…) con sus **palabras clave**; la app los busca en la descripción de **todo el historial** (sin importar mayúsculas, tildes ni plurales), así que no hay que cambiar la forma de registrar. Por cada uno muestra: veces, frecuencia y gasto por mes, última compra, **Exacto** (gastos que son solo ese producto, o una parte propia de un gasto dividido) vs **Compartido** (descripciones combinadas como "Empanadas y gaseosa": cuenta la vez, pero el monto incluye otras cosas), **precio típico por año** (mediana de las compras exactas) y barras de los últimos 12 meses. Se guardan en `profile.seguimientos` (sincronizado). Incluye sugeridos.

@@ -41,8 +41,9 @@ function stats(seg, txs) {
   // meses del rango (desde la primera compra hasta hoy) para el promedio mensual real
   let nRango = 1;
   if (primer) { const [y1, m1] = primer.split("-").map(Number), [y2, m2] = curMonth().split("-").map(Number); nRango = Math.max(1, (y2 - y1) * 12 + (m2 - m1) + 1); }
-  const med = (arr) => { if (!arr.length) return 0; const a = arr.map((t) => +t.amount || 0).sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
-  // precio típico (mediana de compras exactas) por año: muestra si va subiendo
+  // precio por unidad: si el gasto tiene cantidad (compra con varios productos) se divide
+  const med = (arr) => { if (!arr.length) return 0; const a = arr.map((t) => (+t.amount || 0) / (+t.qty || 1)).sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
+  // precio típico (mediana de compras exactas, por unidad) por año: muestra si va subiendo
   const porAnio = {};
   exact.forEach((t) => { const y = (t.date || "").slice(0, 4); (porAnio[y] = porAnio[y] || []).push(t); });
   const precios = Object.keys(porAnio).sort().map((y) => [y, med(porAnio[y])]);
@@ -81,7 +82,7 @@ export function seguimientosCard(s) {
   return `<div class="card mb-3">
     <div class="row between" style="align-items:center"><div class="card-title" style="margin:0">🎯 Seguimientos</div>
       <button id="seg-add" class="btn btn-ghost btn-sm">+ Agregar</button></div>
-    <p class="tiny muted" style="margin:4px 0 4px"><b>Exacto</b>: gastos que son solo ese producto (o una parte propia de un gasto dividido). <b>Compartido</b>: descripción combinada (ej. "Empanadas y gaseosa"); cuenta la vez, pero el monto incluye otras cosas.</p>
+    <p class="tiny muted" style="margin:4px 0 4px"><b>Exacto</b>: gastos que son solo ese producto (incluye los productos de una compra con varios productos). <b>Compartido</b>: descripción combinada (ej. "Empanadas y gaseosa"); cuenta la vez, pero el monto incluye otras cosas.</p>
     ${body}
   </div>`;
 }

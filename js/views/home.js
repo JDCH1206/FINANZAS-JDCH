@@ -234,7 +234,7 @@ function drawList() {
       return `<div class="tx-row" data-row="${t.id}" style="cursor:pointer">
         <span class="tx-dot" style="background:${PALETTE[(ci + 11) % PALETTE.length]}"></span>
         <div class="flex1"><div class="tx-desc ellipsis">${escapeHtml(t.desc)}${veh ? (veh.tipo === "Moto" ? " 🏍️" : " 🚗") : ""}</div>
-          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}${t.splitId ? ' · <span title="Parte de un gasto dividido">÷</span>' : ""}</div>
+          <div class="tx-meta">${fmtDate(t.date)} · ${escapeHtml(t.cat)} &rsaquo; ${escapeHtml(t.sub || "")}${t.pay ? " · " + escapeHtml(t.pay) : ""}${t.qty ? ` · x${escapeHtml(String(t.qty))}` : ""}${t.splitId ? ' · <span title="Parte de una compra con varios productos">÷</span>' : ""}</div>
           ${(t.tags || []).length ? `<div class="tx-meta">${t.tags.map((g) => `<span class="badge" style="background:var(--panel-2);color:var(--gold);font-size:10px;padding:1px 6px;margin-right:4px">#${escapeHtml(normTag(g))}</span>`).join("")}</div>` : ""}</div>
         <div class="tx-amt">${fmt(t.amount)}</div>
         <button class="icon-btn" data-del="${t.id}" aria-label="Eliminar gasto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
@@ -370,7 +370,7 @@ export function openTxModal(existing) {
     <div class="field" id="m-acct-field"><label class="label">Cuenta</label><select id="m-acct" class="input">${acctOpts}</select></div>
     <div class="field"><label class="label">Etiquetas (opcional)</label><input id="m-tags" class="input" list="m-tags-list" autocomplete="off" placeholder="Ej: viaje, regalo (separadas por coma)" value="${existing && existing.tags ? escapeHtml(existing.tags.join(", ")) : ""}">${tagsDatalist("m-tags-list", s.txs)}</div>
     ${vehBlock}${vehEditBlock}
-    ${!existing ? `<button type="button" id="m-split" class="btn btn-ghost btn-block btn-sm" style="margin-bottom:8px">➗ Dividir en varias categorías</button>` : ""}
+    ${!existing ? `<button type="button" id="m-split" class="btn btn-ghost btn-block btn-sm" style="margin-bottom:8px">🧾 Compra con varios productos</button>` : ""}
     <button id="m-save" class="btn btn-primary btn-block">${existing ? "Guardar cambios" : "Guardar"}</button>`, {
     onMount(b) {
       const splitBtn = b.querySelector("#m-split");
@@ -465,6 +465,8 @@ export function openTxModal(existing) {
           const veVisible = veWrap && veWrap.style.display !== "none";
           tx.vehicleId = (veSel && veVisible) ? veSel.value : (existing.vehicleId || "");
           tx.fuelId = existing.fuelId || ""; tx.maintId = existing.maintId || ""; tx.obligId = existing.obligId || ""; tx.visitaId = existing.visitaId || "";
+          // conserva el vínculo con su compra (gasto dividido) y la cantidad
+          tx.splitId = existing.splitId || ""; if (existing.qty) tx.qty = existing.qty;
         }
         if (!tx.date) return toast("Falta la fecha", true);
         if (!tx.desc || !tx.amount || tx.amount < 0) return toast("Falta descripción o monto válido (positivo)", true);
@@ -530,71 +532,100 @@ export function openTxModal(existing) {
   });
 }
 
-// Dividir un gasto: un mismo pago repartido en varias categorías. Crea una transacción por
-// parte (cada una es un gasto normal), enlazadas por un mismo splitId. Fecha/desc/pago/cuenta
-// se comparten. Cada parte se puede editar o borrar por separado luego.
+// Compra con varios productos (antes "Dividir gasto"): un mismo pago con varios ítems. Cada
+// ítem se guarda como un gasto propio con SU descripción (ej. "Coca cola"), categoría,
+// subcategoría, cantidad y valor, así entra en búsquedas, seguimientos y gasto hormiga como
+// cualquier compra suelta. Todos quedan enlazados por un mismo splitId (símbolo ÷) y llevan la
+// tienda como etiqueta, para ver el recibo completo filtrando por ella.
 export function openSplitModal(prefill = {}) {
   const s = getState();
-  const catOpts = s.cats.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  const catOpts = (sel) => s.cats.map((c) => `<option value="${escapeHtml(c.name)}" ${c.name === sel ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
+  const subOpts = (catName, sel) => ((s.cats.find((c) => c.name === catName) || {}).subs || []).map((x) => `<option ${x === sel ? "selected" : ""}>${escapeHtml(x)}</option>`).join("");
   const payList = [...DEFAULT_PAY_METHODS.filter((m) => m !== "Otro"), ...(s.payMethods || []), "Otro"];
   const payOpts = payList.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
   const acctOpts = `<option value="">— ninguna —</option>` + (s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
-  // cada parte: categoría + subcategoría (dependiente) + monto + detalle opcional
-  const subOpts = (catName) => ((s.cats.find((c) => c.name === catName) || {}).subs || []).map((x) => `<option>${escapeHtml(x)}</option>`).join("");
-  const firstCat = (s.cats[0] || {}).name || "";
-  const partRow = () => `<div class="split-part" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px">
+  // aprendizaje del historial: producto → categoría/subcategoría que más has usado con él
+  const kNorm = (x) => String(x || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");
+  const hist = {};
+  for (const t of s.txs) { const k = kNorm(t.desc); if (!k) continue; const c = `${t.cat}|${t.sub || ""}`; (hist[k] = hist[k] || {})[c] = (hist[k][c] || 0) + 1; }
+  const learned = (desc) => { const h = hist[kNorm(desc)]; if (!h) return null; const [c, sub] = Object.entries(h).sort((x, y) => y[1] - x[1])[0][0].split("|"); return { c, sub }; };
+  const firstCat = (s.cats.find((c) => c.name === "Alimentación") || s.cats[0] || {}).name || "";
+  const firstSub = ((s.cats.find((c) => c.name === firstCat) || {}).subs || [])[0] || "";
+  const itemRow = (cat = firstCat, sub = firstSub) => `<div class="split-part" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px">
       <div class="row gap-2" style="align-items:center;margin-bottom:6px">
-        <select class="input sp-cat" style="flex:1;min-width:0">${catOpts}</select>
-        <button type="button" class="icon-btn sp-del" aria-label="Quitar parte">✕</button></div>
+        <input class="input sp-prod" list="sp-prod-list" autocomplete="off" placeholder="Producto (ej. Coca cola)" style="flex:1;min-width:0">
+        <button type="button" class="icon-btn sp-del" aria-label="Quitar producto">✕</button></div>
       <div class="row gap-2" style="margin-bottom:6px">
-        <select class="input sp-sub" style="flex:1;min-width:0">${subOpts(firstCat)}</select>
-        <input class="input sp-amt" type="number" inputmode="numeric" placeholder="Monto" style="width:120px"></div>
-      <input class="input sp-note" placeholder="Detalle (opcional): ej. jabón, shampoo"></div>`;
-  openModal("Dividir gasto", `
-    <p class="tiny muted" style="margin:-4px 0 10px">Un pago repartido en varias categorías (ej. mercado + aseo en una compra). Se crea un gasto por parte, con la misma fecha y descripción.</p>
+        <input class="input sp-qty" type="number" inputmode="decimal" min="0" step="any" value="1" title="Cantidad" style="width:70px">
+        <input class="input sp-amt" type="number" inputmode="numeric" placeholder="Valor total del ítem" style="flex:1;min-width:0"></div>
+      <div class="row gap-2">
+        <select class="input sp-cat" style="flex:1;min-width:0">${catOpts(cat)}</select>
+        <select class="input sp-sub" style="flex:1;min-width:0">${subOpts(cat, sub)}</select></div></div>`;
+  openModal("Compra con varios productos", `
+    <p class="tiny muted" style="margin:-4px 0 10px">Para un recibo con varios productos (ej. mercado). Cada producto queda como un gasto propio con su nombre, para seguirlo de forma individual; todos quedan unidos como una sola compra (÷) y con la tienda como etiqueta.</p>
     <div class="field"><label class="label">Fecha</label><input id="sp-date" class="input" type="date" value="${prefill.date || todayISO()}"></div>
-    <div class="field"><label class="label">Descripción</label><input id="sp-desc" class="input" list="sp-desc-list" autocomplete="off" placeholder="Ej: Compra Éxito" value="${escapeHtml(prefill.desc || "")}">${descDatalist("sp-desc-list", s.txs)}</div>
+    <div class="field"><label class="label">Tienda / lugar</label><input id="sp-desc" class="input" list="sp-desc-list" autocomplete="off" placeholder="Ej: Éxito" value="${escapeHtml(prefill.desc || "")}">${descDatalist("sp-desc-list", s.txs)}
+      <div class="tiny muted mt-1">Se guarda como etiqueta de todos los productos (filtra por ella para ver el recibo completo).</div></div>
     <div class="field"><label class="label">Medio de pago</label><select id="sp-pay" class="input">${payOpts}</select></div>
     <div class="field"><label class="label">Cuenta (opcional)</label><select id="sp-acct" class="input">${acctOpts}</select></div>
-    <div class="field"><label class="label">Etiquetas para todo el recibo (opcional)</label><input id="sp-tags" class="input" list="sp-tags-list" autocomplete="off" placeholder="Ej: exito, viaje (separadas por coma)">${tagsDatalist("sp-tags-list", s.txs)}</div>
-    <label class="label">Partes (categoría › subcategoría · monto)</label>
-    <div id="sp-parts">${partRow()}${partRow()}</div>
-    <button type="button" id="sp-add" class="btn btn-ghost btn-sm">+ Agregar parte</button>
-    <div class="row between mt-2 small" style="padding-top:6px;border-top:1px solid var(--line)"><span class="muted">Total repartido</span><span id="sp-total" class="bold" style="color:var(--gold)">$0</span></div>
-    <button id="sp-save" class="btn btn-primary btn-block mt-2">Guardar gasto dividido</button>`, {
+    <div class="field"><label class="label">Otras etiquetas (opcional)</label><input id="sp-tags" class="input" list="sp-tags-list" autocomplete="off" placeholder="Ej: viaje (separadas por coma)">${tagsDatalist("sp-tags-list", s.txs)}</div>
+    <div class="field"><label class="label">Total del recibo (opcional, para verificar)</label><input id="sp-recibo" class="input" type="number" inputmode="numeric" placeholder="0"></div>
+    <label class="label">Productos</label>
+    ${descDatalist("sp-prod-list", s.txs)}
+    <div id="sp-parts">${itemRow()}${itemRow()}</div>
+    <button type="button" id="sp-add" class="btn btn-ghost btn-sm">+ Agregar producto</button>
+    <div class="row between mt-2 small" style="padding-top:6px;border-top:1px solid var(--line)"><span class="muted">Suma de productos</span><span id="sp-total" class="bold" style="color:var(--gold)">$0</span></div>
+    <div id="sp-check" class="tiny" style="text-align:right"></div>
+    <button id="sp-save" class="btn btn-primary btn-block mt-2">Guardar compra</button>`, {
     onMount(b) {
       const parts = b.querySelector("#sp-parts");
-      const recalc = () => { const t = [...b.querySelectorAll(".sp-amt")].reduce((a, i) => a + (+i.value || 0), 0); b.querySelector("#sp-total").textContent = fmt(t); };
+      const recalc = () => {
+        const t = [...b.querySelectorAll(".sp-amt")].reduce((a, i) => a + (+i.value || 0), 0);
+        b.querySelector("#sp-total").textContent = fmt(t);
+        const r = +b.querySelector("#sp-recibo").value || 0, ck = b.querySelector("#sp-check");
+        ck.innerHTML = !r ? "" : Math.abs(r - t) < 1 ? `<span style="color:var(--green)">✓ Cuadra con el recibo</span>`
+          : `<span style="color:var(--yel)">${r > t ? "Faltan" : "Sobran"} ${fmt(Math.abs(r - t))} frente al recibo</span>`;
+      };
       const wire = () => {
         b.querySelectorAll(".sp-amt").forEach((i) => i.oninput = recalc);
-        b.querySelectorAll(".split-part").forEach((p) => {
-          const cat = p.querySelector(".sp-cat"), sub = p.querySelector(".sp-sub");
-          cat.onchange = () => { sub.innerHTML = subOpts(cat.value); };
-        });
         b.querySelectorAll(".sp-del").forEach((x) => x.onclick = () => { if (b.querySelectorAll(".split-part").length > 1) { x.closest(".split-part").remove(); recalc(); } });
+        b.querySelectorAll(".split-part").forEach((p) => {
+          const cat = p.querySelector(".sp-cat"), sub = p.querySelector(".sp-sub"), prod = p.querySelector(".sp-prod");
+          cat.onchange = () => { sub.innerHTML = subOpts(cat.value); };
+          // al escribir un producto conocido, propone la categoría con la que lo sueles registrar
+          prod.onchange = () => { const l = learned(prod.value); if (l && s.cats.some((c) => c.name === l.c)) { cat.value = l.c; sub.innerHTML = subOpts(l.c, l.sub); } };
+        });
       };
       wire();
-      b.querySelector("#sp-add").onclick = () => { parts.insertAdjacentHTML("beforeend", partRow()); wire(); };
+      b.querySelector("#sp-recibo").oninput = recalc;
+      b.querySelector("#sp-add").onclick = () => {
+        // el nuevo producto arranca con la categoría del último (suele ser la misma sección)
+        const last = [...b.querySelectorAll(".split-part")].pop();
+        parts.insertAdjacentHTML("beforeend", last ? itemRow(last.querySelector(".sp-cat").value, last.querySelector(".sp-sub").value) : itemRow());
+        wire(); parts.lastElementChild.querySelector(".sp-prod").focus();
+      };
       submitOnce(b.querySelector("#sp-save"), async () => {
-        const date = b.querySelector("#sp-date").value, desc = b.querySelector("#sp-desc").value.trim();
+        const date = b.querySelector("#sp-date").value, tienda = b.querySelector("#sp-desc").value.trim();
         const pay = b.querySelector("#sp-pay").value, acct = b.querySelector("#sp-acct").value || "";
-        if (!date || !desc) return toast("Falta fecha o descripción", true);
-        const partsData = [...b.querySelectorAll(".split-part")]
-          .map((p) => ({ cat: p.querySelector(".sp-cat").value, sub: p.querySelector(".sp-sub").value, note: p.querySelector(".sp-note").value.trim(), amount: +p.querySelector(".sp-amt").value || 0 }))
-          .filter((p) => p.amount > 0);
-        if (partsData.length < 2) return toast("Necesitas al menos 2 partes con monto", true);
+        if (!date || !tienda) return toast("Falta fecha o tienda", true);
+        const items = [...b.querySelectorAll(".split-part")].map((p) => ({
+          prod: p.querySelector(".sp-prod").value.trim(), qty: +p.querySelector(".sp-qty").value || 1,
+          cat: p.querySelector(".sp-cat").value, sub: p.querySelector(".sp-sub").value, amount: +p.querySelector(".sp-amt").value || 0,
+        })).filter((p) => p.amount > 0);
+        if (!items.length) return toast("Agrega al menos un producto con valor", true);
+        if (items.some((p) => !p.prod)) return toast("Falta el nombre de algún producto", true);
         const splitId = uid(), s2 = getState();
-        const tags = parseTags(b.querySelector("#sp-tags").value);
-        const newTxs = partsData.map((p) => {
+        const tags = [...new Set([...parseTags(tienda), ...parseTags(b.querySelector("#sp-tags").value)])];
+        const newTxs = items.map((p) => {
           const c = s2.cats.find((x) => x.name === p.cat);
-          const sub = p.sub || (c && c.subs && c.subs[0]) || "";
-          // el detalle de la parte va en la descripción para que se vea y se pueda buscar
-          return { id: uid(), date, desc: p.note ? `${desc} · ${p.note}` : desc, amount: p.amount, cat: p.cat, sub, pay, acct, tags, splitId };
+          const t = { id: uid(), date, desc: p.prod, amount: p.amount, cat: p.cat, sub: p.sub || (c && c.subs && c.subs[0]) || "", pay, acct, tags, splitId };
+          if (p.qty && p.qty !== 1) t.qty = p.qty;
+          return t;
         });
         setState({ txs: [...newTxs, ...s2.txs] });
         for (const t of newTxs) await addTx(s2.user.uid, t);
         forcePersistLocal(s2.user.uid);
-        closeModal(); drawList(); toast(`Gasto dividido en ${newTxs.length} partes`);
+        closeModal(); drawList(); toast(`Compra guardada: ${newTxs.length} producto(s)`);
       });
     },
   });
