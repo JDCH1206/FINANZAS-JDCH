@@ -59,11 +59,32 @@ export const OBLIG_TIPOS = [
 ];
 export const AVISO_DIAS = [15, 30, 60];
 export const MAINT_CATEGORIES = ["Taller", "Rutina", "Insumos"];
+// Listas ordenadas por sistema (motor → transmisión → frenos/llantas →
+// suspensión/dirección → eléctrico → general). Insumos refleja a Taller para
+// poder comparar "compré la pieza" vs "me la instalaron" en el histórico de precios.
 export const MAINT_TIPOS = {
-  Taller: ["Cambio de aceite", "Filtro de aceite", "Llantas", "Frenos (pastillas)", "Kit de arrastre", "Bujía", "Sincronización / válvulas", "Batería", "Reparación", "Otro"],
-  Rutina: ["Lubricación de cadena", "Tensión de cadena", "Presión de llantas", "Nivel de aceite", "Luces", "Limpieza", "Otro"],
-  // compras de repuestos/insumos que aún no se instalan: el odómetro no aplica
-  Insumos: ["Aceite (compra)", "Filtro (compra)", "Repuesto (compra)", "Llantas (compra)", "Líquidos (frenos/refrigerante)", "Accesorios", "Otro"],
+  // Servicios con mano de obra / instalación (sí aplica odómetro)
+  Taller: [
+    "Cambio de aceite", "Filtro de aceite", "Filtro de aire", "Bujía",
+    "Sincronización / válvulas", "Carburación / inyección",
+    "Kit de arrastre (cadena)", "Clutch / embrague", "Guayas / cables",
+    "Frenos (pastillas)", "Líquido de frenos", "Llantas (montaje)", "Rodamientos",
+    "Suspensión / dirección", "Sistema eléctrico", "Batería",
+    "Revisión / diagnóstico", "Reparación (otra)", "Otro",
+  ],
+  // Mantenimiento propio en casa, sin mano de obra
+  Rutina: [
+    "Lubricación de cadena", "Tensión de cadena", "Presión de llantas",
+    "Nivel / control de aceite", "Revisión de frenos", "Luces y señales",
+    "Limpieza / lavado", "Revisión general", "Otro",
+  ],
+  // Compras de repuestos/insumos que aún no se instalan: el odómetro no aplica
+  Insumos: [
+    "Aceite (compra)", "Filtro de aceite (compra)", "Filtro de aire (compra)",
+    "Bujía (compra)", "Pastillas de freno (compra)", "Kit de arrastre (compra)",
+    "Llanta (compra)", "Líquidos (frenos/refrigerante)", "Batería (compra)",
+    "Repuesto (otro)", "Accesorios", "Otro",
+  ],
 };
 export const DEPARTAMENTOS = [
   "Amazonas", "Antioquia", "Arauca", "Atlántico", "Bogotá D.C.", "Bolívar", "Boyacá",

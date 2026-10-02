@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v80.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v98.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v80). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v98). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,13 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v97**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v98**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v98 — Listas de Tipo de mantenimiento reorganizadas y ampliadas
+- 🗂️ Las tres listas de **Tipo** (Taller / Rutina / Insumos) se reordenaron **por sistema** (motor → transmisión → frenos/llantas → suspensión/dirección → eléctrico → general) para elegir más rápido.
+- ➕ Se agregaron ítems comunes que faltaban: **filtro de aire, carburación/inyección, clutch/embrague, guayas/cables, líquido de frenos, rodamientos, suspensión/dirección, sistema eléctrico, revisión/diagnóstico** (Taller); **revisión de frenos y revisión general** (Rutina); y en **Insumos** ahora cada compra espeja a Taller (filtro de aire, pastillas, batería, etc.) para comparar "compré la pieza" vs "me la instalaron" en el histórico de precios.
+- 🎯 El cajón genérico **"Reparación"** pasa a **"Reparación (otra)"** y queda como último recurso: con las nuevas opciones específicas deberías usarlo mucho menos, lo que hace los datos **filtrables de forma objetiva**.
+- ℹ️ Los registros antiguos conservan su Tipo original aunque ya no esté en la lista (el formulario lo preserva al editar).
 
 ### 2026-10-02 · caché v97 — Orden de trabajo: campos como el ítem individual + Tipo estricto
 - 🧱 Cada línea de la orden ahora usa **campos con etiqueta y el mismo espaciado** que el ítem individual (Clasificación, Tipo, Descripción, Referencia/Cantidad, Valor, Repetir cada km), en vez de inputs apretados.
