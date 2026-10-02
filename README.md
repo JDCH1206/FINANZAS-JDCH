@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v102.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v103.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v102). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v103). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v102**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v103**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v103 — Flujo del dinero por mes
+- 📅 Junto al selector de año ahora hay un selector de **mes** ("Todo el año" por defecto + los meses de ese año con movimientos). El Sankey, los totales de Ingresos/Gastos/Ahorro y el aviso de déficit se calculan para el período elegido; los % pasan a ser "sobre tus ingresos del mes".
+- Al cambiar de año el mes vuelve a "Todo el año".
 
 ### 2026-10-02 · caché v102 — Rediseño del "Flujo del dinero" (Sankey)
 - 🎨 Antes: 12 categorías con colores de una paleta que se repetían o parecían (Salud y Ahorro con el mismo verde) y una leyenda aparte que había que descifrar.

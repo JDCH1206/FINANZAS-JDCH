@@ -26,6 +26,7 @@ let dashTab = "resumen";       // "resumen" | "detalle" | "calendario"
 let detPath = { year: null, month: null, cat: null }; // ruta del drill-down Año › Mes › Categoría › Subcat
 let calMonth = null;           // mes del calendario/mapa de calor
 let advYear = null;            // año del Sankey de flujo (pestaña Avanzado)
+let advMonth = "";             // mes del Sankey ("" = todo el año; si no, "YYYY-MM")
 
 export function renderDashboard(root) {
   const s = getState();
@@ -390,19 +391,25 @@ function renderAvanzado(root, tabs) {
   // --- Sankey: flujo ingreso → categorías (+ ahorro) del año elegido ---
   const years = [...new Set([...txs, ...(s.incomes || [])].map((t) => (t.date || "").slice(0, 4)).filter(Boolean))].sort().reverse();
   if (!advYear || !years.includes(advYear)) advYear = years[0] || curMonth().slice(0, 4);
-  const inY = sum((s.incomes || []).filter((t) => (t.date || "").slice(0, 4) === advYear), (t) => t.amount);
+  // meses del año elegido con movimientos (para ver el flujo de un solo mes)
+  const months = [...new Set([...txs, ...(s.incomes || [])].map((t) => (t.date || "").slice(0, 7)).filter((m) => m.slice(0, 4) === advYear))].sort().reverse();
+  if (advMonth && !months.includes(advMonth)) advMonth = "";
+  const period = advMonth || advYear, inPer = (t) => (t.date || "").startsWith(period);
+  const periodLbl = advMonth ? monthLabel(advMonth) : advYear;
+  const inY = sum((s.incomes || []).filter(inPer), (t) => t.amount);
   const exByCat = {};
-  txs.filter((t) => (t.date || "").slice(0, 4) === advYear).forEach((t) => { exByCat[t.cat] = (exByCat[t.cat] || 0) + (+t.amount || 0); });
+  txs.filter(inPer).forEach((t) => { exByCat[t.cat] = (exByCat[t.cat] || 0) + (+t.amount || 0); });
   const exY = sum(Object.values(exByCat));
-  const sankey = buildSankey(inY, exByCat);
+  const sankey = buildSankey(inY, exByCat, advMonth ? "del mes" : "del año");
 
   root.innerHTML = tabs + `
     <div class="card mb-3">
-      <div class="row between mb-2" style="align-items:center"><div class="card-title" style="margin:0">💵 Flujo del dinero</div>
-        <select id="adv-year" class="input" style="width:auto">${years.map((y) => `<option ${y === advYear ? "selected" : ""}>${y}</option>`).join("")}</select></div>
+      <div class="row between mb-2" style="align-items:center;flex-wrap:wrap;gap:8px"><div class="card-title" style="margin:0">💵 Flujo del dinero</div>
+        <div class="row gap-2"><select id="adv-month" class="input" style="width:auto"><option value="">Todo el año</option>${months.map((m) => `<option value="${m}" ${m === advMonth ? "selected" : ""}>${escapeHtml(monthLabel(m))}</option>`).join("")}</select>
+        <select id="adv-year" class="input" style="width:auto">${years.map((y) => `<option ${y === advYear ? "selected" : ""}>${y}</option>`).join("")}</select></div></div>
       <div class="row between tiny muted mb-2"><span>Ingresos ${fmt(inY)}</span><span>Gastos ${fmt(exY)}</span><span style="color:${inY - exY >= 0 ? "var(--green)" : "var(--red)"}">${inY - exY >= 0 ? "Ahorro" : "Déficit"} ${fmt(Math.abs(inY - exY))}</span></div>
       ${sankey}
-      ${inY - exY < 0 ? `<p class="tiny" style="color:var(--red)">⚠ En ${advYear} gastaste más de lo que ingresó.</p>` : ""}
+      ${inY - exY < 0 ? `<p class="tiny" style="color:var(--red)">⚠ En ${escapeHtml(periodLbl)} gastaste más de lo que ingresó.</p>` : ""}
     </div>
     <div class="card mb-3">
       <div class="card-title">🐜 Compras repetidas (gasto hormiga)</div>
@@ -416,15 +423,16 @@ function renderAvanzado(root, tabs) {
     </div>`;
 
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
-  const yr = root.querySelector("#adv-year"); if (yr) yr.onchange = (e) => { advYear = e.target.value; renderDashboard(root); };
+  const yr = root.querySelector("#adv-year"); if (yr) yr.onchange = (e) => { advYear = e.target.value; advMonth = ""; renderDashboard(root); };
+  const mo = root.querySelector("#adv-month"); if (mo) mo.onchange = (e) => { advMonth = e.target.value; renderDashboard(root); };
 }
 
 // Diagrama Sankey (SVG inline) en 3 columnas: Ingresos → (Gastos | Ahorro) → categorías.
 // El color codifica el SIGNIFICADO (dorado ingreso, gris gasto, verde ahorro, rojo déficit);
 // las categorías se identifican con etiqueta directa, no con colores.
-function buildSankey(inY, exByCat) {
+function buildSankey(inY, exByCat, perTxt = "del año") {
   const exY = sum(Object.values(exByCat));
-  if (!inY && !exY) return `<div class="muted small">Sin datos para este año.</div>`;
+  if (!inY && !exY) return `<div class="muted small">Sin datos para este período.</div>`;
   const TOP = 7;
   const sorted = Object.entries(exByCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const cats = sorted.slice(0, TOP).map(([label, value]) => ({ label, value }));
@@ -488,7 +496,7 @@ function buildSankey(inY, exByCat) {
       ${colHead(X0, "INGRESOS")}${colHead(X1, "REPARTO")}${colHead(X2, "EN QUÉ SE FUE")}
       ${svg}${labels}
     </svg>
-    <p class="tiny muted" style="margin-top:6px">Porcentajes sobre tus ingresos del año${deficit ? " (sobre los gastos, porque hubo déficit)" : ""}. Toca una banda para ver el valor exacto.</p>
+    <p class="tiny muted" style="margin-top:6px">Porcentajes sobre tus ingresos ${perTxt}${deficit ? " (sobre los gastos, porque hubo déficit)" : ""}. Toca una banda para ver el valor exacto.</p>
   </div>`;
 }
 
