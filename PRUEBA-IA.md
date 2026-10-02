@@ -33,6 +33,12 @@ los datos son los reales (lo que registres aparece también en el celular).
   taller con IA**: foto de la factura → revisa las líneas → *Registrar orden*.
 - **Ajustes → Reporte mensual (PDF) → ✨ Incluir análisis del mes con IA → Generar**: el PDF
   trae un resumen, hallazgos y recomendaciones redactados con IA a partir de tus cifras.
+- **Movimientos → 🎤 Dictar o escribir**: toca 🎤 y habla (o escribe), *Interpretar* → revisa →
+  *Guardar marcados*. El micrófono pide permiso la primera vez (en `localhost` funciona).
+- **Movimientos → 📄 Importar extracto**: elige el PDF del banco o la tarjeta → revisa: las
+  transferencias entre tus cuentas y los que ya tienes registrados salen **desmarcados**.
+- **Tablero → Avanzado**: 📈 Proyección del mes y 🚨 Gastos inusuales (sin IA), ✨ Análisis del
+  mes (elige el mes → *Analizar*) y ❓ Pregúntale a tus datos.
 - Si un modelo no existe o agota su cupo, la app salta al siguiente (se ve en *Probar conexión*
   y en *Uso de hoy*). Las cadenas se cambian en Ajustes → IA → *Modelos*.
 

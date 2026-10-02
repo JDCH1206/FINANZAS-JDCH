@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v118.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v119.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v118). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v119). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,17 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v118**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v119**. Cambios por fecha (más reciente primero):
+
+### 2026-10-02 · caché v119 — Más IA: dictado, extractos PDF, preguntas y análisis en el Tablero (rama `ia-gemini`)
+- 🎤 **Movimientos → Dictar o escribir**: dices o escribes "ayer almuerzo 18 mil en efectivo y una coca cola de 4500" y la IA arma los movimientos (varios por frase; fechas relativas; "mil"/"millones"/"palos"; gasto o ingreso; categoría, medio de pago y cuenta solo de tus listas). Voz con el reconocimiento del navegador (español Colombia).
+- 📄 **Movimientos → Importar extracto** (PDF o foto, máx 15 MB): lee extractos del banco/tarjeta y facturas electrónicas; marca **transferencias entre tus cuentas / pagos de tarjeta** y **posibles duplicados** (mismo valor ±1 día) para que no se importen por error. El archivo no se guarda.
+- ✅ Todo pasa por una **pantalla de revisión**: casilla por movimiento, fecha, tipo, descripción, valor, categoría›sub (la que tú sueles usar con esa descripción manda) o tipo de ingreso (deducido: nómina→Salario, intereses→Rendimientos…), medio de pago y cuenta globales. Nada se guarda sin confirmar.
+- 📈 **Avanzado → Proyección del mes** (sin IA): cuánto llevas y en cuánto cerrarías, usando el ritmo de tus meses anteriores a esta misma altura del mes (el arriendo del día 1 no infla la proyección); compara con tu promedio y avisa si superarías el ingreso.
+- 🚨 **Avanzado → Gastos inusuales** (sin IA, últimos 45 días): gastos ≥1,8× lo normal para esa misma descripción (o ≥3× su subcategoría si es nuevo).
+- ✨ **Avanzado → Análisis del mes con IA**: el mismo análisis del reporte PDF en pantalla, por mes; queda guardado en el equipo y solo se recalcula si cambian los movimientos de ese mes.
+- ❓ **Avanzado → Pregúntale a tus datos**: preguntas libres ("¿cuánto gasté en domicilios en los últimos 3 meses?"). La IA solo elige **funciones de consulta** (totales, por categoría, por descripción, más grandes, búsqueda, ingresos, resumen mensual, saldos) que **la app calcula** con tus datos; la IA no ve la lista completa de movimientos.
+- ✅ Verificado con Gemini real y datos sintéticos: dictado de 3 movimientos ≈23 s; extracto PDF de 8 líneas ≈24 s (transferencia propia y nómina duplicada detectadas); pregunta con 8 consultas ≈29 s; análisis ≈41 s. Si un modelo devuelve 429 salta al siguiente.
 
 ### 2026-10-02 · caché v118 — IA con Gemini (rama `ia-gemini`, en prueba)
 - 🔧 **Firebase JS SDK 10.12.2 → 12.19.0** (`FB_VER` en `firebase-service.js`; todos los módulos de la misma versión). Necesario para **Firebase AI Logic**. Se verificó que las 21 funciones de Firebase que usa la app existen en 12.19.0 y que la app arranca igual que con 10.12.2.

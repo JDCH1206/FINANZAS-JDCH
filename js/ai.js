@@ -245,6 +245,96 @@ ${JSON.stringify(datos)}`;
   return { resumen: d.resumen || "", hallazgos: (d.hallazgos || []).filter((h) => h && h.titulo), recomendaciones: (d.recomendaciones || []).filter(Boolean), model: r.model };
 }
 
+/* ---------- Movimientos desde texto o voz ---------- */
+// "almuerzo 15 mil efectivo y gaseosa 4 mil" → lista de movimientos para revisar
+export async function interpretarTexto(texto, { cats, pays, cuentas, hoy }) {
+  const listado = cats.map((c) => `- ${c.name}: ${(c.subs || []).join(", ")}`).join("\n");
+  const prompt = `Convierte lo que dijo o escribió el usuario (Colombia, pesos COP) en movimientos de dinero. HOY es ${hoy}.
+Reglas: "15 mil" = 15000, "1,2 millones" o "1.2 palos" = 1200000, "ayer"/"el lunes" → fecha real YYYY-MM-DD; si no dice fecha, usa HOY.
+Un texto puede traer VARIOS movimientos ("almuerzo 15 mil y gaseosa 4 mil" = 2). "tipo": "gasto" o "ingreso" (salario, pago recibido, venta…).
+Descripción corta y clara en español (ej. "Almuerzo", "Gasolina extra", "Coca cola"). Para gastos elige categoría y subcategoría SOLO de esta lista:
+${listado}
+Medio de pago SOLO de: ${pays.join(", ")} (vacío si no lo dice). Cuenta SOLO de: ${cuentas.join(", ") || "(ninguna)"} (vacío si no lo dice).
+Texto: """${texto}"""`;
+  const r = await generar("texto", [prompt], (S) => S.object({ properties: { movimientos: S.array({ items: S.object({ properties: {
+    tipo: S.enumString({ enum: ["gasto", "ingreso"] }), descripcion: S.string(), monto: S.number(), fecha: S.string(),
+    categoria: S.enumString({ enum: cats.map((c) => c.name) }), subcategoria: S.string(), medioPago: S.string(), cuenta: S.string(),
+  } }) }) } }));
+  const movs = ((r.data || {}).movimientos || []).filter((m) => m && m.descripcion && +m.monto > 0)
+    .map((m) => ({ ...m, monto: Math.round(+m.monto), fecha: fechaOk(m.fecha) || hoy }));
+  return { movimientos: movs, model: r.model };
+}
+
+/* ---------- Extracto bancario (PDF o foto) ---------- */
+async function archivoParte(file) {
+  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")) {
+    if (file.size > 15 * 1024 * 1024) throw new Error("El PDF pesa más de 15 MB; divídelo o usa un período más corto.");
+    const data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1]); fr.onerror = () => rej(new Error("No se pudo leer el archivo")); fr.readAsDataURL(file); });
+    return { inlineData: { data, mimeType: "application/pdf" } };
+  }
+  return imagenParte(file, 2000, 0.85);
+}
+export async function leerExtracto(file, cats) {
+  const listado = cats.map((c) => `- ${c.name}: ${(c.subs || []).join(", ")}`).join("\n");
+  const prompt = `Este archivo es un extracto bancario, de tarjeta o una factura/recibo de Colombia. Extrae TODOS los movimientos (cada fila con fecha, descripción y valor).
+"tipo": "gasto" para compras, pagos, débitos, retiros y cobros; "ingreso" para abonos, consignaciones, nómina, transferencias recibidas y rendimientos.
+"descripcion": corta y clara (comercio o concepto, ej. "Éxito", "Netflix", "Pago nómina"). "monto" siempre positivo, entero, sin puntos.
+"fecha" YYYY-MM-DD (si el extracto solo trae día/mes, usa el año del período del extracto).
+"esTransferenciaPropia": true si parece un movimiento entre cuentas propias o pago de la tarjeta (no es gasto real).
+Para gastos asigna categoría y subcategoría SOLO de esta lista:
+${listado}
+No inventes filas; no incluyas saldos, totales ni subtotales como movimientos.`;
+  const r = await generar("vision", [prompt, await archivoParte(file)], (S) => S.object({ properties: {
+    entidad: S.string(), periodo: S.string(),
+    movimientos: S.array({ items: S.object({ properties: {
+      fecha: S.string(), descripcion: S.string(), monto: S.number(), tipo: S.enumString({ enum: ["gasto", "ingreso"] }),
+      categoria: S.enumString({ enum: cats.map((c) => c.name) }), subcategoria: S.string(), esTransferenciaPropia: S.boolean(),
+    } }) }),
+  } }), { pensarPoco: true });
+  const d = r.data || {};
+  const movs = (d.movimientos || []).filter((m) => m && m.descripcion && +m.monto > 0).map((m) => ({ ...m, monto: Math.round(+m.monto), fecha: fechaOk(m.fecha) }));
+  return { entidad: (d.entidad || "").trim(), periodo: (d.periodo || "").trim(), movimientos: movs, model: r.model, intentos: r.intentos };
+}
+
+/* ---------- Pregúntale a tus datos (llamada a funciones) ---------- */
+// La IA NO recibe los movimientos: pide cálculos a funciones de la app (`herramientas`) y redacta.
+export async function preguntar(pregunta, herramientas, declaraciones, contexto) {
+  const { ai: inst, aiMod: m } = await conectar();
+  const cadena = aiCfg().chains.analisis || DEFAULT_CHAINS.analisis;
+  const uso = usoHoy(), intentos = [];
+  const sistema = `Eres el asistente de una app de finanzas personales (Colombia, COP). Responde en español, breve y con cifras.
+NUNCA calcules ni inventes cifras: usa SIEMPRE las funciones para obtener los datos y responde con sus resultados. ${contexto}`;
+  for (const model of cadena) {
+    const u = uso[model] || {};
+    if (u.agotado || u.noExiste) continue;
+    try {
+      const gm = m.getGenerativeModel(inst, { model, systemInstruction: sistema, tools: [{ functionDeclarations: typeof declaraciones === "function" ? declaraciones(m.Schema) : declaraciones }] });
+      const chat = gm.startChat();
+      let res = await conTiempo(chat.sendMessage(pregunta), 90000);
+      const usadas = [];
+      for (let paso = 0; paso < 5; paso++) {
+        const calls = (res.response.functionCalls && res.response.functionCalls()) || [];
+        if (!calls.length) break;
+        const respuestas = calls.map((c) => {
+          let out; try { out = herramientas[c.name] ? herramientas[c.name](c.args || {}) : { error: "función desconocida" }; } catch (e) { out = { error: String(e.message || e) }; }
+          usadas.push(c.name);
+          return { functionResponse: { name: c.name, response: { resultado: out } } };
+        });
+        res = await conTiempo(chat.sendMessage(respuestas), 90000);
+      }
+      marcar(model, (x) => ({ n: (x.n || 0) + 1 }));
+      return { texto: res.response.text(), model, funciones: usadas, intentos };
+    } catch (e) {
+      const t = tipoError(e);
+      intentos.push({ model, error: t, detalle: String((e && e.message) || e).slice(0, 160) });
+      if (t === "appcheck" || t === "api") throw new Error(t === "api" ? "Firebase AI Logic no está activado." : "App Check rechazó la consulta.");
+      if (t === "cupo") marcar(model, () => ({ agotado: true }));
+      if (t === "modelo") marcar(model, () => ({ noExiste: true }));
+    }
+  }
+  const err = new Error("IA no disponible por ahora (todos los modelos fallaron o agotaron su cupo)."); err.intentos = intentos; throw err;
+}
+
 // prueba rápida de conexión (Ajustes → IA)
 export async function probarConexion() {
   const r = await generar("texto", ["Responde solo con la palabra: OK"]);

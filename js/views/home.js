@@ -6,6 +6,7 @@ import { PALETTE, INCOME_TYPES, DEFAULT_PAY_METHODS, FUEL_TYPES, MAINT_CATEGORIE
 import { openModal, closeModal, toast, toastUndo, confirmDialog, submitOnce, moneyPreview } from "../components/modals.js";
 import { openVisitModal } from "./vehicles.js";
 import { aiReady, botonesFoto, enlazarFoto, leerRecibo } from "../ai.js";
+import { iaBarHtml, wireIaBar } from "./ia-registro.js";
 
 let query = "";
 let tabKind = "gasto";
@@ -80,6 +81,7 @@ export function renderHome(root) {
   root.innerHTML = `
     <h2 class="page-title disp">Movimientos</h2>
     <p class="page-sub">${escapeHtml(s.profile.name)}</p>
+    ${iaBarHtml()}
     <div class="row gap-2 mb-3">
       <button class="chip ${tabKind === "gasto" ? "on" : ""}" data-kind="gasto">Gastos</button>
       <button class="chip ${tabKind === "ingreso" ? "on" : ""}" data-kind="ingreso">Ingresos</button>
@@ -117,6 +119,7 @@ export function renderHome(root) {
   const ftagSel = root.querySelector("#f-tag"); if (ftagSel) ftagSel.onchange = (e) => { fTag = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-min").oninput = (e) => { fMin = e.target.value; limit = 300; drawList(); };
   root.querySelector("#f-max").oninput = (e) => { fMax = e.target.value; limit = 300; drawList(); };
+  wireIaBar(root, () => renderHome(root));
   root.querySelector("#f-clear").onclick = () => { query = ""; fMonth = ""; fCat = ""; fMin = ""; fMax = ""; fAcct = ""; fPay = ""; fTag = ""; renderHome(root); };
   drawSavedFilters(root);
 

@@ -6,6 +6,7 @@ import { fmt, fmtShort, ym, monthLabel, sum, curMonth, todayISO, escapeHtml } fr
 import { donut, lineTrend, lineTrendPct, categoryBars, groupedBars } from "../components/charts.js";
 import { openModal } from "../components/modals.js";
 import { seguimientosCard, wireSeguimientos } from "./seguimientos.js";
+import { avanzadoExtraHtml, wireAvanzadoExtra } from "./ia-avanzado.js";
 
 // desplaza una clave "YYYY-MM" en delta meses
 function ymAdd(key, delta) {
@@ -443,6 +444,7 @@ function renderAvanzado(root, tabs) {
       ${inY - exY < 0 ? `<p class="tiny" style="color:var(--red)">⚠ En ${escapeHtml(periodLbl)} gastaste más de lo que ingresó.</p>` : ""}
     </div>
     ${concil}
+    ${avanzadoExtraHtml(s)}
     <div class="card mb-3">
       <div class="card-title">🐜 Compras repetidas (gasto hormiga)</div>
       <p class="tiny muted" style="margin:-4px 0 8px">Compras <b>pequeñas</b> (promedio ≤ ${fmt(HORM_MAX_PROM)}), <b>frecuentes</b> (≥3 veces) y <b>prescindibles</b>. No incluye gastos necesarios o fijos (arriendo, transporte, parqueadero, combustible, mercado, salud, suscripciones, pólizas) ni comidas principales. Estas ${horm.length} suman <b>${fmt(hormTot)}</b> (≈ ${fmt(hormTot / (nMonths / 12))}/año). Toca ✕ si algo no es hormiga.</p>
@@ -459,6 +461,7 @@ function renderAvanzado(root, tabs) {
 
   root.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { dashTab = b.getAttribute("data-tab"); renderDashboard(root); });
   wireSeguimientos(root, () => renderDashboard(root));
+  wireAvanzadoExtra(root);
   // excluir / restaurar ítems de la lista de gasto hormiga (se guarda en el perfil)
   const setExcl = async (fn) => {
     const st = getState();
