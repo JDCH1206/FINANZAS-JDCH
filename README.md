@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v127.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v128.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v127). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v128). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v127**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v128**. Cambios por fecha (más reciente primero):
+
+### 2026-10-03 · caché v128 — Foto también para un gasto individual
+- 📸 **Nuevo gasto → ✨ Leer foto del recibo o factura** (Tomar foto / Cargar foto): llena descripción (nombre comercial de la tienda), fecha, monto (total a pagar) y categoría › subcategoría (la que sueles usar con esa tienda o, si no, la de mayor valor en el recibo). Si el recibo trae productos de varias categorías avisa que puedes usar **Compra con varios productos** para separarlos. Solo en gastos nuevos y con la IA activa.
+- La IA ahora devuelve la tienda con su **nombre comercial** ("Éxito"), no la razón social ("ALMACENES ÉXITO S.A."); aplica también a Compra con varios productos.
 
 ### 2026-10-03 · caché v127 — IA: preguntas solo de finanzas; revisión más clara
 - ❓ **Pregúntale a tus datos** solo responde sobre tus finanzas: a preguntas ajenas ("¿Marvel o DC?", "capital de Francia") contesta "Solo puedo responder preguntas sobre tus finanzas registradas en la app…" sin opinar ni consultar datos. Respuestas sin markdown (si llega `**negrita**` se muestra en negrita, no con asteriscos) y la lista de consultas sin repetidos.

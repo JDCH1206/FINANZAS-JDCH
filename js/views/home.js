@@ -392,6 +392,7 @@ export function openTxModal(existing) {
       <p class="tiny muted" style="margin-top:4px">Etiqueta este gasto a un vehículo para separar sus costos. No crea tanqueo ni mantenimiento.</p></div>`
     : (linkedVeh ? `<div class="field"><p class="tiny muted">${existing.visitaId ? "🧾 Este gasto es una <b>visita de taller</b> con varias líneas. Su monto y detalle se editan en Vehículos → Mantenimiento." : "🔗 Este gasto está vinculado a un registro del vehículo (combustible/mantenimiento/obligación). Su vehículo se administra desde ese módulo."}</p></div>` : "");
   openModal(existing ? "Editar gasto" : "Nuevo gasto", `
+    ${!existing && aiReady() ? botonesFoto("m-ai", "Leer foto del recibo o factura") : ""}
     <div class="field"><label class="label">Fecha</label><input id="m-date" class="input" type="date" value="${existing ? existing.date : todayISO()}"></div>
     <div class="field"><label class="label">Descripción</label><input id="m-desc" class="input" list="m-desc-list" autocomplete="off" placeholder="Ej: Mercado D1" value="${existing ? escapeHtml(existing.desc) : ""}">${descDatalist("m-desc-list", s.txs)}</div>
     <div class="field"><label class="label">Monto (COP)</label><input id="m-amt" class="input" type="number" placeholder="0" value="${existing ? existing.amount : ""}" ${existing && existing.visitaId ? "readonly style='opacity:.55'" : ""}></div>
@@ -439,6 +440,33 @@ export function openTxModal(existing) {
       if (existing) catSel.value = existing.cat;
       catSel.onchange = () => { fillSubs(); toggleVehWrap(); toggleVisitCta(); }; fillSubs(); toggleVehWrap(); toggleVisitCta();
       subSel.addEventListener("change", toggleVisitCta);
+      // ✨ IA: foto de un recibo → un solo gasto (tienda, fecha, total y la categoría que más pesa)
+      if (!existing) enlazarFoto(b, "m-ai", async (file, st) => {
+        st.textContent = "⏳ Leyendo la foto… (puede tardar unos segundos)"; st.style.color = "";
+        try {
+          const r = await leerRecibo(file, s.cats);
+          const total = r.total || r.items.reduce((a, x) => a + x.valor, 0);
+          if (!total) { st.textContent = "No pude leer el valor. Intenta con una foto más nítida."; st.style.color = "var(--yel)"; return; }
+          const desc = r.tienda || (r.items[0] && r.items[0].producto) || "";
+          if (desc) b.querySelector("#m-desc").value = desc;
+          if (r.fecha) b.querySelector("#m-date").value = r.fecha;
+          b.querySelector("#m-amt").value = total;
+          b.querySelector("#m-amt").dispatchEvent(new Event("input"));
+          // categoría: la que sueles usar con esa tienda › la de mayor valor en el recibo (según la IA)
+          const learned = makeLearner(s.txs), l = learned(desc);
+          const peso = {}; r.items.forEach((x) => { const k = `${x.categoria}|${x.subcategoria || ""}`; peso[k] = (peso[k] || 0) + x.valor; });
+          const top = Object.entries(peso).sort((x, y) => y[1] - x[1])[0];
+          let [cat, sub] = l ? [l.c, l.sub] : top ? top[0].split("|") : ["", ""];
+          if (s.cats.some((c) => c.name === cat)) {
+            catSel.value = cat; fillSubs(); toggleVehWrap(); toggleVisitCta();
+            if ([...subSel.options].some((o) => o.value === sub)) subSel.value = sub;
+          }
+          const cats = new Set(r.items.map((x) => x.categoria));
+          st.innerHTML = `✓ Leído con ${escapeHtml(r.model)}: ${escapeHtml(desc || "recibo")} · ${fmt(total)}. <b>Revisa antes de guardar.</b>`
+            + (cats.size > 1 ? `<br>Trae ${r.items.length} productos de ${cats.size} categorías: si quieres cada uno por separado usa <b>🧾 Compra con varios productos</b>.` : "");
+          st.style.color = "var(--green)";
+        } catch (e) { st.textContent = "⚠ " + (e.message || e); st.style.color = "var(--red)"; }
+      });
       if (visitCta) b.querySelector("#m-visit-btn").onclick = () => {
         const vehs = s.vehicles || [];
         const vid = (vehSelEl && vehSelEl.value) || (vehs.length === 1 ? vehs[0].id : "");

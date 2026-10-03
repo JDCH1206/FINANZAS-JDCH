@@ -180,7 +180,7 @@ const IVA_TXT = `Valores: si las líneas YA incluyen IVA, pon "ivaAparte": 0. Si
 /* ---------- Leer recibo de compra (supermercado, tienda…) ---------- */
 export async function leerRecibo(file, cats) {
   const listado = cats.map((c) => `- ${c.name}: ${(c.subs || []).join(", ")}`).join("\n");
-  const prompt = `Lee este recibo de compra de Colombia. Extrae la tienda, la fecha (YYYY-MM-DD) y CADA producto con su cantidad y su valor total de la línea.
+  const prompt = `Lee este recibo de compra de Colombia. Extrae la tienda (nombre comercial corto como la gente la conoce, ej. "Éxito", "D1", "Terpel"; NO la razón social como "ALMACENES ÉXITO S.A."), la fecha (YYYY-MM-DD) y CADA producto con su cantidad y su valor total de la línea.
 Para cada producto escribe un nombre corto y claro en español (ej. "Coca cola", "Arroz Diana 1kg") y asígnale una categoría y subcategoría SOLO de esta lista:
 ${listado}
 ${IVA_TXT}
