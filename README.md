@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v121.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v122.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v121). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v122). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v121**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v122**. Cambios por fecha (más reciente primero):
+
+### 2026-10-03 · caché v122 — IA: medio de pago y cuenta por movimiento en la revisión
+- 🧾 En la pantalla de revisión (dictado y extracto) **cada gasto muestra su propio medio de pago y cuenta**, ya llenos: lo que dijiste («con la tarjeta Nu») o, si no lo dijiste, el medio y la cuenta con los que **sueles pagar esa descripción**; la cuenta de cada medio sale de la última usada o de la más frecuente. Efectivo oculta la cuenta.
+- Los selectores de arriba pasan a ser **«Poner a todos»**: aplican el medio o la cuenta a todos los movimientos de una vez y luego se pueden ajustar uno por uno. Al guardar se recuerda la cuenta de cada medio de pago (igual que el formulario normal).
 
 ### 2026-10-03 · caché v121 — IA: diagnóstico de App Check en "Probar conexión"
 - 🔎 **Probar conexión** pide primero el token de App Check por separado y, si falla, dice si el problema es la **clave/dominio** (Fraud Defense no validó la página) o el **registro en Firebase** (la clave pegada no es la registrada en App Check para esta app web), con el detalle técnico. Los fallos de red momentáneos no se reportan como error de clave.

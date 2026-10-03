@@ -14,6 +14,15 @@ function aprendido(txs) {
   for (const t of txs) { const k = norm(t.desc); if (!k) continue; const c = `${t.cat}|${t.sub || ""}`; (h[k] = h[k] || {})[c] = (h[k][c] || 0) + 1; }
   return (d) => { const e = h[norm(d)]; if (!e) return null; const [c, sub] = Object.entries(e).sort((a, b) => b[1] - a[1])[0][0].split("|"); return { c, sub }; };
 }
+// medio de pago y cuenta con los que sueles pagar esa descripción
+function pagoHabitual(txs) {
+  const h = {};
+  for (const t of txs) { const k = norm(t.desc); if (!k || !t.pay) continue; const c = `${t.pay}|${t.acct || ""}`; (h[k] = h[k] || {})[c] = (h[k][c] || 0) + 1; }
+  return (d) => { const e = h[norm(d)]; if (!e) return null; const [pay, acct] = Object.entries(e).sort((a, b) => b[1] - a[1])[0][0].split("|"); return { pay, acct }; };
+}
+// última cuenta usada con cada medio de pago (la misma memoria del formulario normal)
+const cuentaDePago = () => { try { return JSON.parse(localStorage.getItem("fz_pay_acct") || "{}"); } catch { return {}; } };
+const esEfectivo = (p) => String(p || "").trim().toLowerCase() === "efectivo";
 // tipo de ingreso: el que ya usaste con esa descripción o uno deducido del texto
 function tipoIngreso(desc, incomes) {
   const k = norm(desc), prev = (incomes || []).find((i) => norm(i.desc) === k && INCOME_TYPES.includes(i.type));
@@ -110,7 +119,11 @@ function esDuplicado(m) {
   return lista.some((t) => Math.round(+t.amount) === m.monto && Math.abs(new Date((t.date || "") + "T12:00:00").getTime() - d0) <= 86400000 * 1.5);
 }
 export function openRevision(movs, opts, onDone) {
-  const s = getState(), aprend = aprendido(s.txs);
+  const s = getState(), aprend = aprendido(s.txs), habitual = pagoHabitual(s.txs);
+  // cuenta por medio de pago: la última usada (memoria del equipo) o, si no hay, la más usada en tus gastos
+  const memo = (() => { const c = {}; s.txs.forEach((t) => { if (t.pay && t.acct) { const k = c[t.pay] = c[t.pay] || {}; k[t.acct] = (k[t.acct] || 0) + 1; } });
+    const out = {}; Object.entries(c).forEach(([p, o]) => { out[p] = Object.entries(o).sort((x, y) => y[1] - x[1])[0][0]; }); return { ...out, ...cuentaDePago() }; })();
+  const existe = (id) => (s.accounts || []).some((a) => a.id === id);
   const pays = payList(), acctOf = (name) => ((s.accounts || []).find((a) => norm(a.name) === norm(name)) || {}).id || "";
   const items = movs.map((m) => {
     const l = m.tipo === "gasto" ? aprend(m.descripcion) : null;
@@ -118,7 +131,13 @@ export function openRevision(movs, opts, onDone) {
     const subs = (s.cats.find((c) => c.name === cat) || {}).subs || [];
     const sub = l && l.c === cat && subs.includes(l.sub) ? l.sub : (subs.includes(m.subcategoria) ? m.subcategoria : subs[0] || "");
     const dup = esDuplicado(m), transf = !!m.esTransferenciaPropia;
-    return { ...m, cat, sub, pay: opts.pay || (pays.includes(m.medioPago) ? m.medioPago : ""), acct: opts.acct || acctOf(m.cuenta), dup, transf, ok: !dup && !transf, itype: tipoIngreso(m.descripcion, s.incomes) };
+    // medio de pago: el elegido para todo el extracto › el que dijiste › el que sueles usar para eso
+    const hab = m.tipo === "gasto" ? habitual(m.descripcion) : null;
+    const pay = opts.pay || (pays.includes(m.medioPago) ? m.medioPago : "") || (hab && pays.includes(hab.pay) ? hab.pay : "");
+    let acct = opts.acct || acctOf(m.cuenta);
+    if (!acct && pay && !esEfectivo(pay)) acct = (hab && hab.pay === pay && existe(hab.acct) && hab.acct) || (existe(memo[pay]) && memo[pay]) || "";
+    if (esEfectivo(pay)) acct = "";
+    return { ...m, cat, sub, pay, acct, dup, transf, ok: !dup && !transf, itype: tipoIngreso(m.descripcion, s.incomes) };
   });
   const catOpts = (sel) => s.cats.map((c) => `<option ${c.name === sel ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
   const subOpts = (cat, sel) => ((s.cats.find((c) => c.name === cat) || {}).subs || []).map((x) => `<option ${x === sel ? "selected" : ""}>${escapeHtml(x)}</option>`).join("");
@@ -131,13 +150,15 @@ export function openRevision(movs, opts, onDone) {
         <input class="input rv-amt" type="number" inputmode="numeric" value="${m.monto}" style="width:110px;padding:6px 8px"></div>
       <div class="row gap-2 rv-g" style="display:${m.tipo === "gasto" ? "flex" : "none"}"><select class="input rv-cat" style="flex:1;min-width:0;padding:6px 8px">${catOpts(m.cat)}</select><select class="input rv-sub" style="flex:1;min-width:0;padding:6px 8px">${subOpts(m.cat, m.sub)}</select></div>
       <div class="rv-i" style="display:${m.tipo === "ingreso" ? "block" : "none"}"><select class="input rv-itype" style="padding:6px 8px">${INCOME_TYPES.map((t) => `<option ${t === m.itype ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></div>
+      <div class="row gap-2 rv-pg" style="margin-top:6px;display:${m.tipo === "gasto" ? "flex" : "none"}"><select class="input rv-pay" style="flex:1;min-width:0;padding:6px 8px"><option value="">— medio de pago —</option>${pays.map((p) => `<option ${p === m.pay ? "selected" : ""}>${escapeHtml(p)}</option>`).join("")}</select>
+        <select class="input rv-acct" style="flex:1;min-width:0;padding:6px 8px;${esEfectivo(m.pay) ? "visibility:hidden" : ""}"><option value="">— cuenta —</option>${(s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}" ${a.id === m.acct ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("")}</select></div>
       ${m.dup ? `<div class="tiny mt-1" style="color:var(--yel)">⚠ Posible duplicado: ya tienes un movimiento de ${fmt(m.monto)} en esa fecha.</div>` : ""}
       ${m.transf ? `<div class="tiny mt-1" style="color:var(--yel)">↔ Parece una transferencia entre tus cuentas o pago de tarjeta (no es gasto real).</div>` : ""}
     </div>`;
   openModal(escapeHtml(opts.titulo || "Revisar movimientos"), `
-    <p class="tiny muted" style="margin:-4px 0 8px">${escapeHtml(opts.nota || "")} Revisa y corrige; solo se guardan los marcados. La categoría con la que sueles registrar cada descripción tiene prioridad.</p>
-    <div class="row gap-2 mb-2"><select id="rv-pay" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Medio de pago: el de cada uno</option>${pays.map((p) => `<option>${escapeHtml(p)}</option>`).join("")}</select>
-      <select id="rv-acct" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Cuenta: la de cada uno</option>${(s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("")}</select></div>
+    <p class="tiny muted" style="margin:-4px 0 8px">${escapeHtml(opts.nota || "")} Revisa y corrige; solo se guardan los marcados. Cada movimiento trae su categoría, medio de pago y cuenta: lo que dijiste o, si no lo dijiste, lo que sueles usar para eso.</p>
+    <div class="row gap-2 mb-2"><select id="rv-pay" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Poner a todos: medio…</option>${pays.map((p) => `<option>${escapeHtml(p)}</option>`).join("")}</select>
+      <select id="rv-acct" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Poner a todos: cuenta…</option>${(s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("")}</select></div>
     <div style="max-height:56vh;overflow:auto">${items.map(fila).join("")}</div>
     <div id="rv-sum" class="small bold mt-2" style="text-align:right"></div>
     <button id="rv-save" class="btn btn-primary btn-block mt-2">Guardar marcados</button>`, {
@@ -150,27 +171,36 @@ export function openRevision(movs, opts, onDone) {
       };
       filas.forEach((f) => {
         const tipo = f.querySelector(".rv-tipo"), cat = f.querySelector(".rv-cat"), sub = f.querySelector(".rv-sub");
-        tipo.onchange = () => { f.querySelector(".rv-g").style.display = tipo.value === "gasto" ? "flex" : "none"; f.querySelector(".rv-i").style.display = tipo.value === "ingreso" ? "block" : "none"; upd(); };
+        const fpay = f.querySelector(".rv-pay"), facct = f.querySelector(".rv-acct");
+        fpay.onchange = () => {
+          const ef = esEfectivo(fpay.value); facct.style.visibility = ef ? "hidden" : "";
+          if (ef) facct.value = ""; else if (!facct.value && existe(memo[fpay.value])) facct.value = memo[fpay.value];
+        };
+        tipo.onchange = () => { f.querySelector(".rv-pg").style.display = tipo.value === "gasto" ? "flex" : "none"; f.querySelector(".rv-g").style.display = tipo.value === "gasto" ? "flex" : "none"; f.querySelector(".rv-i").style.display = tipo.value === "ingreso" ? "block" : "none"; upd(); };
         cat.onchange = () => { sub.innerHTML = subOpts(cat.value); };
         f.querySelector(".rv-ok").onchange = upd; f.querySelector(".rv-amt").oninput = upd;
       });
+      // selectores de arriba: aplican el valor a todos los movimientos y luego vuelven a su texto
+      b.querySelector("#rv-pay").onchange = (e) => { const v = e.target.value; if (!v) return; filas.forEach((f) => { const fp = f.querySelector(".rv-pay"); fp.value = v; f.querySelector(".rv-acct").value = ""; fp.onchange(); }); e.target.value = ""; };
+      b.querySelector("#rv-acct").onchange = (e) => { const v = e.target.value; if (!v) return; filas.forEach((f) => { if (!esEfectivo(f.querySelector(".rv-pay").value)) f.querySelector(".rv-acct").value = v; }); e.target.value = ""; };
       upd();
       submitOnce(b.querySelector("#rv-save"), async () => {
-        const st = getState(), payAll = b.querySelector("#rv-pay").value, acctAll = b.querySelector("#rv-acct").value;
+        const st = getState();
         const txs = [], incs = [];
         for (const f of filas) {
           if (!f.querySelector(".rv-ok").checked) continue;
-          const m = items[+f.dataset.i];
           const date = f.querySelector(".rv-date").value || todayISO(), desc = f.querySelector(".rv-desc").value.trim(), amount = Math.round(+f.querySelector(".rv-amt").value || 0);
           if (!desc || amount <= 0) continue;
           if (f.querySelector(".rv-tipo").value === "ingreso") incs.push({ id: uid(), date, desc, amount, type: f.querySelector(".rv-itype").value });
-          else txs.push({ id: uid(), date, desc, amount, cat: f.querySelector(".rv-cat").value, sub: f.querySelector(".rv-sub").value, pay: payAll || m.pay || "", acct: acctAll || m.acct || "", tags: [] });
+          else txs.push({ id: uid(), date, desc, amount, cat: f.querySelector(".rv-cat").value, sub: f.querySelector(".rv-sub").value, pay: f.querySelector(".rv-pay").value, acct: esEfectivo(f.querySelector(".rv-pay").value) ? "" : f.querySelector(".rv-acct").value, tags: [] });
         }
         if (!txs.length && !incs.length) return toast("No hay movimientos marcados", true);
         setState({ txs: [...txs, ...st.txs], incomes: [...incs, ...st.incomes] });
         for (const t of txs) await addTx(st.user.uid, t);
         for (const i of incs) await addIncome(st.user.uid, i);
         forcePersistLocal(st.user.uid);
+        // recordar la cuenta de cada medio de pago, igual que el formulario normal
+        try { const mm = cuentaDePago(); txs.forEach((t) => { if (t.pay && t.acct && !esEfectivo(t.pay)) mm[t.pay] = t.acct; }); localStorage.setItem("fz_pay_acct", JSON.stringify(mm)); } catch { /* sin espacio */ }
         closeModal(); toast(`Guardado: ${txs.length} gasto(s)${incs.length ? ` y ${incs.length} ingreso(s)` : ""}`);
         if (onDone) onDone();
       }, "Guardando…");
