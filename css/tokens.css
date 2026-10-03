@@ -1,5 +1,8 @@
 /* css/tokens.css — variables de diseño */
 :root {
+  /* el tema oscuro es propio: declararlo evita que Chrome ("tema oscuro para sitios")
+     oscurezca la app por su cuenta y, sobre todo, el reporte PDF al imprimir */
+  color-scheme: dark;
   --bg: #0e1417;
   --panel: #161e22;
   --panel-2: #1d272c;
@@ -34,6 +37,7 @@
 
 /* Tema claro */
 :root[data-theme="light"] {
+  color-scheme: only light;
   --bg: #f4f6f5;
   --panel: #ffffff;
   --panel-2: #eef2f1;
@@ -50,3 +54,6 @@
   --blue: #3f7799;
   --shadow: 0 8px 24px rgba(20, 40, 50, .12);
 }
+
+/* al imprimir (reporte PDF) siempre claro: "only light" impide el oscurecido automático */
+@media print { :root, :root[data-theme="light"] { color-scheme: only light; } }

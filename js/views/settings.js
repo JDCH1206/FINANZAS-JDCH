@@ -483,7 +483,7 @@ export function renderSettings(root, onSignOut) {
 function ensurePrintStyle() {
   if (document.getElementById("print-style")) return;
   const st = document.createElement("style"); st.id = "print-style";
-  st.textContent = `#print-area{display:none;--ink:#1a1a1a;--sub:#666;--gold:#9a6a1a;--green:#2f7d46;--red:#b34a30;--line:#ddd;--panel-2:#eee}
+  st.textContent = `#print-area{display:none;background:#fff;color:#1a1a1a;color-scheme:only light;--bg:#fff;--panel:#fff;--ink:#1a1a1a;--sub:#666;--gold:#9a6a1a;--green:#2f7d46;--red:#b34a30;--line:#ddd;--panel-2:#eee}
     @media print{ html,body{background:#fff!important} body>#app,#fab,.toast,.modal-bg,#install-bar,#offline-bar{display:none!important}
     #print-area{display:block!important} }`;
   document.head.appendChild(st);

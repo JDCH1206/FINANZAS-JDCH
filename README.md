@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v122.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v123.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v122). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v123). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v122**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v123**. Cambios por fecha (más reciente primero):
+
+### 2026-10-03 · caché v123 — Reporte PDF salía negro
+- 🐛 Con **"tema oscuro para sitios"** de Chrome (Android), el navegador oscurecía por su cuenta la página al imprimir: el PDF traía una capa gris oscura (#1f1f1f) encima del reporte y el texto no se veía. La app ahora declara `color-scheme` (oscuro propio; claro si eliges el tema claro) y al imprimir fuerza **`only light`**, que le prohíbe a Chrome oscurecer el reporte. El área del reporte también fija fondo blanco y texto oscuro.
 
 ### 2026-10-03 · caché v122 — IA: medio de pago y cuenta por movimiento en la revisión
 - 🧾 En la pantalla de revisión (dictado y extracto) **cada gasto muestra su propio medio de pago y cuenta**, ya llenos: lo que dijiste («con la tarjeta Nu») o, si no lo dijiste, el medio y la cuenta con los que **sueles pagar esa descripción**; la cuenta de cada medio sale de la última usada o de la más frecuente. Efectivo oculta la cuenta.
