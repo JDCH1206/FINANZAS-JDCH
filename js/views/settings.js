@@ -486,7 +486,7 @@ const REPORT_CSS = (P, oscuro) => `:root{color-scheme:only ${oscuro ? "dark" : "
   html,body{margin:0;background:${P.bg}!important;color:${P.ink};-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .tiny{font-size:11px}.small{font-size:13px}.muted{color:${P.sub}}.bold{font-weight:700}.flex1{flex:1}
   .row{display:flex;gap:8px}.between{justify-content:space-between}.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  @page{margin:12mm}`;
+  @page{margin:${oscuro ? "0" : "12mm"}}`; /* oscuro: sin márgenes para que no queden bordes blancos */
 
 // estilo recordado; la primera vez: oscuro en Samsung Internet (fuerza el modo oscuro en las páginas)
 const estiloRep = () => { try { const v = localStorage.getItem("fz_rep_estilo"); if (v) return v; } catch { /* nada */ } return /SamsungBrowser/i.test(navigator.userAgent) ? "oscuro" : "claro"; };
@@ -528,22 +528,25 @@ function openReportModal() {
 }
 
 export function printReport(mes, analisis, oscuro = false) {
+  // Se imprime DENTRO de la página (un iframe aparte en el celular imprime la pantalla entera):
+  // al imprimir se oculta todo menos #print-area, que lleva su propia paleta clara u oscura.
   const P = oscuro ? REPORT_PAL.oscuro : REPORT_PAL.claro;
-  const old = document.getElementById("print-frame"); if (old) old.remove();
-  const fr = document.createElement("iframe"); fr.id = "print-frame";
-  fr.setAttribute("aria-hidden", "true");
-  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
-  document.body.appendChild(fr);
-  const d = fr.contentDocument;
-  d.open();
-  d.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="color-scheme" content="only ${oscuro ? "dark" : "light"}">
-    <title>Finanzas JDCH · Reporte ${escapeHtml(monthLabel(mes))}</title><style>${REPORT_CSS(P, oscuro)}</style></head>
-    <body>${buildReportHTML(getState(), mes, analisis, { oscuro })}</body></html>`);
-  d.close();
-  const w = fr.contentWindow;
-  w.onafterprint = () => setTimeout(() => fr.remove(), 500);
-  // pequeña espera para que el navegador termine de pintar (diagramas y fuentes) antes de imprimir
-  setTimeout(() => { w.focus(); w.print(); }, 350);
+  let st = document.getElementById("print-style");
+  if (!st) { st = document.createElement("style"); st.id = "print-style"; document.head.appendChild(st); }
+  st.textContent = `#print-area{display:none}
+    @media print{
+      ${REPORT_CSS(P, oscuro).replace(/:root\{/, ":root,:root[data-theme]{")}
+      body>*:not(#print-area){display:none!important}
+      #print-area{display:block!important;background:${P.bg}}
+    }`;
+  let pa = document.getElementById("print-area");
+  if (!pa) { pa = document.createElement("div"); pa.id = "print-area"; document.body.appendChild(pa); }
+  pa.innerHTML = buildReportHTML(getState(), mes, analisis, { oscuro });
+  const titulo = document.title;
+  document.title = `Finanzas JDCH · Reporte ${monthLabel(mes)}`; // nombre sugerido del PDF
+  const fin = () => { document.title = titulo; window.removeEventListener("afterprint", fin); };
+  window.addEventListener("afterprint", fin);
+  setTimeout(() => window.print(), 300); // deja pintar el reporte antes de abrir el diálogo
 }
 
 // Cifras del mes que se envían a la IA para el análisis (todo calculado aquí, exacto)

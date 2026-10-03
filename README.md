@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v125.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v126.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v125). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v126). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,10 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v125**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v126**. Cambios por fecha (más reciente primero):
+
+### 2026-10-03 · caché v126 — Reporte PDF: en el celular imprimía la pantalla de Ajustes
+- 🐛 El documento aparte (iframe) de v124 funciona en el PC, pero en el celular (Samsung Internet/Chrome Android) `print()` del iframe imprime la **página completa**: salía la pantalla de Ajustes en vez del informe. Vuelve a imprimirse **dentro de la página**: al imprimir se oculta todo excepto `#print-area`, que lleva la paleta elegida (oscura o clara) con prioridad sobre el tema de la app; en estilo oscuro sin márgenes de página (sin bordes blancos). El título del documento cambia mientras se imprime para que el PDF se llame "Finanzas JDCH · Reporte <mes>".
 
 ### 2026-10-03 · caché v125 — Reporte PDF en estilo oscuro (letra blanca)
 - 🌙 **Estilo del PDF** en Ajustes → Reporte mensual: **Oscuro · letra blanca** (fondo #111418, texto blanco, verde/rojo/dorado vivos, barras y mapa de calor con contraste) o **Claro** para papel. Pensado para **Samsung Internet en modo oscuro**, que oscurece las páginas a la fuerza e ignora la preferencia de la página: con el reporte ya oscuro no hay nada que tapar. La elección se recuerda; la primera vez es oscuro en Samsung Internet y claro en los demás. Paletas en `REPORT_PAL` (`settings.js`).
