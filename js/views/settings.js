@@ -480,14 +480,13 @@ export function renderSettings(root, onSignOut) {
 
 /* ===================== REPORTE MENSUAL (PDF) ===================== */
 // Usa la impresión del navegador (Guardar como PDF). Cero dependencias.
-function ensurePrintStyle() {
-  if (document.getElementById("print-style")) return;
-  const st = document.createElement("style"); st.id = "print-style";
-  st.textContent = `#print-area{display:none;background:#fff;color:#1a1a1a;color-scheme:only light;--bg:#fff;--panel:#fff;--ink:#1a1a1a;--sub:#666;--gold:#9a6a1a;--green:#2f7d46;--red:#b34a30;--line:#ddd;--panel-2:#eee}
-    @media print{ html,body{background:#fff!important} body>#app,#fab,.toast,.modal-bg,#install-bar,#offline-bar{display:none!important}
-    #print-area{display:block!important} }`;
-  document.head.appendChild(st);
-}
+// El reporte se imprime en un documento APARTE (iframe) que solo existe en claro: así el tema
+// oscuro de la app y el "tema oscuro para sitios" de Chrome no lo oscurecen al guardar el PDF.
+const REPORT_CSS = `:root{color-scheme:only light;--bg:#fff;--panel:#fff;--panel-2:#eee;--ink:#1a1a1a;--sub:#666;--gold:#9a6a1a;--green:#2f7d46;--red:#b34a30;--line:#ddd}
+  html,body{margin:0;background:#fff!important;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .tiny{font-size:11px}.small{font-size:13px}.muted{color:#666}.bold{font-weight:700}.flex1{flex:1}
+  .row{display:flex;gap:8px}.between{justify-content:space-between}.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  @page{margin:12mm}`;
 
 function openReportModal() {
   const s = getState();
@@ -521,12 +520,22 @@ function openReportModal() {
   });
 }
 
-function printReport(mes, analisis) {
-  ensurePrintStyle();
-  let pa = document.getElementById("print-area");
-  if (!pa) { pa = document.createElement("div"); pa.id = "print-area"; document.body.appendChild(pa); }
-  pa.innerHTML = buildReportHTML(getState(), mes, analisis);
-  window.print();
+export function printReport(mes, analisis) {
+  const old = document.getElementById("print-frame"); if (old) old.remove();
+  const fr = document.createElement("iframe"); fr.id = "print-frame";
+  fr.setAttribute("aria-hidden", "true");
+  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(fr);
+  const d = fr.contentDocument;
+  d.open();
+  d.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="color-scheme" content="only light">
+    <title>Finanzas JDCH · Reporte ${escapeHtml(monthLabel(mes))}</title><style>${REPORT_CSS}</style></head>
+    <body>${buildReportHTML(getState(), mes, analisis)}</body></html>`);
+  d.close();
+  const w = fr.contentWindow;
+  w.onafterprint = () => setTimeout(() => fr.remove(), 500);
+  // pequeña espera para que el navegador termine de pintar (diagramas y fuentes) antes de imprimir
+  setTimeout(() => { w.focus(); w.print(); }, 350);
 }
 
 // Cifras del mes que se envían a la IA para el análisis (todo calculado aquí, exacto)
