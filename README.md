@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v119.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v120.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v119). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v120). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v119**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v120**. Cambios por fecha (más reciente primero):
+
+### 2026-10-03 · caché v120 — IA: la clave de sitio se aplica sin recargar a mano
+- 🐛 App Check solo se puede iniciar una vez por carga de página: si se probaba la conexión antes de pegar la clave (o con otro proveedor), la clave nueva no se usaba y salía "App Check rechazó la consulta" aunque estuviera bien. Ahora, al guardar una clave o proveedor distinto, la app **recarga sola** para aplicarlos.
+- 🔎 El error de App Check muestra el detalle técnico entre corchetes (para saber si es la clave, el dominio o el proveedor) y avisa si falta la clave.
 
 ### 2026-10-02 · caché v119 — Más IA: dictado, extractos PDF, preguntas y análisis en el Tablero (integrado a `main`)
 - 🎤 **Movimientos → Dictar o escribir**: dices o escribes "ayer almuerzo 18 mil en efectivo y una coca cola de 4500" y la IA arma los movimientos (varios por frase; fechas relativas; "mil"/"millones"/"palos"; gasto o ingreso; categoría, medio de pago y cuenta solo de tus listas). Voz con el reconocimiento del navegador (español Colombia).

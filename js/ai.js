@@ -33,7 +33,11 @@ export function aiCfg() {
 export const aiReady = () => FIREBASE_READY && aiCfg().enabled;
 
 /* ---------- Conexión (App Check + AI Logic) ---------- */
-let ai = null, aiMod = null, appCheckOn = false;
+let ai = null, aiMod = null, appCheckOn = false, acFirma = "";
+// App Check solo se puede iniciar UNA vez por carga de página: si cambian la clave o el
+// proveedor después de haberlo iniciado, hay que recargar para que tome la nueva.
+const firmaAC = () => { const c = aiCfg(); return `${c.proveedor}|${c.siteKey}`; };
+export const requiereRecarga = () => appCheckOn && acFirma !== firmaAC();
 async function conectar() {
   if (ai) return { ai, aiMod };
   if (!FIREBASE_READY) throw new Error("La IA necesita el modo nube (Firebase).");
@@ -48,7 +52,7 @@ async function conectar() {
       const Prov = proveedor === "v3" ? ac.ReCaptchaV3Provider : ac.ReCaptchaEnterpriseProvider;
       ac.initializeAppCheck(app, { provider: new Prov(siteKey || "token-de-depuracion-local"), isTokenAutoRefreshEnabled: true });
     }
-    appCheckOn = true;
+    appCheckOn = true; acFirma = firmaAC();
   }
   aiMod = m;
   ai = m.getAI(app, { backend: new m.GoogleAIBackend() });
@@ -88,6 +92,7 @@ const conTiempo = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout
  * @returns {{data:any, model:string, intentos:Array}}
  */
 export async function generar(tarea, partes, esquema, { pensarPoco = false } = {}) {
+  if (requiereRecarga()) throw new Error("Cambiaste la clave o el proveedor: recarga la página para aplicarlos.");
   const { ai: inst, aiMod: m } = await conectar();
   const cadena = aiCfg().chains[tarea] || DEFAULT_CHAINS[tarea];
   const uso = usoHoy(), intentos = [];
@@ -115,7 +120,10 @@ export async function generar(tarea, partes, esquema, { pensarPoco = false } = {
       const t = tipoError(e);
       intentos.push({ model, error: t, detalle: String((e && e.message) || e).slice(0, 160) });
       if (t === "appcheck" && !reintentoAC) { reintentoAC = true; intentos.pop(); await new Promise((r) => setTimeout(r, 1500)); i--; continue; }
-      if (t === "appcheck") throw new Error("App Check rechazó la consulta. " + (esLocal() ? "Registra el token de depuración (consola F12) en Firebase → App Check." : "Revisa la clave de sitio y el proveedor (Fraud Defense / v3) en Ajustes → IA."));
+      if (t === "appcheck") {
+        const det = String((e && e.message) || e).replace(/\s+/g, " ").slice(0, 220);
+        throw new Error("App Check rechazó la consulta. " + (esLocal() ? "Registra el token de depuración (consola F12) en Firebase → App Check." : !aiCfg().siteKey ? "Falta la clave de sitio en Ajustes → IA." : "Revisa que la clave de sitio y el proveedor (Fraud Defense / v3) coincidan con los de Firebase → App Check.") + ` [${det}]`);
+      }
       if (t === "api") throw new Error("Firebase AI Logic no está activado en el proyecto (consola de Firebase → AI Logic).");
       if (t === "cupo") marcar(model, () => ({ agotado: true }));
       if (t === "modelo") marcar(model, () => ({ noExiste: true }));
@@ -299,6 +307,7 @@ No inventes filas; no incluyas saldos, totales ni subtotales como movimientos.`;
 /* ---------- Pregúntale a tus datos (llamada a funciones) ---------- */
 // La IA NO recibe los movimientos: pide cálculos a funciones de la app (`herramientas`) y redacta.
 export async function preguntar(pregunta, herramientas, declaraciones, contexto) {
+  if (requiereRecarga()) throw new Error("Cambiaste la clave o el proveedor: recarga la página para aplicarlos.");
   const { ai: inst, aiMod: m } = await conectar();
   const cadena = aiCfg().chains.analisis || DEFAULT_CHAINS.analisis;
   const uso = usoHoy(), intentos = [];

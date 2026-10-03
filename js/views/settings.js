@@ -9,7 +9,7 @@ import { toast, confirmDialog, openModal, closeModal, submitOnce, moneyPreview }
 import { notifSupported, notifEnabled, enableNotif, disableNotif } from "../notify.js";
 import { gruposVariantes, openUnificarDescripciones } from "./unificar.js";
 import { buildSankey, aportesNetos } from "./dashboard.js";
-import { aiCfg, aiReady, DEFAULT_CHAINS, usoHoy, reiniciarUso, probarConexion, esLocal, analizarMes } from "../ai.js";
+import { aiCfg, aiReady, DEFAULT_CHAINS, usoHoy, reiniciarUso, probarConexion, esLocal, analizarMes, requiereRecarga } from "../ai.js";
 
 export function renderSettings(root, onSignOut) {
   const s = getState();
@@ -254,13 +254,15 @@ export function renderSettings(root, onSignOut) {
       setState({ profile });
       await saveConfig(st.user.uid, { profile, cats: st.cats, budgets: st.budgets });
       forcePersistLocal(st.user.uid);
+      // App Check ya se inició con la clave anterior en esta página: recargar para aplicar la nueva
+      if (requiereRecarga()) { toast("Clave guardada. Recargando para aplicarla…"); setTimeout(() => location.reload(), 900); return true; }
     };
     submitOnce(aiSave, async () => { await guardarAI(); toast("IA: ajustes guardados"); renderSettings(root, onSignOut); });
     root.querySelector("#ai-ch-reset").onclick = () => { root.querySelector("#ai-ch-vision").value = DEFAULT_CHAINS.vision.join(", "); root.querySelector("#ai-ch-texto").value = DEFAULT_CHAINS.texto.join(", "); root.querySelector("#ai-ch-analisis").value = DEFAULT_CHAINS.analisis.join(", "); };
     const ur = root.querySelector("#ai-uso-reset"); if (ur) ur.onclick = (e) => { e.preventDefault(); reiniciarUso(); renderSettings(root, onSignOut); };
     submitOnce(root.querySelector("#ai-test"), async () => {
       const out = root.querySelector("#ai-test-res");
-      await guardarAI();
+      if (await guardarAI()) return;
       out.textContent = "Probando…"; out.style.color = "";
       try {
         const r = await probarConexion();
