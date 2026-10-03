@@ -33,7 +33,7 @@ export function aiCfg() {
 export const aiReady = () => FIREBASE_READY && aiCfg().enabled;
 
 /* ---------- Conexión (App Check + AI Logic) ---------- */
-let ai = null, aiMod = null, appCheckOn = false, acFirma = "";
+let ai = null, aiMod = null, appCheckOn = false, acFirma = "", acInst = null, acMod = null;
 // App Check solo se puede iniciar UNA vez por carga de página: si cambian la clave o el
 // proveedor después de haberlo iniciado, hay que recargar para que tome la nueva.
 const firmaAC = () => { const c = aiCfg(); return `${c.proveedor}|${c.siteKey}`; };
@@ -50,7 +50,8 @@ async function conectar() {
     if (esLocal() && !self.FIREBASE_APPCHECK_DEBUG_TOKEN) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
     if (siteKey || esLocal()) {
       const Prov = proveedor === "v3" ? ac.ReCaptchaV3Provider : ac.ReCaptchaEnterpriseProvider;
-      ac.initializeAppCheck(app, { provider: new Prov(siteKey || "token-de-depuracion-local"), isTokenAutoRefreshEnabled: true });
+      acMod = ac;
+      acInst = ac.initializeAppCheck(app, { provider: new Prov(siteKey || "token-de-depuracion-local"), isTokenAutoRefreshEnabled: true });
     }
     appCheckOn = true; acFirma = firmaAC();
   }
@@ -346,6 +347,21 @@ NUNCA calcules ni inventes cifras: usa SIEMPRE las funciones para obtener los da
 
 // prueba rápida de conexión (Ajustes → IA)
 export async function probarConexion() {
+  // 1) primero App Check por separado: si falla aquí, el detalle dice si es la clave/dominio
+  //    (reCAPTCHA / Fraud Defense) o el registro de la app en Firebase (intercambio 403/400)
+  if (requiereRecarga()) throw new Error("Cambiaste la clave o el proveedor: recarga la página para aplicarlos.");
+  await conectar();
+  if (acInst && acMod) {
+    const t = await acMod.getToken(acInst, true).catch((e) => ({ error: e }));
+    // un fallo de red momentáneo no se diagnostica aquí: la consulta lo reintenta
+    if (t && t.error && !/network|fetch-network/i.test(String(t.error.message || t.error))) {
+      const msg = String(t.error.message || t.error);
+      const pista = /recaptcha|fraud/i.test(msg) ? "Fraud Defense/reCAPTCHA no validó esta página: revisa que la clave sea de tipo sitio web (puntuación) y que el dominio jdch1206.github.io esté en la lista de la clave."
+        : /403|400|invalid|permission/i.test(msg) ? "Firebase no aceptó la validación: la clave pegada en la app no es la misma registrada en Firebase → App Check → tu app web (o está registrada en otra app web del proyecto)."
+        : "No se pudo obtener el token de App Check.";
+      throw new Error(`App Check: ${pista} [${msg.replace(/\s+/g, " ").slice(0, 220)}]`);
+    }
+  }
   const r = await generar("texto", ["Responde solo con la palabra: OK"]);
   return r;
 }
