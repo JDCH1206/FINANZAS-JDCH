@@ -313,7 +313,11 @@ export async function preguntar(pregunta, herramientas, declaraciones, contexto)
   const cadena = aiCfg().chains.analisis || DEFAULT_CHAINS.analisis;
   const uso = usoHoy(), intentos = [];
   const sistema = `Eres el asistente de una app de finanzas personales (Colombia, COP). Responde en español, breve y con cifras.
-NUNCA calcules ni inventes cifras: usa SIEMPRE las funciones para obtener los datos y responde con sus resultados. ${contexto}`;
+ALCANCE: SOLO respondes sobre los gastos, ingresos, categorías, presupuestos y cuentas del usuario en esta app, y consejos de finanzas personales basados en esos datos.
+Si la pregunta no tiene que ver con sus finanzas (temas generales, opiniones, entretenimiento, tareas, programación, noticias, etc.), NO la respondas ni opines y NO llames funciones:
+contesta solo "Solo puedo responder preguntas sobre tus finanzas registradas en la app. Por ejemplo: ¿cuánto gasté en mercado este mes?".
+NUNCA calcules ni inventes cifras: usa SIEMPRE las funciones para obtener los datos y responde con sus resultados.
+Formato: texto plano, sin markdown (sin asteriscos ni #); para listas usa líneas que empiecen con "• ". ${contexto}`;
   for (const model of cadena) {
     const u = uso[model] || {};
     if (u.agotado || u.noExiste) continue;

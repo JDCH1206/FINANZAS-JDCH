@@ -209,8 +209,10 @@ Tipos de ingreso: ${[...new Set((s.incomes || []).map((i) => i.type).filter(Bool
 Si la pregunta habla de una cosa concreta (ej. "domicilios", "gasolina") que coincide con una categoría o subcategoría, filtra por ella; si no, busca por texto en la descripción. Formatea los montos como $1.234.567.`;
       try {
         const r = await preguntar(q, herramientas(s), declaraciones, ctx);
-        out.innerHTML = `<div style="white-space:pre-wrap;line-height:1.45">${escapeHtml(r.texto || "Sin respuesta")}</div>
-          <p class="tiny muted mt-1" style="margin-bottom:0">Consultas: ${escapeHtml(r.funciones.join(", ") || "ninguna")} · ${escapeHtml(r.model)}</p>`;
+        // por si el modelo igual usa markdown: **negrita** → negrita y "* " → viñeta (después de escapar)
+        const txt = escapeHtml(r.texto || "Sin respuesta").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/^\s*[*-] /gm, "• ").replace(/^#+\s*/gm, "");
+        out.innerHTML = `<div style="white-space:pre-wrap;line-height:1.45">${txt}</div>
+          <p class="tiny muted mt-1" style="margin-bottom:0">Consultas: ${escapeHtml([...new Set(r.funciones)].join(", ") || "ninguna")} · ${escapeHtml(r.model)}</p>`;
       } catch (e) { out.innerHTML = `<div style="color:var(--red)">${escapeHtml(e.message || String(e))}</div>`; }
       qb.disabled = false;
     };

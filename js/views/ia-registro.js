@@ -157,8 +157,9 @@ export function openRevision(movs, opts, onDone) {
     </div>`;
   openModal(escapeHtml(opts.titulo || "Revisar movimientos"), `
     <p class="tiny muted" style="margin:-4px 0 8px">${escapeHtml(opts.nota || "")} Revisa y corrige; solo se guardan los marcados. Cada movimiento trae su categoría, medio de pago y cuenta: lo que dijiste o, si no lo dijiste, lo que sueles usar para eso.</p>
-    <div class="row gap-2 mb-2"><select id="rv-pay" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Poner a todos: medio…</option>${pays.map((p) => `<option>${escapeHtml(p)}</option>`).join("")}</select>
-      <select id="rv-acct" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Poner a todos: cuenta…</option>${(s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("")}</select></div>
+    ${items.length > 1 ? `<div class="tiny muted" style="margin-bottom:4px">Cambiar en todos a la vez (opcional):</div>
+    <div class="row gap-2 mb-2"><select id="rv-pay" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Medio de pago…</option>${pays.map((p) => `<option>${escapeHtml(p)}</option>`).join("")}</select>
+      <select id="rv-acct" class="input" style="flex:1;min-width:0;padding:6px 8px"><option value="">Cuenta…</option>${(s.accounts || []).map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("")}</select></div>` : ""}
     <div style="max-height:56vh;overflow:auto">${items.map(fila).join("")}</div>
     <div id="rv-sum" class="small bold mt-2" style="text-align:right"></div>
     <button id="rv-save" class="btn btn-primary btn-block mt-2">Guardar marcados</button>`, {
@@ -181,8 +182,8 @@ export function openRevision(movs, opts, onDone) {
         f.querySelector(".rv-ok").onchange = upd; f.querySelector(".rv-amt").oninput = upd;
       });
       // selectores de arriba: aplican el valor a todos los movimientos y luego vuelven a su texto
-      b.querySelector("#rv-pay").onchange = (e) => { const v = e.target.value; if (!v) return; filas.forEach((f) => { const fp = f.querySelector(".rv-pay"); fp.value = v; f.querySelector(".rv-acct").value = ""; fp.onchange(); }); e.target.value = ""; };
-      b.querySelector("#rv-acct").onchange = (e) => { const v = e.target.value; if (!v) return; filas.forEach((f) => { if (!esEfectivo(f.querySelector(".rv-pay").value)) f.querySelector(".rv-acct").value = v; }); e.target.value = ""; };
+      if (b.querySelector("#rv-pay")) b.querySelector("#rv-pay").onchange = (e) => { const v = e.target.value; if (!v) return; filas.forEach((f) => { const fp = f.querySelector(".rv-pay"); fp.value = v; f.querySelector(".rv-acct").value = ""; fp.onchange(); }); e.target.value = ""; };
+      if (b.querySelector("#rv-acct")) b.querySelector("#rv-acct").onchange = (e) => { const v = e.target.value; if (!v) return; filas.forEach((f) => { if (!esEfectivo(f.querySelector(".rv-pay").value)) f.querySelector(".rv-acct").value = v; }); e.target.value = ""; };
       upd();
       submitOnce(b.querySelector("#rv-save"), async () => {
         const st = getState();
