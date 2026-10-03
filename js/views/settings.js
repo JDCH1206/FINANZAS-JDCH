@@ -482,12 +482,14 @@ export function renderSettings(root, onSignOut) {
 // Usa la impresión del navegador (Guardar como PDF). Cero dependencias.
 // El reporte se imprime en un documento APARTE (iframe) que solo existe en claro: así el tema
 // oscuro de la app y el "tema oscuro para sitios" de Chrome no lo oscurecen al guardar el PDF.
-const REPORT_CSS = `:root{color-scheme:only light;--bg:#fff;--panel:#fff;--panel-2:#eee;--ink:#1a1a1a;--sub:#666;--gold:#9a6a1a;--green:#2f7d46;--red:#b34a30;--line:#ddd}
-  html,body{margin:0;background:#fff!important;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .tiny{font-size:11px}.small{font-size:13px}.muted{color:#666}.bold{font-weight:700}.flex1{flex:1}
+const REPORT_CSS = (P, oscuro) => `:root{color-scheme:only ${oscuro ? "dark" : "light"};--bg:${P.bg};--panel:${P.bg};--panel-2:${P.panel2};--ink:${P.ink};--sub:${P.sub};--gold:${P.gold};--green:${P.green};--red:${P.red};--line:${P.line}}
+  html,body{margin:0;background:${P.bg}!important;color:${P.ink};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .tiny{font-size:11px}.small{font-size:13px}.muted{color:${P.sub}}.bold{font-weight:700}.flex1{flex:1}
   .row{display:flex;gap:8px}.between{justify-content:space-between}.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @page{margin:12mm}`;
 
+// estilo recordado; la primera vez: oscuro en Samsung Internet (fuerza el modo oscuro en las páginas)
+const estiloRep = () => { try { const v = localStorage.getItem("fz_rep_estilo"); if (v) return v; } catch { /* nada */ } return /SamsungBrowser/i.test(navigator.userAgent) ? "oscuro" : "claro"; };
 function openReportModal() {
   const s = getState();
   const months = [...new Set(s.txs.map((t) => ym(t.date)).filter(Boolean)), curMonth()];
@@ -496,6 +498,9 @@ function openReportModal() {
     <div class="field"><label class="label">Mes</label>
       <select id="rep-mes" class="input">${allMonths.map((m) => `<option value="${m}">${monthLabel(m)}</option>`).join("")}</select></div>
     ${aiReady() ? `<label class="row gap-2 small mb-2" style="align-items:center"><input type="checkbox" id="rep-ai" checked> ✨ Incluir análisis del mes con IA</label>` : ""}
+    <div class="field"><label class="label">Estilo del PDF</label><select id="rep-estilo" class="input">
+      <option value="oscuro" ${estiloRep() === "oscuro" ? "selected" : ""}>Oscuro · letra blanca (celular con modo oscuro, Samsung Internet)</option>
+      <option value="claro" ${estiloRep() === "claro" ? "selected" : ""}>Claro · para imprimir en papel</option></select></div>
     <p class="tiny muted mb-3">Se abrirá el diálogo de impresión: elige <b>"Guardar como PDF"</b> como destino para archivarlo o compartirlo.</p>
     <div id="rep-st" class="tiny mb-2"></div>
     <button id="rep-go" class="btn btn-primary btn-block">Generar</button>`, {
@@ -503,6 +508,8 @@ function openReportModal() {
       submitOnce(b.querySelector("#rep-go"), async () => {
         const mes = b.querySelector("#rep-mes").value;
         const conIA = b.querySelector("#rep-ai") && b.querySelector("#rep-ai").checked;
+        const estilo = b.querySelector("#rep-estilo").value;
+        try { localStorage.setItem("fz_rep_estilo", estilo); } catch { /* nada */ }
         let analisis = null;
         if (conIA) {
           const st = b.querySelector("#rep-st");
@@ -514,13 +521,14 @@ function openReportModal() {
           }
         }
         closeModal();
-        printReport(mes, analisis);
+        printReport(mes, analisis, estilo === "oscuro");
       }, "Generando…");
     },
   });
 }
 
-export function printReport(mes, analisis) {
+export function printReport(mes, analisis, oscuro = false) {
+  const P = oscuro ? REPORT_PAL.oscuro : REPORT_PAL.claro;
   const old = document.getElementById("print-frame"); if (old) old.remove();
   const fr = document.createElement("iframe"); fr.id = "print-frame";
   fr.setAttribute("aria-hidden", "true");
@@ -528,9 +536,9 @@ export function printReport(mes, analisis) {
   document.body.appendChild(fr);
   const d = fr.contentDocument;
   d.open();
-  d.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="color-scheme" content="only light">
-    <title>Finanzas JDCH · Reporte ${escapeHtml(monthLabel(mes))}</title><style>${REPORT_CSS}</style></head>
-    <body>${buildReportHTML(getState(), mes, analisis)}</body></html>`);
+  d.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="color-scheme" content="only ${oscuro ? "dark" : "light"}">
+    <title>Finanzas JDCH · Reporte ${escapeHtml(monthLabel(mes))}</title><style>${REPORT_CSS(P, oscuro)}</style></head>
+    <body>${buildReportHTML(getState(), mes, analisis, { oscuro })}</body></html>`);
   d.close();
   const w = fr.contentWindow;
   w.onafterprint = () => setTimeout(() => fr.remove(), 500);
@@ -581,7 +589,14 @@ export function datosMes(s, mes) {
   };
 }
 
-export function buildReportHTML(s, mes, analisis) {
+// Paletas del reporte: clara (impresión en papel) y oscura (letra blanca, colores vivos), para
+// navegadores que oscurecen las páginas a la fuerza (p. ej. Samsung Internet en modo oscuro).
+export const REPORT_PAL = {
+  claro: { bg: "#fff", ink: "#1a1a1a", sub: "#666", line: "#ddd", gold: "#9a6a1a", green: "#2f7d46", red: "#b34a30", warn: "#c08a1a", track: "#eee", heat: "154,106,26", panel2: "#eee" },
+  oscuro: { bg: "#111418", ink: "#f4f4f4", sub: "#b9c0c5", line: "#3a4046", gold: "#f0b95a", green: "#5fd68a", red: "#ff8a70", warn: "#ffcc4d", track: "#2a2f35", heat: "240,185,90", panel2: "#2a2f35" },
+};
+export function buildReportHTML(s, mes, analisis, { oscuro = false } = {}) {
+  const P = oscuro ? REPORT_PAL.oscuro : REPORT_PAL.claro;
   const prevMes = (m) => { const [y, mo] = m.split("-").map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`; };
   const mAnt = prevMes(mes), mAnio = `${+mes.slice(0, 4) - 1}-${mes.slice(5, 7)}`;
   const ult12 = []; { let k = mes; for (let i = 0; i < 12; i++) { k = prevMes(k); ult12.push(k); } }
@@ -610,7 +625,7 @@ export function buildReportHTML(s, mes, analisis) {
   const liq = accts.filter((a) => a.type !== "Por cobrar");
   const disp = sum(liq, (a) => a.balance);
 
-  const c = { ink: "#1a1a1a", sub: "#666", line: "#ddd", gold: "#9a6a1a", green: "#2f7d46", red: "#b34a30" };
+  const c = P;
   const sec = (titulo, html) => `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:20px"><h3 style="font-size:15px;margin:0 0 6px;color:${c.gold}">${titulo}</h3>${html}</div>`;
   const row = (k, v, col) => `<tr><td style="padding:6px 0;border-top:1px solid ${c.line};color:${c.sub}">${escapeHtml(k)}</td><td style="padding:6px 0;border-top:1px solid ${c.line};text-align:right;font-weight:600;color:${col || c.ink}">${v}</td></tr>`;
   const td = (v, extra = "") => `<td style="padding:5px 4px;border-top:1px solid ${c.line};${extra}">${v}</td>`;
@@ -656,8 +671,8 @@ export function buildReportHTML(s, mes, analisis) {
   const presu = s.cats.map((x) => ({ n: x.name, tope: tope(x.name), real: byCat[x.name] || 0 })).filter((x) => x.tope > 0).sort((a, b) => (b.real / b.tope) - (a.real / a.tope));
   const presuHTML = presu.length ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
     <tr>${th("Categoría", "left")}${th("Presupuesto")}${th("Real")}${th("Ejecución", "left")}</tr>
-    ${presu.map((x) => { const p = (x.real / x.tope) * 100, col = p > 110 ? c.red : p > 100 ? "#c08a1a" : c.green;
-      return `<tr>${td(escapeHtml(x.n))}${td(fmt(x.tope), "text-align:right")}${td(`<b>${fmt(x.real)}</b>`, "text-align:right")}${td(`<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:7px;background:#eee;border-radius:4px;overflow:hidden"><div style="width:${Math.min(100, p)}%;height:100%;background:${col}"></div></div><span style="color:${col};font-weight:600;min-width:38px;text-align:right">${p.toFixed(0)}%</span></div>`, "width:38%")}</tr>`; }).join("")}
+    ${presu.map((x) => { const p = (x.real / x.tope) * 100, col = p > 110 ? c.red : p > 100 ? c.warn : c.green;
+      return `<tr>${td(escapeHtml(x.n))}${td(fmt(x.tope), "text-align:right")}${td(`<b>${fmt(x.real)}</b>`, "text-align:right")}${td(`<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:7px;background:${c.track};border-radius:4px;overflow:hidden"><div style="width:${Math.min(100, p)}%;height:100%;background:${col}"></div></div><span style="color:${col};font-weight:600;min-width:38px;text-align:right">${p.toFixed(0)}%</span></div>`, "width:38%")}</tr>`; }).join("")}
     <tr>${td("<b>Total</b>")}${td(fmt(sum(presu, (x) => x.tope)), "text-align:right")}${td(`<b>${fmt(sum(presu, (x) => x.real))}</b>`, "text-align:right")}${td("")}</tr>
   </table>` : "";
 
@@ -669,7 +684,7 @@ export function buildReportHTML(s, mes, analisis) {
   for (let i = 0; i < firstDow; i++) celdas.push(`<div></div>`);
   for (let d = 1; d <= dim; d++) {
     const v = byDay[d] || 0, a = v ? (0.12 + 0.7 * (v / maxDay)).toFixed(2) : 0;
-    celdas.push(`<div style="border:1px solid ${c.line};border-radius:5px;min-height:34px;padding:2px 4px;background:rgba(154,106,26,${a});font-size:9.5px;display:flex;flex-direction:column;justify-content:space-between"><span style="color:${c.sub}">${d}</span>${v ? `<b style="color:${c.ink}">${fmtShortR(v)}</b>` : ""}</div>`);
+    celdas.push(`<div style="border:1px solid ${c.line};border-radius:5px;min-height:34px;padding:2px 4px;background:rgba(${c.heat},${a});font-size:9.5px;display:flex;flex-direction:column;justify-content:space-between"><span style="color:${c.sub}">${d}</span>${v ? `<b style="color:${c.ink}">${fmtShortR(v)}</b>` : ""}</div>`);
   }
   const dowNom = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"], dow = [0, 0, 0, 0, 0, 0, 0];
   Object.entries(byDay).forEach(([d, v]) => { dow[(new Date(Y, M - 1, +d).getDay() + 6) % 7] += v; });
@@ -680,7 +695,7 @@ export function buildReportHTML(s, mes, analisis) {
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${celdas.join("")}</div></div>
     <div style="font-size:11.5px">
       <div style="color:${c.sub};margin-bottom:4px">Gasto por día de la semana</div>
-      ${dow.map((v, i) => `<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><span style="width:28px;color:${c.sub}">${dowNom[i]}</span><div style="flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden"><div style="width:${(v / maxDow) * 100}%;height:100%;background:${c.gold}"></div></div><span style="min-width:58px;text-align:right">${fmtShortR(v)}</span></div>`).join("")}
+      ${dow.map((v, i) => `<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><span style="width:28px;color:${c.sub}">${dowNom[i]}</span><div style="flex:1;height:8px;background:${c.track};border-radius:4px;overflow:hidden"><div style="width:${(v / maxDow) * 100}%;height:100%;background:${c.gold}"></div></div><span style="min-width:58px;text-align:right">${fmtShortR(v)}</span></div>`).join("")}
       <div style="margin-top:8px;color:${c.sub}">${Object.keys(byDay).length} de ${dim} días con gasto${diaTop ? ` · día de mayor gasto: <b style="color:${c.ink}">${diaTop[0]} (${fmt(diaTop[1])})</b>` : ""}</div>
     </div></div>`;
 
@@ -705,7 +720,7 @@ export function buildReportHTML(s, mes, analisis) {
     ${snapM && snapA ? row(`Cambio vs cierre de ${monthLabel(mAnt)}`, `${snapM.patrimonio - snapA.patrimonio >= 0 ? "+" : "−"}${fmt(Math.abs(snapM.patrimonio - snapA.patrimonio))}`, snapM.patrimonio >= snapA.patrimonio ? c.green : c.red) : ""}
   </table>`;
 
-  return `<div style="max-width:760px;margin:0 auto;padding:28px 30px;font-family:Georgia,'Times New Roman',serif;color:${c.ink};background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+  return `<div style="max-width:760px;margin:0 auto;padding:28px 30px;font-family:Georgia,'Times New Roman',serif;color:${c.ink};background:${c.bg};-webkit-print-color-adjust:exact;print-color-adjust:exact">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid ${c.gold};padding-bottom:10px;margin-bottom:18px">
       <div><div style="font-size:22px;font-weight:700">Finanzas JDCH</div>
         <div style="color:${c.sub};font-size:13px">Reporte de ${escapeHtml(monthLabel(mes))}</div></div>
