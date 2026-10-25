@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v128.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v129.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v128). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v129). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,12 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v128**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v129**. Cambios por fecha (más reciente primero):
+
+### 2026-10-25 · caché v129 — Restaurar respaldo seguro + fecha local en archivos
+- 🛡️ **Restaurar respaldo valida el archivo antes de tocar nada** (`validarRespaldo` en `settings.js`): debe ser un objeto con las listas `txs`, `incomes` y `cats` (categorías no vacías), las demás listas con el tipo correcto y cada gasto/ingreso con id, fecha `YYYY-MM-DD`, monto numérico ≥ 0 y categoría. Si algo falla muestra los problemas y **no cambia nada** (antes un JSON equivocado borraba todos los datos, porque se restauraba con listas vacías). Los montos con decimales se aceptan: hay gastos repartidos (IVA/descuentos) que no son enteros.
+- ✋ **Confirmación antes de restaurar**: dice cuántos gastos/ingresos tienes ahora y cuántos trae el respaldo, y avisa si el respaldo no tiene movimientos.
+- 🐛 El nombre del respaldo (`finanzas_respaldo_AAAA-MM-DD.json`), el del Excel y la fecha del último respaldo usaban `toISOString()` (UTC): después de las 7 p. m. en Colombia salían con la fecha de mañana. Ahora usan `todayISO()` (fecha local).
 
 ### 2026-10-03 · caché v128 — Foto también para un gasto individual
 - 📸 **Nuevo gasto → ✨ Leer foto del recibo o factura** (Tomar foto / Cargar foto): llena descripción (nombre comercial de la tienda), fecha, monto (total a pagar) y categoría › subcategoría (la que sueles usar con esa tienda o, si no, la de mayor valor en el recibo). Si el recibo trae productos de varias categorías avisa que puedes usar **Compra con varios productos** para separarlos. Solo en gastos nuevos y con la IA activa.

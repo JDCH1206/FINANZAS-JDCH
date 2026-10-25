@@ -285,8 +285,8 @@ export function renderSettings(root, onSignOut) {
       const data = { ...dataSnapshot(), fuel, maintenance, obligations };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-      a.download = "finanzas_respaldo_" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
-      localStorage.setItem("fz_last_backup", new Date().toISOString().slice(0, 10));
+      a.download = "finanzas_respaldo_" + todayISO() + ".json"; a.click();
+      localStorage.setItem("fz_last_backup", todayISO());
       toast(`Respaldo descargado (${(data.txs || []).length} gastos · ${fuel.length} tanqueos · ${maintenance.length} mant. · ${obligations.length} oblig.)`);
     } catch (e) { console.error(e); toast("No se pudo preparar el respaldo", true); }
     btn.disabled = false; btn.textContent = orig;
@@ -294,9 +294,23 @@ export function renderSettings(root, onSignOut) {
   const impJson = root.querySelector("#imp-json");
   root.querySelector("#imp-btn").onclick = () => impJson.click();
   impJson.onchange = async () => {
-    const file = impJson.files[0]; if (!file) return;
+    const file = impJson.files[0]; impJson.value = ""; if (!file) return;
+    let d;
+    try { d = JSON.parse(await file.text()); } catch { return toast("El archivo no es un JSON válido", true); }
+    // validar ANTES de tocar nada: un JSON equivocado no debe dejar la app vacía
+    const errores = validarRespaldo(d);
+    if (errores.length) {
+      const extra = errores.length > 5 ? `<li>… y ${errores.length - 5} más</li>` : "";
+      openModal("No se puede restaurar", `<p class="small mb-2">Este archivo no parece un respaldo válido de Finanzas JDCH. <b>No se cambió nada.</b></p>
+        <ul class="small" style="margin:0 0 0 18px;padding:0;line-height:1.5">${errores.slice(0, 5).map((e) => `<li>${escapeHtml(e)}</li>`).join("")}${extra}</ul>`);
+      return;
+    }
+    const st = getState(), n = (x) => (x || []).length;
+    const vacio = !n(d.txs) && !n(d.incomes);
+    confirmDialog(`Se reemplazarán TODOS tus datos actuales (${n(st.txs)} gastos y ${n(st.incomes)} ingresos) por los del respaldo "${escapeHtml(file.name)}" (${n(d.txs)} gastos y ${n(d.incomes)} ingresos).${vacio ? " ⚠ El respaldo no tiene movimientos: la app quedará vacía." : ""} ¿Continuar? Te recomendamos descargar primero un respaldo de lo que tienes ahora.`, () => restaurar(d), { yesLabel: "Restaurar", busyLabel: "Restaurando…" });
+  };
+  const restaurar = async (d) => {
     try {
-      const d = JSON.parse(await file.text());
       setState({ profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, txs: d.txs || [], incomes: d.incomes || [], accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false, snapshots: d.snapshots || [] });
       await saveConfig(s.user.uid, { profile: d.profile || s.profile, cats: d.cats || s.cats, budgets: d.budgets || {}, accounts: d.accounts || [], payMethods: d.payMethods || [], vehicles: d.vehicles || [], vehiclesEnabled: d.vehiclesEnabled || false, goals: d.goals || [], recurrentes: d.recurrentes || [], debts: d.debts || [], debtsEnabled: d.debtsEnabled || false, snapshots: d.snapshots || [] });
       await bulkSetTx(s.user.uid, d.txs || []);
@@ -310,8 +324,7 @@ export function renderSettings(root, onSignOut) {
       persistObligLocal(s.user.uid, d.obligations || []);
       forcePersistLocal(s.user.uid);
       toast(`Respaldo restaurado (${(d.txs || []).length} gastos · ${(d.fuel || []).length} tanqueos · ${(d.maintenance || []).length} mant. · ${(d.obligations || []).length} oblig.)`);
-    } catch (e) { console.error(e); toast("Archivo inválido", true); }
-    impJson.value = "";
+    } catch (e) { console.error(e); toast("No se pudo restaurar: " + (e.message || e), true); }
   };
   root.querySelector("#exp-xls").onclick = async () => {
     const btn = root.querySelector("#exp-xls"); const orig = btn.textContent;
@@ -345,7 +358,7 @@ export function renderSettings(root, onSignOut) {
         const wsO = XLSX.utils.json_to_sheet(obligations.map((r) => ({ Vehículo: vName(r.vehicleId), Tipo: r.tipo || "", "Fecha expedición": r.fechaExpedicion || "", "Fecha vencimiento": r.fechaVencimiento || "", Costo: r.costo, Entidad: r.entidad || "", "N°/referencia": r.numero || "", Estado: r.estado || "" })));
         XLSX.utils.book_append_sheet(wb, wsO, "Obligaciones");
       }
-      XLSX.writeFile(wb, "finanzas_export_" + new Date().toISOString().slice(0, 10) + ".xlsx");
+      XLSX.writeFile(wb, "finanzas_export_" + todayISO() + ".xlsx");
       toast("Excel exportado");
     } catch (e) { console.error(e); toast("No se pudo exportar", true); }
     btn.disabled = false; btn.textContent = orig;
@@ -487,6 +500,34 @@ const REPORT_CSS = (P, oscuro) => `:root{color-scheme:only ${oscuro ? "dark" : "
   .tiny{font-size:11px}.small{font-size:13px}.muted{color:${P.sub}}.bold{font-weight:700}.flex1{flex:1}
   .row{display:flex;gap:8px}.between{justify-content:space-between}.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @page{margin:${oscuro ? "0" : "12mm"}}`; /* oscuro: sin márgenes para que no queden bordes blancos */
+
+// Valida un respaldo antes de restaurarlo. Devuelve la lista de problemas (vacía = se puede).
+// Los montos se aceptan con decimales: hay gastos repartidos (IVA/descuentos) que no son enteros.
+export function validarRespaldo(d) {
+  if (!d || typeof d !== "object" || Array.isArray(d)) return ["No es un respaldo de Finanzas JDCH (no es un objeto)."];
+  const e = [], fecha = (x) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x), monto = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0;
+  for (const k of ["txs", "incomes", "cats"]) if (!Array.isArray(d[k])) e.push(`Falta la lista "${k}" (${k === "txs" ? "gastos" : k === "incomes" ? "ingresos" : "categorías"}).`);
+  if (Array.isArray(d.cats) && !d.cats.length) e.push("La lista de categorías está vacía.");
+  for (const k of ["accounts", "fuel", "maintenance", "obligations", "snapshots", "debts", "goals", "recurrentes", "vehicles", "payMethods"])
+    if (d[k] !== undefined && !Array.isArray(d[k])) e.push(`"${k}" debería ser una lista.`);
+  if (d.budgets !== undefined && (typeof d.budgets !== "object" || Array.isArray(d.budgets))) e.push(`"budgets" debería ser un objeto por mes.`);
+  (Array.isArray(d.txs) ? d.txs : []).forEach((t, i) => {
+    const q = `Gasto ${i + 1}${t && t.desc ? ` ("${String(t.desc).slice(0, 30)}")` : ""}`;
+    if (!t || typeof t !== "object") return e.push(`${q}: no es un registro válido.`);
+    if (!t.id) e.push(`${q}: sin identificador.`);
+    if (!fecha(t.date)) e.push(`${q}: fecha inválida (${t.date}).`);
+    if (!monto(t.amount)) e.push(`${q}: monto inválido (${t.amount}).`);
+    if (typeof t.cat !== "string" || !t.cat) e.push(`${q}: sin categoría.`);
+  });
+  (Array.isArray(d.incomes) ? d.incomes : []).forEach((t, i) => {
+    const q = `Ingreso ${i + 1}`;
+    if (!t || typeof t !== "object") return e.push(`${q}: no es un registro válido.`);
+    if (!t.id) e.push(`${q}: sin identificador.`);
+    if (!fecha(t.date)) e.push(`${q}: fecha inválida (${t.date}).`);
+    if (!monto(t.amount)) e.push(`${q}: monto inválido (${t.amount}).`);
+  });
+  return e;
+}
 
 // estilo recordado; la primera vez: oscuro en Samsung Internet (fuerza el modo oscuro en las páginas)
 const estiloRep = () => { try { const v = localStorage.getItem("fz_rep_estilo"); if (v) return v; } catch { /* nada */ } return /SamsungBrowser/i.test(navigator.userAgent) ? "oscuro" : "claro"; };
