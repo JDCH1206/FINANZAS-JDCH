@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v130.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v131.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v130). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v131). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,11 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v130**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v131**. Cambios por fecha (más reciente primero):
+
+### 2026-11-02 · caché v131 — Lista de cuentas legible en el celular
+- 🐛 En la lista de **Tus cuentas** los 4 botones dejaban una columna angosta y el texto se partía palabra por palabra. Ahora cada cuenta usa dos líneas: arriba nombre y saldo; abajo los datos ("Ahorro · actualizada hoy · 14 movim." y el rendimiento) y los botones a la derecha.
+- El rendimiento de la lista muestra el **último mes completo** (no el mes en curso con 1–2 días, que daba 0,02%). Si solo hay el mes en curso, se muestra marcado "(en curso)".
 
 ### 2026-11-02 · caché v130 — Rendimiento mensual por cuenta
 - 📅 **Cuentas → Rendimiento mensual por cuenta** (últimos 6 meses): rendimiento de cada cuenta por mes, su **% mensual** (rendimientos del mes ÷ saldo con que empezó el mes, reconstruido desde el saldo actual) y el total. Solo aparecen las cuentas con rendimientos registrados. El primer mes se marca como parcial si empezaste a registrar después del día 3, y el mes actual como "en curso".

@@ -308,19 +308,29 @@ function drawList(root) {
   host.innerHTML = accts.map((a, i) => {
     const nMovs = (a.movs || []).length;
     const meta = [escapeHtml(a.type)];
-    if (a.lastSaldoUpdate) meta.push("act. hace " + daysBetweenISO(a.lastSaldoUpdate, today) + "d");
+    if (a.lastSaldoUpdate) { const d = daysBetweenISO(a.lastSaldoUpdate, today); meta.push(d <= 0 ? "actualizada hoy" : `actualizada hace ${d} d`); }
     if (nMovs) meta.push(nMovs + " movim.");
-    const rm = rendMensual(a), ult = rm[rm.length - 1];
-    const rendLinea = ult ? `<div class="tiny" style="color:var(--green)">↑ ${fmt(ult.rend)} en ${escapeHtml(monthLabel(ult.mes))}${ult.pct != null ? ` · ${pctTxt(ult.pct)} mensual` : ""}${ult.enCurso ? " (en curso)" : ""}</div>` : "";
+    // rendimiento: el último mes completo; si solo hay el mes en curso, ese
+    const rm = rendMensual(a), cerrados = rm.filter((r) => !r.enCurso), ult = cerrados[cerrados.length - 1] || rm[rm.length - 1];
+    const rendLinea = ult ? `<div class="tiny" style="color:var(--green);margin-top:2px">↑ ${fmt(ult.rend)} en ${escapeHtml(monthLabel(ult.mes))}${ult.pct != null ? ` · ${pctTxt(ult.pct)} mensual` : ""}${ult.enCurso ? " (en curso)" : ""}</div>` : "";
+    const ico = (attr, label, path, sz = 15) => `<button class="icon-btn" ${attr} aria-label="${label}" title="${label}"><svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${path}"/></svg></button>`;
     return `
-    <div class="tx-row">
-      <span class="tx-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
-      <div class="flex1"><div class="tx-desc">${escapeHtml(a.name)}</div><div class="tx-meta">${meta.join(" · ")}</div>${rendLinea}</div>
-      <div class="tx-amt">${fmt(a.balance)}</div>
-      <button class="icon-btn" data-upd="${a.id}" aria-label="Actualizar saldo" title="Actualizar saldo / rendimiento"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5"/></svg></button>
-      <button class="icon-btn" data-mov="${a.id}" aria-label="Movimientos de la cuenta" title="Sumar o restar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button class="icon-btn" data-edit="${a.id}" aria-label="Editar cuenta"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
-      <button class="icon-btn" data-del="${a.id}" aria-label="Eliminar cuenta"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg></button>
+    <div style="padding:10px 0;border-bottom:1px solid var(--line)">
+      <div class="row between" style="align-items:center;gap:10px">
+        <div class="row" style="align-items:center;gap:8px;min-width:0;flex:1">
+          <span class="tx-dot" style="background:${PALETTE[i % PALETTE.length]};flex:none"></span>
+          <div class="tx-desc ellipsis" style="min-width:0">${escapeHtml(a.name)}</div></div>
+        <div class="tx-amt" style="flex:none">${fmt(a.balance)}</div>
+      </div>
+      <div class="row between" style="align-items:center;gap:6px;margin-top:2px;padding-left:16px">
+        <div style="min-width:0;flex:1"><div class="tx-meta">${meta.join(" · ")}</div>${rendLinea}</div>
+        <div class="row" style="flex:none;gap:2px">
+          ${ico(`data-upd="${a.id}"`, "Actualizar saldo / rendimiento", "M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5")}
+          ${ico(`data-mov="${a.id}"`, "Movimientos de la cuenta", "M12 5v14M5 12h14")}
+          ${ico(`data-edit="${a.id}"`, "Editar cuenta", "M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z")}
+          ${ico(`data-del="${a.id}"`, "Eliminar cuenta", "M3 6h18M8 6V4h8v2m-9 0v14h10V6")}
+        </div>
+      </div>
     </div>`;
   }).join("");
   host.querySelectorAll("[data-upd]").forEach((b) => b.onclick = () => openUpdateModal(root, b.getAttribute("data-upd")));
