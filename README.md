@@ -4,11 +4,11 @@ App de finanzas personales: clasificación COICOP, presupuesto editable por mes 
 
 ## Estado actual y cómo continuar (flujo de trabajo)
 
-**Versión actual: caché v129.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
+**Versión actual: caché v130.** Si retomas el proyecto desde otro equipo o el celular, sigue este flujo para no pisar cambios (una vez se duplicó trabajo por editar en paralelo).
 
 **Arranque rápido en otra sesión (celular u otro PC):**
 1. Abre Claude Code (web `claude.ai/code` o la app) con tu cuenta y conecta el repo `jdch1206/FINANZAS-JDCH`.
-2. `git pull origin main` (trae lo último — vamos en v129). El desarrollo va directo sobre `main`.
+2. `git pull origin main` (trae lo último — vamos en v130). El desarrollo va directo sobre `main`.
 3. Trabaja. Para probar local: `python -m http.server 8000` en la raíz del repo (no hay Node/npm).
 4. En **cada cambio de código**: sube el caché del SW (`const CACHE = "finanzas-jdch-vNN"` en `sw.js`, NN+1) y anota el cambio en el changelog de abajo. Saltarse esto es la causa #1 de "mi cambio no se ve".
 5. `git commit` + `git push origin main` al terminar (los cambios quedan como commit lineal sobre `main`; ver el changelog para el historial de versiones).
@@ -112,7 +112,13 @@ flowchart TD
 
 ## Novedades (changelog)
 
-La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v129**. Cambios por fecha (más reciente primero):
+La app no usa versión numérica formal; la referencia técnica es la constante `CACHE` del service worker (`sw.js`), hoy **v130**. Cambios por fecha (más reciente primero):
+
+### 2026-11-02 · caché v130 — Rendimiento mensual por cuenta
+- 📅 **Cuentas → Rendimiento mensual por cuenta** (últimos 6 meses): rendimiento de cada cuenta por mes, su **% mensual** (rendimientos del mes ÷ saldo con que empezó el mes, reconstruido desde el saldo actual) y el total. Solo aparecen las cuentas con rendimientos registrados. El primer mes se marca como parcial si empezaste a registrar después del día 3, y el mes actual como "en curso".
+- En la lista de cuentas, cada cuenta con rendimientos muestra el del último mes ("↑ $292.160 en sep-2026 · 0,73% mensual").
+- En el detalle de la cuenta (botón +): **Rendimiento por mes** con % mensual y su equivalente E.A. (en meses completos).
+- `rendMensual(a)` exportada en `accounts.js`. Verificado con saldos como los reales: el saldo de inicio de septiembre reconstruido coincide con la foto de patrimonio de agosto en ambas cuentas.
 
 ### 2026-10-25 · caché v129 — Restaurar respaldo seguro + fecha local en archivos
 - 🛡️ **Restaurar respaldo valida el archivo antes de tocar nada** (`validarRespaldo` en `settings.js`): debe ser un objeto con las listas `txs`, `incomes` y `cats` (categorías no vacías), las demás listas con el tipo correcto y cada gasto/ingreso con id, fecha `YYYY-MM-DD`, monto numérico ≥ 0 y categoría. Si algo falla muestra los problemas y **no cambia nada** (antes un JSON equivocado borraba todos los datos, porque se restauraba con listas vacías). Los montos con decimales se aceptan: hay gastos repartidos (IVA/descuentos) que no son enteros.

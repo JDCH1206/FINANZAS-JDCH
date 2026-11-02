@@ -59,6 +59,47 @@ export function acctNeedsUpdate(a, today) {
 // total que ha "crecido tu dinero" en una cuenta (suma de rendimientos registrados)
 const rendTotal = (a) => sum((a.movs || []).filter((m) => m.kind === "rendimiento"), (m) => m.amount);
 
+// Rendimiento por mes de una cuenta (solo si tiene rendimientos registrados).
+// % mensual = rendimientos del mes / saldo al inicio del mes (reconstruido desde el saldo actual
+// restando los movimientos posteriores). El primer mes puede ser parcial (desde el primer registro)
+// y el mes actual está en curso.
+export function rendMensual(a) {
+  const movs = (a.movs || []).filter((m) => m.date);
+  const rends = movs.filter((m) => m.kind === "rendimiento");
+  if (!rends.length) return [];
+  const meses = [...new Set(rends.map((m) => m.date.slice(0, 7)))].sort();
+  const primero = movs.map((m) => m.date).sort()[0], hoyMes = curMonth();
+  return meses.map((mes) => {
+    const rend = sum(rends.filter((m) => m.date.slice(0, 7) === mes), (m) => +m.amount || 0);
+    const saldoIni = (+a.balance || 0) - sum(movs.filter((m) => m.date >= mes + "-01"), (m) => +m.amount || 0);
+    const pct = saldoIni > 0 ? rend / saldoIni : null;
+    return { mes, rend, saldoIni, pct, ea: pct != null ? Math.pow(1 + pct, 12) - 1 : null,
+      parcial: primero.slice(0, 7) === mes && +primero.slice(8, 10) > 3, enCurso: mes === hoyMes };
+  });
+}
+const pctTxt = (p, dec = 2) => (p == null ? "—" : (p * 100).toFixed(dec).replace(".", ",") + "%");
+
+// tarjeta "Rendimiento mensual por cuenta" (últimos 6 meses con rendimientos)
+function rendMensualCard(accts) {
+  const cuentas = accts.map((a) => ({ a, rm: rendMensual(a) })).filter((x) => x.rm.length);
+  if (!cuentas.length) return "";
+  const meses = [...new Set(cuentas.flatMap((x) => x.rm.map((r) => r.mes)))].sort().reverse().slice(0, 6);
+  const celda = (r) => r ? `<div style="color:${r.rend >= 0 ? "var(--green)" : "var(--red)"}">${r.rend >= 0 ? "+" : "−"}${fmt(Math.abs(r.rend))}</div><div class="tiny muted">${pctTxt(r.pct)}${r.parcial || r.enCurso ? " *" : ""}</div>` : `<span class="muted">—</span>`;
+  return `<div class="card mb-3"><div class="card-title">📅 Rendimiento mensual por cuenta</div>
+    <div style="overflow-x:auto"><table class="small" style="width:100%;border-collapse:collapse">
+      <tr class="tiny muted"><td style="padding:4px 6px">Mes</td>${cuentas.map((x) => `<td style="padding:4px 6px;text-align:right">${escapeHtml(x.a.name)}</td>`).join("")}${cuentas.length > 1 ? `<td style="padding:4px 6px;text-align:right">Total</td>` : ""}</tr>
+      ${meses.map((mes) => {
+        const fila = cuentas.map((x) => x.rm.find((r) => r.mes === mes));
+        const tot = sum(fila.filter(Boolean), (r) => r.rend);
+        return `<tr style="border-top:1px solid var(--line)"><td style="padding:6px">${escapeHtml(monthLabel(mes))}</td>
+          ${fila.map((r) => `<td style="padding:6px;text-align:right">${celda(r)}</td>`).join("")}
+          ${cuentas.length > 1 ? `<td style="padding:6px;text-align:right;font-weight:600;color:var(--green)">${fmt(tot)}</td>` : ""}</tr>`;
+      }).join("")}
+    </table></div>
+    <p class="tiny muted mt-2" style="margin-bottom:0">El % es el rendimiento del mes sobre el saldo con que empezó el mes. * Mes parcial (desde que empezaste a registrar) o en curso. Sale de lo que registras con "Actualizar saldo".</p>
+  </div>`;
+}
+
 // Rentabilidad aproximada de una cuenta: toma el último rendimiento registrado, lo divide por
 // el saldo justo antes de ese rendimiento, y lo anualiza (E.A.) según los días del intervalo.
 // Es una estimación (los aportes y el momento exacto no se modelan al 100%).
@@ -143,6 +184,8 @@ export function renderAccounts(root) {
         ${kpiBox("Aportes", fmt(aportesTot))}
         ${eaAvg != null ? kpiBox("Rentab. prom", "≈ " + (eaAvg * 100).toFixed(1) + "% E.A.", "var(--green)") : ""}
       </div></div>` : ""}
+
+    ${rendMensualCard(accts)}
 
     ${pend.length ? `<div class="card mb-3" style="border:1px solid var(--gold)">
       <div class="card-title">📈 Actualiza el saldo de esta semana</div>
@@ -267,10 +310,12 @@ function drawList(root) {
     const meta = [escapeHtml(a.type)];
     if (a.lastSaldoUpdate) meta.push("act. hace " + daysBetweenISO(a.lastSaldoUpdate, today) + "d");
     if (nMovs) meta.push(nMovs + " movim.");
+    const rm = rendMensual(a), ult = rm[rm.length - 1];
+    const rendLinea = ult ? `<div class="tiny" style="color:var(--green)">↑ ${fmt(ult.rend)} en ${escapeHtml(monthLabel(ult.mes))}${ult.pct != null ? ` · ${pctTxt(ult.pct)} mensual` : ""}${ult.enCurso ? " (en curso)" : ""}</div>` : "";
     return `
     <div class="tx-row">
       <span class="tx-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
-      <div class="flex1"><div class="tx-desc">${escapeHtml(a.name)}</div><div class="tx-meta">${meta.join(" · ")}</div></div>
+      <div class="flex1"><div class="tx-desc">${escapeHtml(a.name)}</div><div class="tx-meta">${meta.join(" · ")}</div>${rendLinea}</div>
       <div class="tx-amt">${fmt(a.balance)}</div>
       <button class="icon-btn" data-upd="${a.id}" aria-label="Actualizar saldo" title="Actualizar saldo / rendimiento"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5"/></svg></button>
       <button class="icon-btn" data-mov="${a.id}" aria-label="Movimientos de la cuenta" title="Sumar o restar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -438,6 +483,10 @@ function openMovsModal(root, acctId) {
       <div class="k-label">Saldo actual</div><div class="k-val">${fmt(acct.balance)}</div>
       ${rend ? `<div class="tiny" style="color:var(--green);margin-top:4px">↑ ${fmt(rend)} en rendimientos${ye ? ` · ≈ ${(ye.ea * 100).toFixed(1)}% E.A.` : ""}</div>` : ""}
     </div>
+    ${(() => { const rm = rendMensual(acct).slice().reverse(); return rm.length ? `<div class="card-title" style="margin:0 0 6px">Rendimiento por mes</div>
+      <div class="mb-3">${rm.map((r) => `<div class="row between small" style="padding:5px 0;border-top:1px solid var(--line)">
+        <span>${escapeHtml(monthLabel(r.mes))}${r.parcial ? ' <span class="tiny muted">(parcial)</span>' : r.enCurso ? ' <span class="tiny muted">(en curso)</span>' : ""}</span>
+        <span style="text-align:right"><span style="color:var(--green)">+${fmt(r.rend)}</span> <span class="tiny muted">${pctTxt(r.pct)}${r.ea != null && !r.parcial && !r.enCurso ? ` · ≈ ${pctTxt(r.ea, 1)} E.A.` : ""}</span></span></div>`).join("")}</div>` : ""; })()}
     <button id="m-updbtn" class="btn btn-primary btn-block mb-3">📈 Actualizar saldo (rendimiento / aporte)</button>
     <p class="tiny muted mb-3">O registra un ajuste manual. Nada de esto afecta tus gastos ni ingresos.</p>
 
